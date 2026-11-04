@@ -56,7 +56,6 @@ window.__ModuleLoader__.load({
       'chart.legend': '图例',
       'chart.hint': '悬停查看每日明细，点击图例可隐藏或显示曲线',
       'chart.empty': '该区间内没有 token 消耗',
-      'chart.noModels': '该区间内没有可归到模型的用量',
       'chart.allHidden': '所有曲线已隐藏，点击图例恢复',
       'chart.input': '输入',
       'chart.output': '输出',
@@ -138,7 +137,6 @@ window.__ModuleLoader__.load({
       'chart.legend': 'Legend',
       'chart.hint': 'Hover for a day breakdown; click a legend item to hide or show a line',
       'chart.empty': 'No tokens used in this window',
-      'chart.noModels': 'No model-attributed usage in this window',
       'chart.allHidden': 'All lines are hidden; click a legend item to show one',
       'chart.input': 'Input',
       'chart.output': 'Output',
@@ -248,7 +246,9 @@ window.__ModuleLoader__.load({
 .ss-grid-base{stroke:var(--dsw-alias-border-l3)}
 .ss-series-line{fill:none;stroke-width:2;stroke-linecap:round;stroke-linejoin:round}
 .ss-hits{position:absolute;inset:0;pointer-events:none}
-.ss-hit{position:absolute;top:0;bottom:0;pointer-events:auto;cursor:crosshair}
+.ss-hit{position:absolute;top:0;bottom:0;padding:0;border:0;background:transparent;color:inherit;font:inherit;text-align:left;appearance:none;pointer-events:auto;cursor:crosshair}
+.ss-hit:focus-visible{outline:2px solid var(--dsw-focus-ring-color,var(--dsw-alias-state-business-primary));outline-offset:-2px;border-radius:6px}
+.ss-hit:focus-visible .ss-guide,.ss-hit:focus-visible .ss-dot,.ss-hit:focus-visible .ss-tip{opacity:1;visibility:visible}
 .ss-guide{position:absolute;top:0;bottom:0;width:0;border-left:1px dashed var(--dsw-alias-border-l2);opacity:0;transition:opacity .12s ease;pointer-events:none}
 .ss-dot{position:absolute;width:7px;height:7px;border-radius:50%;transform:translate(-50%,-50%);opacity:0;transition:opacity .12s ease;box-shadow:0 0 0 2px var(--dsw-alias-bg-layer-1);pointer-events:none}
 .ss-hit:hover .ss-guide,.ss-hit:hover .ss-dot,.ss-hit:hover .ss-tip{opacity:1;visibility:visible}
@@ -848,6 +848,12 @@ window.__ModuleLoader__.load({
       return provider === '' ? model : provider + '/' + model
     }
 
+    /** Stable series identity: the payload sorts models by all-time cost, the client by
+     * window tokens, so a position-based id would silently re-point between polls. */
+    function modelRowId(provider, model) {
+      return 'model:' + provider + '\u0000' + model
+    }
+
     /** One timeline bucket, normalized for the chart. */
     function trendBucketOf(entry) {
       const record = toObject(entry)
@@ -915,18 +921,31 @@ window.__ModuleLoader__.load({
       return step * magnitude
     }
 
-    /** A smoothed cubic path through {x, y} points (Catmull-Rom control points). */
-    function smoothPath(points) {
+    /**
+     * A smoothed cubic path through {x, y} points (Catmull-Rom control points).
+     * `top`/`bottom` clamp the control points to the plot band: an unclamped
+     * Catmull-Rom curve overshoots steep peaks and would draw outside the chart.
+     */
+    function smoothPath(points, top, bottom) {
       if (points.length === 0) return ''
       let path = 'M ' + String(points[0].x) + ' ' + String(points[0].y)
       if (points.length === 1) return path
+      const clampControl = (value) => (top === undefined || bottom === undefined
+        ? value
+        : Math.min(bottom, Math.max(top, value)))
       for (let index = 0; index < points.length - 1; index += 1) {
         const previous = index === 0 ? points[index] : points[index - 1]
         const current = points[index]
         const next = points[index + 1]
         const after = index + 2 >= points.length ? next : points[index + 2]
-        const controlOne = { x: current.x + (next.x - previous.x) / 6, y: current.y + (next.y - previous.y) / 6 }
-        const controlTwo = { x: next.x - (after.x - current.x) / 6, y: next.y - (after.y - current.y) / 6 }
+        const controlOne = {
+          x: current.x + (next.x - previous.x) / 6,
+          y: clampControl(current.y + (next.y - previous.y) / 6),
+        }
+        const controlTwo = {
+          x: next.x - (after.x - current.x) / 6,
+          y: clampControl(next.y - (after.y - current.y) / 6),
+        }
         path += ' C ' + String(controlOne.x) + ' ' + String(controlOne.y) + ', ' + String(controlTwo.x) + ' ' + String(controlTwo.y) + ', ' + String(next.x) + ' ' + String(next.y)
       }
       return path
@@ -984,7 +1003,7 @@ window.__ModuleLoader__.load({
         const provider = toText(record.provider)
         const model = toText(record.model)
         return {
-          id: 'model:' + String(position),
+          id: modelRowId(provider, model),
           provider: provider,
           model: model,
           label: modelLabelOf(provider, model),
@@ -1122,7 +1141,7 @@ window.__ModuleLoader__.load({
         {
           key: entry.id,
           className: 'ss-series-line',
-          d: smoothPath(entry.values.map((value, index) => ({ x: count > 1 ? index : 0, y: yPercent(value) }))),
+          d: smoothPath(entry.values.map((value, index) => ({ x: count > 1 ? index : 0, y: yPercent(value) })), plotTop, plotBottom),
           style: { stroke: entry.color },
           vectorEffect: 'non-scaling-stroke',
         },
@@ -1151,20 +1170,27 @@ window.__ModuleLoader__.load({
           'aria-hidden': 'true',
           style: { left: offset + '%', top: yPercent(entry.values[index]) + '%', background: entry.color },
         }))
-        const tipRows = series
-          .filter((entry) => entry.values[index] > 0)
-          .map((entry) => h(
-            'li',
-            { key: 'tip:' + entry.id },
-            h('span', { className: 'ss-tip-dot', style: { background: entry.color }, 'aria-hidden': 'true' }),
-            h('span', { className: 'ss-tip-name' }, entry.label),
-            h('strong', { className: 'ss-tip-value' }, fmt.compact(entry.values[index])),
-          ))
+        const positive = series.filter((entry) => entry.values[index] > 0)
+        const tipRows = positive.map((entry) => h(
+          'li',
+          { key: 'tip:' + entry.id },
+          h('span', { className: 'ss-tip-dot', style: { background: entry.color }, 'aria-hidden': 'true' }),
+          h('span', { className: 'ss-tip-name' }, entry.label),
+          h('strong', { className: 'ss-tip-value' }, fmt.compact(entry.values[index])),
+        ))
+        const hitLabel = bucketLabel(bucket, fmt)
+          + ' ' + t('chart.total') + ' ' + fmt.compact(bucket.total)
+          + (positive.length === 0
+            ? ''
+            : ' · ' + positive.map((entry) => entry.label + ' ' + fmt.compact(entry.values[index])).join(' · '))
         return h(
-          'div',
+          'button',
           {
             key: 'hit:' + (bucket.key === '' ? String(index) : bucket.key),
+            type: 'button',
             className: 'ss-hit',
+            tabIndex: bucket.total > 0 ? 0 : -1,
+            'aria-label': hitLabel,
             style: { left: left + '%', width: hitWidth + '%' },
           },
           h('span', { className: 'ss-guide', style: { left: offset + '%' }, 'aria-hidden': 'true' }),
@@ -1243,7 +1269,9 @@ window.__ModuleLoader__.load({
       const allSeries = mode === 'model' ? modelView.series : buildTypeSeries(buckets, t)
       const visible = allSeries.filter((entry) => hidden.indexOf(entry.id) === -1)
       const maxValue = visible.reduce((largest, entry) => entry.values.reduce((inner, value) => Math.max(inner, value), largest), 0)
-      const yMax = niceMax(maxValue)
+      // A fallback bound keeps the plot meaningful when every visible series is zero
+      // (all usage may belong to a hidden series); `hasData` already handled no data.
+      const yMax = niceMax(maxValue) || 1
 
       const toggleSeries = useCallback((id) => {
         setHidden((previous) => (previous.indexOf(id) === -1 ? previous.concat([id]) : previous.filter((value) => value !== id)))
@@ -1286,9 +1314,7 @@ window.__ModuleLoader__.load({
 
       let body
       if (!hasData) body = h('p', { className: 'ss-empty' }, t('chart.empty'))
-      else if (allSeries.length === 0) body = h('p', { className: 'ss-empty' }, t('chart.noModels'))
       else if (visible.length === 0) body = h('p', { className: 'ss-empty' }, t('chart.allHidden'))
-      else if (yMax <= 0) body = h('p', { className: 'ss-empty' }, t('chart.empty'))
       else body = h(TrendPlot, { t: t, fmt: fmt, buckets: buckets, series: visible, yMax: yMax, mode: mode, days: days })
 
       return h(

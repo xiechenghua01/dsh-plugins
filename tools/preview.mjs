@@ -16,7 +16,7 @@
 import { readFileSync } from 'node:fs'
 import { open, writeFile, mkdir } from 'node:fs/promises'
 import { join, dirname, resolve } from 'node:path'
-import { collect, buildClientDefinition, readyPreset, renderStaticTree } from './lib/render.mjs'
+import { PRESET_INDEX, buildClientDefinition, collect, elementsByClass, readyPreset, renderStaticTree, textOf } from './lib/render.mjs'
 import { PLUGIN_DIR, REPO_ROOT, loadPayloads } from './lib/local-corpus.mjs'
 
 const FALLBACK_DARK = {
@@ -218,9 +218,15 @@ async function main() {
   const payloads = await loadPayloads()
   const definition = buildClientDefinition(PLUGIN_DIR)
   const preset = readyPreset(payloads)
-  preset[3] = mode
+  preset[PRESET_INDEX.chartMode] = mode
   const { tree } = renderStaticTree(definition, preset)
   const found = collect(tree)
+  // Guard the preset contract: the rendered chart must be the requested mode.
+  const activeSegment = elementsByClass(tree, 'ss-segment-active').map(textOf).join('|')
+  const expectedSegment = mode === 'type' ? '按类型' : '按模型'
+  if (!activeSegment.includes(expectedSegment)) {
+    throw new Error(`preview mode mismatch: requested ${mode}, rendered ${activeSegment}`)
+  }
 
   const buckets = payloads.overview.timeline.buckets
   const hoverValue = option('--hover', '')

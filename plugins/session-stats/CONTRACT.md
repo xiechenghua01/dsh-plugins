@@ -369,6 +369,9 @@ token counts (`1.2M`), 2-4 decimals for USD (`$0.0123`).
 ### 7.2 Accessibility / behaviour
 - The page is a `section` with `aria-label={t('panel.title')}`.
 - The Refresh button is a real `<button type="button">` with `aria-label`.
+- Trend hit regions are focusable `<button>`s carrying an `aria-label` with the day total
+  and per-series values, so the daily detail is keyboard reachable; the visual tooltip
+  stays `aria-hidden`. The chart itself is a `role="img"` with a title/window label.
 - Progress bars use `role="progressbar"` with `aria-valuenow/min/max`.
 - No keyboard traps; no focus stealing on poll.
 - Light and dark must both work: only tokens, no literal colors.
@@ -379,24 +382,22 @@ The `locale/*.json` files feed the plugin manager's metadata only; the client re
 dictionaries in `client.js`. Both halves must use the same key set. Use these keys:
 
 ```
-panel.title  panel.description  action.refresh  state.loading  state.error  state.retry
-state.unauthorized  state.empty  updated.at
-summary.tokens  summary.tokensHint  summary.tokensSpark  summary.sessions
-summary.sessionsHint  summary.cost  summary.costHint  summary.costSpark
-summary.budget  summary.budgetHint  summary.remaining  summary.noBudget
-chart.title  chart.window  chart.modeModel  chart.modeType  chart.total  chart.other
-chart.legend  chart.hint  chart.empty  chart.input  chart.output  chart.cacheRead
-sessions.title  sessions.empty  sessions.showing
-table.session  table.created  table.requests  table.tokens  table.split  table.cost
-table.logSize  table.sortCost  table.sortTokens  table.sortSize  table.untitled
-models.title  models.empty  models.share  models.window  models.shareTokens
-models.sparkline
-runtime.title  runtime.process  runtime.system  runtime.cores  runtime.load
-runtime.rss  runtime.heap  runtime.uptime  runtime.sparkline  runtime.peak
-runtime.unavailable
+panel.title  panel.description  action.refresh  state.loading  state.error
+state.retry  state.unauthorized  state.empty  updated.at  summary.tokens
+summary.tokensHint  summary.tokensSpark  summary.costSpark  summary.sessions
+summary.sessionsHint  summary.cost  summary.costHint  summary.budget
+summary.budgetHint  summary.remaining  summary.noBudget  chart.title  chart.window
+chart.modeModel  chart.modeType  chart.total  chart.other  chart.legend  chart.hint
+chart.empty  chart.allHidden  chart.input  chart.output  chart.cacheRead
+sessions.title  sessions.empty  sessions.showing  table.session  table.created
+table.requests  table.tokens  table.split  table.cost  table.logSize  table.sortCost
+table.sortTokens  table.sortSize  table.untitled  models.title  models.empty
+models.share  models.window  models.shareTokens  models.sparkline  runtime.title
+runtime.process  runtime.system  runtime.cores  runtime.load  runtime.rss
+runtime.heap  runtime.uptime  runtime.sparkline  runtime.peak  runtime.unavailable
 logs.title  logs.total  logs.sessionLog  logs.sessions  logs.largest  logs.storage
-logs.attachments  logs.spill  logs.available
-unit.tokens  unit.ms  unit.seconds
+logs.attachments  logs.spill  logs.available  logs.unavailable  unit.tokens  unit.ms
+unit.seconds
 ```
 
 ## 9. Verification

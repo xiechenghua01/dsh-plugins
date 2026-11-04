@@ -86,5 +86,6 @@ export async function loadPayloads(pluginDir = PLUGIN_DIR, corpus = readCorpus()
     overview: await call('/session-stats/overview'),
     system: await call('/session-stats/system'),
     sessions: corpus.records.length,
+    corpus,
   }
 }

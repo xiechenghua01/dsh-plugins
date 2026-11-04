@@ -6,6 +6,21 @@
 import { readFileSync } from 'node:fs'
 import { join } from 'node:path'
 
+/**
+ * Positions of the values a hook preset feeds, in the order the components consume
+ * them: StatsPage takes three useState (refresh token, overview state, system state)
+ * before TrendSection takes its mode and hidden-series state. Tests and the preview
+ * use these names so adding a hook above the chart fails visibly instead of silently
+ * shifting the preset.
+ */
+export const PRESET_INDEX = {
+  refreshToken: 0,
+  overviewState: 1,
+  systemState: 2,
+  chartMode: 3,
+  hiddenSeries: 4,
+}
+
 export function makeReact(preset) {
   let hookIndex = 0
   const noop = () => {}

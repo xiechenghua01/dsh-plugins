@@ -104,6 +104,9 @@ export async function run(report) {
     sameNumber(row.window.tokens, windowTokens, `${key} window tokens`, report)
     sameNumber(row.window.tokens, row.daily.reduce((sum, day) => sum + day.tokens, 0), `${key} window equals daily sum`, report)
     sameNumber(row.tokens.total, windowTokens, `${key} all-time tokens`, report)
+    const dailyCost = row.daily.reduce((sum, day) => sum + day.cost, 0)
+    if (Math.abs(row.window.cost - dailyCost) > 1e-6 * row.daily.length) report(`${key} window cost diverges from its daily sum`)
+    sameNumber(row.window.requests, row.daily.reduce((sum, day) => sum + day.requests, 0), `${key} window requests equals daily sum`, report)
     for (let offset = 0; offset < lastFour.length; offset += 1) {
       const bucket = overview.timeline.buckets[26 + offset]
       sameNumber(row.daily[26 + offset].tokens, lastFour[offset], `${key} daily ${bucket.key}`, report)
@@ -126,9 +129,62 @@ export async function run(report) {
   sameNumber(empty.timeline.buckets.length, 7, 'empty corpus timeline length', report)
   sameNumber(empty.models.length, 0, 'empty corpus models', report)
 
+  // A pre-folded summary (the apply() cache path) must work with and without the
+  // per-model-day fold; without it the model still lists its all-time totals.
+  const today = new Date(now)
+  const todayKey = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}-${String(today.getDate()).padStart(2, '0')}`
+  const todayStart = new Date(today.getFullYear(), today.getMonth(), today.getDate()).getTime()
+  const dayTokens = { input: 10, output: 5, cacheRead: 2, cacheWrite: 0, reasoning: 0, total: 17 }
+  const baseSummary = {
+    id: 's9', createdAt: now - 1000, updatedAt: now - 500, turns: 1, requests: 1,
+    tokens: { ...dayTokens }, cost: 0.25, models: ['m1'],
+    perModel: { 'p1\u0000m1': { provider: 'p1', model: 'm1', requests: 1, tokens: { ...dayTokens }, cost: 0.25 } },
+    perDay: { [todayKey]: { start: todayStart, tokens: { ...dayTokens }, cost: 0.25, requests: 1 } },
+    eventCount: 2, title: 'summary-only', logBytes: 12, error: null,
+  }
+  const summaryRecord = { header: { id: 's9', createdAt: now - 1000 } }
+  const withFold = computeOverview({
+    records: [summaryRecord],
+    summaries: new Map([['s9', {
+      ...baseSummary,
+      perModelDay: { 'p1\u0000m1': { [todayKey]: { start: todayStart, tokens: { ...dayTokens }, cost: 0.25, requests: 1 } } },
+    }]]),
+    now,
+    days: 7,
+    config: {},
+  })
+  sameNumber(withFold.timeline.buckets.reduce((sum, bucket) => sum + bucket.tokens.total, 0), 17, 'summary-only timeline total', report)
+  const foldedRow = withFold.models.find((row) => row.model === 'm1')
+  if (foldedRow === undefined) report('summary-only model row missing')
+  else {
+    sameNumber(foldedRow.window.tokens, 17, 'summary-only window tokens', report)
+    sameNumber(foldedRow.window.requests, 1, 'summary-only window requests', report)
+    sameNumber(foldedRow.window.cost, 0.25, 'summary-only window cost', report)
+    sameNumber(foldedRow.daily[foldedRow.daily.length - 1].tokens, 17, 'summary-only last day tokens', report)
+  }
+  const withoutFold = computeOverview({
+    records: [summaryRecord],
+    summaries: new Map([['s9', { ...baseSummary, perModelDay: {} }]]),
+    now,
+    days: 7,
+    config: {},
+  })
+  const noFoldRow = withoutFold.models.find((row) => row.model === 'm1')
+  if (noFoldRow === undefined) report('a summary without perModelDay must still list the model')
+  else {
+    sameNumber(noFoldRow.window.tokens, 0, 'fold-less summary window tokens', report)
+    sameNumber(noFoldRow.daily.reduce((sum, day) => sum + day.tokens, 0), 0, 'fold-less summary daily tokens', report)
+    sameNumber(noFoldRow.tokens.total, 17, 'fold-less summary keeps all-time tokens', report)
+  }
+
+  // The catch-all fallback must still return a well-formed payload for garbage input.
   const degenerate = computeOverview({ records: [{ header: { id: 'x', createdAt: 'nope' } }, null, 42], eventsById: new Map(), now: Number.NaN, days: 'bad', config: { budget: { amount: -5 } } })
-  if (!Number.isFinite(degenerate.generatedAt)) report('degenerate input must not produce a non-finite generatedAt')
-  if (!Array.isArray(degenerate.models)) report('degenerate input must still produce a models array')
+  sameNumber(degenerate.days, 30, 'degenerate days falls back to the default', report)
+  sameNumber(degenerate.timeline.buckets.length, 30, 'degenerate timeline length', report)
+  sameNumber(degenerate.generatedAt, 0, 'degenerate now becomes 0', report)
+  sameNumber(degenerate.totals.sessions, 1, 'degenerate records count only the object record', report)
+  sameNumber(degenerate.totals.requests, 0, 'degenerate record has no events', report)
+  sameNumber(Array.isArray(degenerate.models) ? degenerate.models.length : -1, 0, 'degenerate corpus has no models', report)
 
   const system = computeSystem({
     now,

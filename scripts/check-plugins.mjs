@@ -27,6 +27,34 @@ async function exists(file) {
   }
 }
 
+/**
+ * The client's inline zh/en dictionaries, which are the actual UI text (the
+ * `locale/*.json` files only carry plugin-manager metadata).
+ * @returns {{ zh: Map<string, string>, en: Map<string, string>, withoutDictionaries: string } | null}
+ */
+function inlineDictionaries(source) {
+  const zhStart = source.indexOf('const zh = {')
+  const enStart = source.indexOf('const en = {')
+  if (zhStart === -1 || enStart === -1) return null
+  const endOf = (start) => {
+    const end = source.indexOf('\n    }\n', start)
+    return end === -1 ? -1 : end
+  }
+  const zhEnd = endOf(zhStart)
+  const enEnd = endOf(enStart)
+  if (zhEnd === -1 || enEnd === -1) return null
+  const entriesOf = (block) => {
+    const entries = new Map()
+    for (const match of block.matchAll(/^\s*'([^']+)':\s*'((?:[^'\\]|\\.)*)',?/gmu)) entries.set(match[1], match[2])
+    return entries
+  }
+  return {
+    zh: entriesOf(source.slice(zhStart, zhEnd)),
+    en: entriesOf(source.slice(enStart, enEnd)),
+    withoutDictionaries: source.slice(0, zhStart) + source.slice(enEnd),
+  }
+}
+
 /** Every locale dictionary key, including nested ones, as a dot path. */
 function localeKeys(value, prefix = '') {
   const keys = []
@@ -101,6 +129,22 @@ async function checkPlugin(plugin, config, report) {
     const unexpected = requires.filter((specifier) => specifier !== 'react')
     if (unexpected.length > 0) report(`client entry requires ${unexpected.join(', ')}; only 'react' is available from the module loader`)
     if (source.includes('@deepseek-ai/')) report('client entry must not import @deepseek-ai packages; only react is available')
+
+    const inline = inlineDictionaries(source)
+    if (inline !== null) {
+      const zhKeys = [...inline.zh.keys()]
+      const enKeys = [...inline.en.keys()]
+      if (zhKeys.length === 0 || enKeys.length === 0) report('client dictionaries must not be empty')
+      if (zhKeys.length !== enKeys.length || zhKeys.some((key) => !inline.en.has(key))) {
+        report('client zh/en dictionaries must have the same key set')
+      }
+      const empty = [...inline.zh, ...inline.en].filter(([, value]) => value.trim() === '')
+      if (empty.length > 0) report(`client dictionary values must be non-empty: ${empty.map(([key]) => key).join(', ')}`)
+      const unreferenced = zhKeys.filter((key) => !inline.withoutDictionaries.includes(`'${key}'`))
+      if (unreferenced.length > 0) {
+        report(`client dictionary keys are not used outside the dictionaries: ${unreferenced.join(', ')}`)
+      }
+    }
   }
 
   const localeDir = join(dir, 'locale')
