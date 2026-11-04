@@ -17,6 +17,9 @@ window.__ModuleLoader__.load({
     const OVERVIEW_POLL_MS = 30000
     const SYSTEM_POLL_MS = 2000
     const TABLE_LIMIT = 50
+    /** Collapsed session table rows; the expanded table is a fixed ten-row window. */
+    const SESSIONS_COLLAPSED_ROWS = 5
+    const SESSIONS_WINDOW_ROWS = 10
     const DEFAULT_LOCALE = 'zh-CN'
     const DASH = '\u2014'
 
@@ -63,6 +66,7 @@ window.__ModuleLoader__.load({
       'sessions.title': '会话用量',
       'sessions.empty': '暂无会话记录',
       'sessions.showing': '显示 {shown} / {total} 个会话',
+      'sessions.more': '查看更多',
       'table.session': '会话',
       'table.created': '创建时间',
       'table.requests': '请求数',
@@ -144,6 +148,7 @@ window.__ModuleLoader__.load({
       'sessions.title': 'Session usage',
       'sessions.empty': 'No sessions recorded',
       'sessions.showing': 'Showing {shown} of {total} sessions',
+      'sessions.more': 'Show more',
       'table.session': 'Session',
       'table.created': 'Created',
       'table.requests': 'Requests',
@@ -194,7 +199,7 @@ window.__ModuleLoader__.load({
     const CSS = `
 .ss-page,.ss-page *{box-sizing:border-box}
 .ss-page{width:100%;min-width:0;height:100%;min-height:0;display:flex;overflow:hidden;background:var(--dsw-alias-bg-base);color:var(--dsw-alias-label-primary);font-family:var(--dsw-font-family,inherit);font-size:14px;line-height:1.6}
-.ss-page{--ss-series-1:#4d93f8;--ss-series-2:#22c55e;--ss-series-3:#8b5cf6;--ss-series-4:#f59e0b;--ss-series-5:#ef4444;--ss-series-6:#06b6d4;--ss-series-7:#ec4899;--ss-series-8:#9aa0a6}
+.ss-page{--ss-series-1:#4d93f8;--ss-series-2:#22c55e;--ss-series-3:#8b5cf6;--ss-series-4:#f59e0b;--ss-series-5:#ef4444;--ss-series-6:#06b6d4;--ss-series-7:#ec4899;--ss-series-8:#9aa0a6;--ss-session-row:56px;--ss-table-head:33px}
 /* The eight --ss-series-* colors are data-visualization series colors, not theme
    surface colors: charts need several distinguishable hues in both color schemes. */
 .ss-scroll{flex:1;min-height:0;overflow:auto;scrollbar-gutter:stable}
@@ -276,6 +281,13 @@ window.__ModuleLoader__.load({
 .ss-log-bar{display:block;height:4px;border-radius:2px;background:var(--dsw-alias-bg-layer-2);margin-top:4px;overflow:hidden}
 .ss-log-bar-fill{display:block;height:100%;border-radius:2px}
 .ss-table-scroll{overflow-x:auto;margin:0 -6px}
+/* Expanded session table: a fixed ten-row window (SESSIONS_WINDOW_ROWS in the
+   component), with a sticky header and its own vertical scrollbar. */
+.ss-table-window{max-height:calc(var(--ss-session-row,56px) * 10 + var(--ss-table-head,33px));overflow-y:auto;scrollbar-gutter:stable;overscroll-behavior:contain}
+.ss-table-window thead th{position:sticky;top:0;z-index:1;background:var(--dsw-alias-bg-layer-1)}
+.ss-table-window tbody tr{height:var(--ss-session-row,56px)}
+.ss-table-window tbody td{height:var(--ss-session-row,56px);padding-top:6px;padding-bottom:6px;vertical-align:middle}
+.ss-table-window .ss-session-title{display:-webkit-box;-webkit-line-clamp:1;-webkit-box-orient:vertical;overflow:hidden}
 .ss-table{width:100%;border-collapse:collapse;font-size:13px;line-height:20px}
 .ss-table th{color:var(--dsw-alias-label-tertiary);font-weight:400;text-align:left;padding:6px;border-bottom:.5px solid var(--dsw-alias-border-l3);white-space:nowrap}
 .ss-table td{padding:8px 6px;border-bottom:.5px solid var(--dsw-alias-border-l4);vertical-align:top}
@@ -291,7 +303,12 @@ window.__ModuleLoader__.load({
 .ss-segment:hover{color:var(--dsw-alias-label-primary)}
 .ss-segment-active{background:var(--dsw-alias-bg-base);color:var(--dsw-alias-label-primary)}
 .ss-sort-arrow{font-size:10px;line-height:1}
-.ss-table-note{margin:8px 0 0;color:var(--dsw-alias-label-tertiary);font-size:12px}
+.ss-table-foot{display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap;margin-top:8px}
+.ss-table-note{margin:0;color:var(--dsw-alias-label-tertiary);font-size:12px}
+.ss-more{display:inline-flex;align-items:center;gap:4px;height:28px;padding:0 12px;border:.5px solid var(--dsw-alias-border-l2);border-radius:14px;background:var(--dsw-alias-bg-layer-1);color:var(--dsw-alias-label-secondary);font:inherit;font-size:12px;line-height:18px;cursor:pointer;transition:background .15s,border-color .15s,color .15s}
+.ss-more:hover{background:var(--dsw-alias-interactive-bg-hover);border-color:var(--dsw-alias-border-l1);color:var(--dsw-alias-label-primary)}
+.ss-more:focus-visible{outline:2px solid var(--dsw-focus-ring-color,var(--dsw-alias-state-business-primary));outline-offset:2px}
+.ss-more-arrow{font-size:10px;line-height:1}
 .ss-model-list{list-style:none;margin:0;padding:0;display:flex;flex-direction:column;gap:12px}
 .ss-model{display:grid;grid-template-columns:auto minmax(0,1fr) 96px;gap:10px;align-items:start;min-width:0}
 .ss-model-mark{width:8px;height:8px;border-radius:50%;margin-top:7px}
@@ -1356,6 +1373,8 @@ window.__ModuleLoader__.load({
       const overview = toObject(props.overview)
       const [sortKey, setSortKey] = useState('cost')
       const [descending, setDescending] = useState(true)
+      /** Collapsed by default; the first expansion shows every row in a ten-row window. */
+      const [expanded, setExpanded] = useState(false)
 
       const sessions = useMemo(() => toArray(overview.sessions).map(normalizeSession), [overview])
       const sorted = useMemo(() => {
@@ -1372,7 +1391,8 @@ window.__ModuleLoader__.load({
         return rows
       }, [sessions, sortKey, descending])
 
-      const shown = sorted.slice(0, TABLE_LIMIT)
+      const shown = sorted.slice(0, expanded ? TABLE_LIMIT : SESSIONS_COLLAPSED_ROWS)
+      const canExpand = !expanded && sessions.length > SESSIONS_COLLAPSED_ROWS
 
       const sortOptions = [
         ['cost', 'table.sortCost'],
@@ -1455,7 +1475,9 @@ window.__ModuleLoader__.load({
 
       const table = h(
         'div',
-        { className: 'ss-table-scroll' },
+        expanded
+          ? { className: 'ss-table-scroll ss-table-window', role: 'region', tabIndex: 0, 'aria-label': t('sessions.title') }
+          : { className: 'ss-table-scroll' },
         h(
           'table',
           { className: 'ss-table' },
@@ -1483,7 +1505,24 @@ window.__ModuleLoader__.load({
         { className: 'ss-card', 'aria-label': t('sessions.title') },
         head,
         table,
-        h('p', { className: 'ss-table-note' }, t('sessions.showing', { shown: fmt.integer(shown.length), total: fmt.integer(sessions.length) })),
+        h(
+          'div',
+          { className: 'ss-table-foot' },
+          h('p', { className: 'ss-table-note' }, t('sessions.showing', { shown: fmt.integer(shown.length), total: fmt.integer(sessions.length) })),
+          canExpand
+            ? h(
+              'button',
+              {
+                type: 'button',
+                className: 'ss-more',
+                'aria-expanded': false,
+                onClick: () => setExpanded(true),
+              },
+              h('span', null, t('sessions.more')),
+              h('span', { className: 'ss-more-arrow', 'aria-hidden': 'true' }, '\u2193'),
+            )
+            : null,
+        ),
       )
     }
 

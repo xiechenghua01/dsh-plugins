@@ -394,7 +394,7 @@ summary.sessionsHint  summary.cost  summary.costHint  summary.budget
 summary.budgetHint  summary.remaining  summary.noBudget  chart.title  chart.window
 chart.modeModel  chart.modeType  chart.total  chart.other  chart.legend  chart.hint
 chart.empty  chart.allHidden  chart.input  chart.output  chart.cacheRead
-sessions.title  sessions.empty  sessions.showing  table.session  table.created
+sessions.title  sessions.empty  sessions.showing  sessions.more  table.session  table.created
 table.requests  table.tokens  table.split  table.cost  table.logSize  table.sortCost
 table.sortTokens  table.sortSize  table.untitled  models.title  models.empty
 models.share  models.window  models.shareTokens  models.sparkline  runtime.title

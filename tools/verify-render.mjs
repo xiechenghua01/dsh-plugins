@@ -136,6 +136,25 @@ function renderState(definition, preset) {
   return renderStaticTree(definition, preset).tree
 }
 
+/** Body rows of the session table (the header row is excluded). */
+function sessionRowCount(tree) {
+  const table = elementsByClass(tree, 'ss-table')[0]
+  if (table === undefined) return -1
+  let rows = 0
+  const visit = (node) => {
+    if (node === null || node === undefined || node === false) return
+    if (Array.isArray(node)) {
+      for (const child of node) visit(child)
+      return
+    }
+    if (typeof node !== 'object') return
+    if (node.type === 'tr') rows += 1
+    for (const child of node.children || []) visit(child)
+  }
+  visit(table)
+  return rows - 1
+}
+
 async function main() {
   console.log('== 1. real payloads from the production Host half')
   const payloads = await loadPayloads()
@@ -203,7 +222,11 @@ async function main() {
     check('series lines rendered', (found.classCounts.get('ss-series-line') || 0) === expected.count, `${found.classCounts.get('ss-series-line') || 0} lines, expected ${expected.count}`)
     check('legend entries rendered', (found.classCounts.get('ss-legend-button') || 0) === expected.count)
     check('model rows and sparklines rendered', (found.classCounts.get('ss-model') || 0) === expected.count && (found.classCounts.get('ss-model-spark') || 0) === expected.count)
-    check('session rows rendered', found.tags.includes('tr'), `${found.tags.filter((tag) => tag === 'tr').length} rows`)
+    check('session table starts with five rows', sessionRowCount(tree) === Math.min(5, payloads.sessions), `${sessionRowCount(tree)} rows of ${payloads.sessions}`)
+    check(
+      'collapsed table offers show-more only when more rows exist',
+      (found.classCounts.get('ss-more') || 0) === (payloads.sessions > 5 ? 1 : 0),
+    )
     check('session token bars rendered', (found.classCounts.get('ss-row-bar') || 0) > 0)
     check('log footprint bars rendered', (found.classCounts.get('ss-log-bar') || 0) >= 1)
     check('progress bars (budget/share) rendered', found.roles.includes('progressbar'))
@@ -225,7 +248,27 @@ async function main() {
     check('no NaN / undefined / [object Object] in text', !/NaN|undefined|\[object Object\]/.test(found.text))
   }
 
-  console.log('\n== 4. chart modes and legend toggles')
+  console.log('\n== 4. expanded session table')
+  const expandedPreset = readyPreset(payloads)
+  expandedPreset[PRESET_INDEX.chartMode] = 'model'
+  expandedPreset[PRESET_INDEX.hiddenSeries] = []
+  expandedPreset[PRESET_INDEX.sessionsSortKey] = 'cost'
+  expandedPreset[PRESET_INDEX.sessionsDescending] = true
+  expandedPreset[PRESET_INDEX.sessionsExpanded] = true
+  try {
+    const expandedTree = renderState(definition, expandedPreset)
+    const found = collect(expandedTree)
+    const expectedRows = Math.min(50, payloads.sessions)
+    check('expanded table renders every session up to the table limit', sessionRowCount(expandedTree) === expectedRows, `${sessionRowCount(expandedTree)} rows of ${payloads.sessions}`)
+    check('expanded table becomes the ten-row scroll window', found.classes.has('ss-table-window'))
+    check('expanded window is a focusable region', found.roles.includes('region'))
+    check('show-more affordance disappears once expanded', (found.classCounts.get('ss-more') || 0) === 0)
+    check('expanded table keeps its sorting controls', (found.classCounts.get('ss-segment') || 0) >= 3)
+  } catch (error) {
+    bad('expanded session table renders', error.message)
+  }
+
+  console.log('\n== 5. chart modes and legend toggles')
   const typePreset = readyPreset(payloads)
   typePreset[PRESET_INDEX.chartMode] = 'type'
   try {
@@ -266,7 +309,7 @@ async function main() {
     }
   }
 
-  console.log('\n== 5. loading, unauthorized and error states render')
+  console.log('\n== 6. loading, unauthorized and error states render')
   for (const [label, state] of [
     ['loading', { status: 'loading', data: null, error: null, unauthorized: false, updatedAt: 0 }],
     ['unauthorized', { status: 'unauthorized', data: null, error: null, unauthorized: true, updatedAt: 0 }],
