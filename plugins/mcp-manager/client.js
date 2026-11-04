@@ -601,6 +601,73 @@ window.__ModuleLoader__.load({
       return false
     }
 
+    /** Focus without scrolling the page; opening/closing a modal must not move the view. */
+    function focusQuietly(node) {
+      if (node === null || node === undefined || typeof node.focus !== 'function') return
+      try {
+        node.focus({ preventScroll: true })
+      } catch (error) {
+        try {
+          node.focus()
+        } catch (inner) {
+          /* the invoking element may be gone */
+        }
+      }
+    }
+
+    /*
+     * Modal scroll lock. The first open dialog hides the page scrollbar (compensating its
+     * width so the layout does not shift) and the last close restores the previous inline
+     * styles. Scroll position is never touched.
+     */
+    let pageScrollLocks = 0
+    let pageScrollSnapshot = null
+
+    function lockPageScroll() {
+      if (typeof document === 'undefined' || document === null) return
+      if (pageScrollLocks === 0) {
+        const root = document.documentElement
+        const body = document.body
+        const gap = typeof window !== 'undefined' && window !== null && root !== null && root !== undefined
+          ? Math.max(0, window.innerWidth - root.clientWidth)
+          : 0
+        pageScrollSnapshot = {
+          rootOverflow: root !== null && root !== undefined ? root.style.overflow : '',
+          bodyOverflow: body !== null && body !== undefined ? body.style.overflow : '',
+          bodyPaddingRight: body !== null && body !== undefined ? body.style.paddingRight : '',
+        }
+        if (root !== null && root !== undefined) root.style.overflow = 'hidden'
+        if (body !== null && body !== undefined) {
+          body.style.overflow = 'hidden'
+          if (gap > 0) body.style.paddingRight = gap + 'px'
+        }
+      }
+      pageScrollLocks += 1
+    }
+
+    function unlockPageScroll() {
+      if (typeof document === 'undefined' || document === null) return
+      pageScrollLocks = Math.max(0, pageScrollLocks - 1)
+      if (pageScrollLocks !== 0 || pageScrollSnapshot === null) return
+      const root = document.documentElement
+      const body = document.body
+      if (root !== null && root !== undefined) root.style.overflow = pageScrollSnapshot.rootOverflow
+      if (body !== null && body !== undefined) {
+        body.style.overflow = pageScrollSnapshot.bodyOverflow
+        body.style.paddingRight = pageScrollSnapshot.bodyPaddingRight
+      }
+      pageScrollSnapshot = null
+    }
+
+    /** Open dialogs stack in mount order; only the topmost reacts to Escape / backdrop clicks. */
+    const dialogStack = []
+
+    /**
+     * In-dialog popovers (currently the workspace picker) stack above the dialog for Escape:
+     * the first Escape closes the topmost popover and the dialog stays open.
+     */
+    const escapeOverlays = []
+
     /* ------------------------------------------------------------------ *
      * HTTP API.                                                          *
      * ------------------------------------------------------------------ */
@@ -659,7 +726,9 @@ window.__ModuleLoader__.load({
      * ------------------------------------------------------------------ */
 
     function Button(props) {
-      const className = 'mm-btn' + (props.variant !== undefined && props.variant !== '' ? ' mm-btn-' + props.variant : '')
+      const className = 'mm-btn'
+        + (props.variant !== undefined && props.variant !== '' ? ' mm-btn-' + props.variant : '')
+        + (props.fixed === true ? ' mm-btn-fixed' : '')
       return h(
         'button',
         {
@@ -721,7 +790,7 @@ window.__ModuleLoader__.load({
 
     function TextArea(props) {
       return h('textarea', {
-        className: 'mm-input mm-textarea' + (props.mono === true ? ' mm-mono' : ''),
+        className: 'mm-input mm-textarea' + (props.mono === true ? ' mm-mono' : '') + (props.fill === true ? ' mm-fill' : ''),
         value: props.value,
         placeholder: props.placeholder,
         disabled: props.disabled === true,
@@ -772,17 +841,45 @@ window.__ModuleLoader__.load({
       const t = props.t
       const workspaces = Array.isArray(props.workspaces) ? props.workspaces : []
       const selected = Array.isArray(props.value) ? props.value : []
-      const [open, setOpen] = useState(false)
+      const [openState, setOpenState] = useState(false)
+      /* The parent hides this control when the scope is "global". Collapse the popover
+       * in that same commit (`open` derives from `visible`) so the hidden overlay also
+       * leaves `escapeOverlays` synchronously — a hidden popover must never sit above
+       * the dialog in the Escape stack. The effect below also clears the stored state
+       * so switching back to "workspace" does not silently reopen it. */
+      const visible = props.visible !== false
+      const open = openState === true && visible === true
+      useEffect(() => {
+        if (visible !== true && openState === true) setOpenState(false)
+      }, [visible, openState])
       const rootRef = useRef(null)
       useEffect(() => {
         if (open !== true) return undefined
+        /* The token carries its own close so the dialog backdrop can dismiss the popover
+         * first, exactly like the Escape handler does. */
+        const token = { close: () => setOpenState(false) }
+        escapeOverlays.push(token)
         const onMouseDown = (event) => {
           const node = rootRef.current
-          if (node !== null && typeof node.contains === 'function' && !node.contains(event.target)) setOpen(false)
+          if (node !== null && typeof node.contains === 'function' && !node.contains(event.target)) setOpenState(false)
+        }
+        /* Capture phase, registered after the dialog's own handler: the dialog sees the
+         * overlay and yields Escape, then this handler closes the popover only. */
+        const onKeyDown = (event) => {
+          if (event.key !== 'Escape') return
+          if (escapeOverlays.length === 0 || escapeOverlays[escapeOverlays.length - 1] !== token) return
+          event.preventDefault()
+          event.stopImmediatePropagation()
+          event.stopPropagation()
+          setOpenState(false)
         }
         document.addEventListener('mousedown', onMouseDown)
+        document.addEventListener('keydown', onKeyDown, true)
         return () => {
           document.removeEventListener('mousedown', onMouseDown)
+          document.removeEventListener('keydown', onKeyDown, true)
+          const index = escapeOverlays.indexOf(token)
+          if (index !== -1) escapeOverlays.splice(index, 1)
         }
       }, [open])
       const change = (next) => {
@@ -793,66 +890,76 @@ window.__ModuleLoader__.load({
         if (checked === true) change(selected.includes(path) ? selected : selected.concat([path]))
         else change(selected.filter((entry) => entry !== path))
       }
+      const buttonText = selected.length === 0 ? t('dialog.workspacesChoose') : t('dialog.workspacesCount', { count: selected.length })
       return h(
         'div',
         { className: 'mm-ws', ref: rootRef },
         h('span', { className: 'mm-ws-label' }, t('dialog.workspaces')),
         h(
-          Button,
-          { onClick: () => setOpen((previous) => !previous) },
-          selected.length === 0 ? t('dialog.workspacesChoose') : t('dialog.workspacesCount', { count: selected.length }),
+          'div',
+          { className: 'mm-ws-picker' },
+          h(
+            Button,
+            {
+              onClick: () => setOpenState((previous) => !previous),
+              ariaLabel: t('dialog.workspaces'),
+              title: buttonText,
+            },
+            /* The button is inline-flex, so bare text becomes an anonymous flex item and
+             * `text-overflow` on the button never applies. A shrinkable span owns the
+             * ellipsis instead of letting the label be hard-clipped. */
+            h('span', { className: 'mm-ws-btn-text' }, buttonText),
+          ),
+          open === true
+            ? h(
+              'div',
+              { className: 'mm-ws-pop', role: 'group', 'aria-label': t('dialog.workspaces') },
+              workspaces.length === 0
+                ? h('p', { className: 'mm-ws-empty' }, t('dialog.workspacesEmpty'))
+                : h(
+                  Fragment,
+                  null,
+                  h(
+                    'div',
+                    { className: 'mm-ws-actions' },
+                    h(Button, {
+                      onClick: () => change(workspaces.map((entry) => textOf(entry !== null && entry !== undefined ? entry.path : '')).filter((entry) => entry !== '')),
+                    }, t('dialog.workspacesAll')),
+                    h(Button, { onClick: () => change([]) }, t('dialog.workspacesClear')),
+                  ),
+                  h(
+                    'div',
+                    { className: 'mm-ws-list' },
+                    workspaces.map((entry, index) => {
+                      const path = textOf(entry !== null && entry !== undefined ? entry.path : '')
+                      return h(Checkbox, {
+                        key: path !== '' ? path : 'workspace-' + index,
+                        checked: selected.includes(path),
+                        label: workspaceLabel(workspaces, path),
+                        title: path,
+                        onChange: (checked) => toggle(path, checked),
+                      })
+                    }),
+                  ),
+                ),
+            )
+            : null,
         ),
-        open === true
-          ? h(
-            'div',
-            { className: 'mm-ws-pop', role: 'group', 'aria-label': t('dialog.workspaces') },
-            workspaces.length === 0
-              ? h('p', { className: 'mm-ws-empty' }, t('dialog.workspacesEmpty'))
-              : h(
-                Fragment,
-                null,
-                h(
-                  'div',
-                  { className: 'mm-ws-actions' },
-                  h(Button, {
-                    onClick: () => change(workspaces.map((entry) => textOf(entry !== null && entry !== undefined ? entry.path : '')).filter((entry) => entry !== '')),
-                  }, t('dialog.workspacesAll')),
-                  h(Button, { onClick: () => change([]) }, t('dialog.workspacesClear')),
-                ),
-                h(
-                  'div',
-                  { className: 'mm-ws-list' },
-                  workspaces.map((entry, index) => {
-                    const path = textOf(entry !== null && entry !== undefined ? entry.path : '')
-                    return h(Checkbox, {
-                      key: path !== '' ? path : 'workspace-' + index,
-                      checked: selected.includes(path),
-                      label: workspaceLabel(workspaces, path),
-                      title: path,
-                      onChange: (checked) => toggle(path, checked),
-                    })
-                  }),
-                ),
-              ),
-          )
-          : null,
-        selected.length > 0
-          ? h(
-            'div',
-            { className: 'mm-ws-chips' },
-            selected.map((path) => h(
-              'span',
-              { key: path, className: 'mm-chip mm-ws-chip', title: path },
-              workspaceLabel(workspaces, path),
-              h('button', {
-                type: 'button',
-                className: 'mm-ws-chip-x',
-                'aria-label': t('aria.removeWorkspace', { name: workspaceLabel(workspaces, path) }),
-                onClick: () => toggle(path, false),
-              }, '×'),
-            )),
-          )
-          : null,
+        h(
+          'div',
+          { className: 'mm-ws-chips' },
+          selected.map((path) => h(
+            'span',
+            { key: path, className: 'mm-chip mm-ws-chip', title: path },
+            workspaceLabel(workspaces, path),
+            h('button', {
+              type: 'button',
+              className: 'mm-ws-chip-x',
+              'aria-label': t('aria.removeWorkspace', { name: workspaceLabel(workspaces, path) }),
+              onClick: () => toggle(path, false),
+            }, '×'),
+          )),
+        ),
       )
     }
 
@@ -896,59 +1003,167 @@ window.__ModuleLoader__.load({
 
     function Dialog(props) {
       const boxRef = useRef(null)
+      const backdropRef = useRef(null)
       const onCloseRef = useRef(props.onClose)
       onCloseRef.current = props.onClose
+      const stackToken = useRef({})
       useEffect(() => {
+        const token = stackToken.current
+        dialogStack.push(token)
         const onKeyDown = (event) => {
-          if (event.key === 'Escape') {
-            event.stopPropagation()
-            const close = onCloseRef.current
-            if (typeof close === 'function') close()
-          }
+          if (event.key !== 'Escape') return
+          /* An open popover (workspace picker) consumes Escape first; it closes itself. */
+          if (escapeOverlays.length > 0) return
+          if (dialogStack.length === 0 || dialogStack[dialogStack.length - 1] !== token) return
+          event.preventDefault()
+          event.stopImmediatePropagation()
+          event.stopPropagation()
+          const close = onCloseRef.current
+          if (typeof close === 'function') close()
         }
-        document.addEventListener('keydown', onKeyDown)
+        /* Capture phase so the Settings shell (React handlers on the root) never sees Escape. */
+        document.addEventListener('keydown', onKeyDown, true)
         return () => {
-          document.removeEventListener('keydown', onKeyDown)
+          document.removeEventListener('keydown', onKeyDown, true)
+          const index = dialogStack.indexOf(token)
+          if (index !== -1) dialogStack.splice(index, 1)
+        }
+      }, [])
+      useEffect(() => {
+        lockPageScroll()
+        return () => {
+          unlockPageScroll()
+        }
+      }, [])
+      /*
+       * The host renders the Settings panel inside its own scroll container, so locking
+       * `html`/`body` is not enough. Swallow non-passive wheel / touch scrolling on the
+       * backdrop; scrollable regions inside the dialog keep their native scrolling.
+       */
+      useEffect(() => {
+        const node = backdropRef.current
+        if (node === null || node === undefined || typeof node.addEventListener !== 'function') return undefined
+        /* Walk ancestors of the gesture target and report whether one of them can still
+         * scroll along the requested axis, in the requested direction. Both axes are
+         * checked independently so a horizontally scrolling chips row works while the
+         * dialog itself stays put.
+         *
+         * The deltas here speak *content* direction, i.e. wheel semantics: deltaY > 0
+         * moves the content down (scrollTop grows) and needs room below
+         * (`scrollTop + clientHeight < scrollHeight`); deltaY < 0 moves it up
+         * (scrollTop shrinks) and needs `scrollTop > 0`. Same mapping on the X axis.
+         * Touch handlers must negate the finger displacement before calling this. */
+        const canScroll = (target, deltaX, deltaY) => {
+          let current = target
+          while (current !== null && current !== undefined && current !== node) {
+            if (current.nodeType === 1) {
+              const style = typeof window !== 'undefined' && window !== null ? window.getComputedStyle(current) : null
+              if (style !== null) {
+                if (deltaY !== 0 && (style.overflowY === 'auto' || style.overflowY === 'scroll') && current.scrollHeight > current.clientHeight) {
+                  if (deltaY > 0 ? current.scrollTop + current.clientHeight < current.scrollHeight : current.scrollTop > 0) return true
+                }
+                if (deltaX !== 0 && (style.overflowX === 'auto' || style.overflowX === 'scroll') && current.scrollWidth > current.clientWidth) {
+                  if (deltaX > 0 ? current.scrollLeft + current.clientWidth < current.scrollWidth : current.scrollLeft > 0) return true
+                }
+              }
+            }
+            current = current.parentNode
+          }
+          return false
+        }
+        const onWheel = (event) => {
+          if (canScroll(event.target, event.deltaX, event.deltaY)) return
+          event.preventDefault()
+        }
+        let touchOrigin = null
+        const onTouchStart = (event) => {
+          if (event.touches.length !== 1) {
+            touchOrigin = null
+            return
+          }
+          const touch = event.touches[0]
+          touchOrigin = { x: touch.clientX, y: touch.clientY }
+        }
+        const onTouchEnd = () => {
+          touchOrigin = null
+        }
+        const onTouchMove = (event) => {
+          const touch = event.touches.length === 1 ? event.touches[0] : null
+          if (touch === null || touchOrigin === null) {
+            event.preventDefault()
+            return
+          }
+          const deltaX = touch.clientX - touchOrigin.x
+          const deltaY = touch.clientY - touchOrigin.y
+          if (deltaX === 0 && deltaY === 0) return
+          /* Finger displacement and scroll direction are opposite:
+           *   finger up   (deltaY < 0) -> content moves down -> scrollTop grows
+           *                             -> needs scrollTop < scrollHeight - clientHeight
+           *   finger down (deltaY > 0) -> content moves up   -> scrollTop shrinks
+           *                             -> needs scrollTop > 0
+           *   finger left (deltaX < 0) -> content moves right -> scrollLeft grows
+           *                             -> needs scrollLeft < scrollWidth - clientWidth
+           *   finger right(deltaX > 0) -> content moves left  -> scrollLeft shrinks
+           *                             -> needs scrollLeft > 0
+           * `canScroll` takes content-direction deltas, so negate the finger delta.
+           * Equal absolute values stay on the vertical axis. */
+          const scrollX = -deltaX
+          const scrollY = -deltaY
+          const horizontal = Math.abs(deltaX) > Math.abs(deltaY)
+          const allowed = horizontal ? canScroll(event.target, scrollX, 0) : canScroll(event.target, 0, scrollY)
+          /* Advance the origin on every move: a mid-gesture reversal is judged by the
+           * current segment, never by the accumulated displacement. */
+          touchOrigin = { x: touch.clientX, y: touch.clientY }
+          if (allowed) return
+          event.preventDefault()
+        }
+        node.addEventListener('wheel', onWheel, { passive: false })
+        node.addEventListener('touchstart', onTouchStart, { passive: true })
+        node.addEventListener('touchmove', onTouchMove, { passive: false })
+        node.addEventListener('touchend', onTouchEnd)
+        node.addEventListener('touchcancel', onTouchEnd)
+        return () => {
+          node.removeEventListener('wheel', onWheel)
+          node.removeEventListener('touchstart', onTouchStart)
+          node.removeEventListener('touchmove', onTouchMove)
+          node.removeEventListener('touchend', onTouchEnd)
+          node.removeEventListener('touchcancel', onTouchEnd)
         }
       }, [])
       useEffect(() => {
         const node = boxRef.current
         if (node !== null && typeof node.querySelector === 'function') {
-          const focusable = node.querySelector('input, select, textarea, button')
-          if (focusable !== null && typeof focusable.focus === 'function') {
-            try {
-              focusable.focus()
-            } catch (error) {
-              /* focus is best-effort */
-            }
-          }
+          focusQuietly(node.querySelector('input, select, textarea, button'))
         }
         const returnFocus = props.returnFocus
         return () => {
-          if (returnFocus !== null && returnFocus !== undefined && typeof returnFocus.focus === 'function') {
-            try {
-              returnFocus.focus()
-            } catch (error) {
-              /* the invoking element may be gone */
-            }
-          }
+          focusQuietly(returnFocus)
         }
       }, [props.returnFocus])
+      const sizeClass = props.size === 'confirm' ? ' mm-dialog-confirm' : ''
       return h(
         'div',
         {
           className: 'mm-backdrop',
+          ref: backdropRef,
           onMouseDown: (event) => {
-            if (event.target === event.currentTarget) {
-              const close = onCloseRef.current
-              if (typeof close === 'function') close()
+            if (event.target !== event.currentTarget) return
+            /* Mirror the Escape hierarchy: an open in-dialog popover consumes the first
+             * backdrop click; only the next click closes the dialog itself. */
+            if (escapeOverlays.length > 0) {
+              const overlay = escapeOverlays[escapeOverlays.length - 1]
+              if (overlay !== null && overlay !== undefined && typeof overlay.close === 'function') overlay.close()
+              return
             }
+            if (dialogStack.length === 0 || dialogStack[dialogStack.length - 1] !== stackToken.current) return
+            const close = onCloseRef.current
+            if (typeof close === 'function') close()
           },
         },
         h(
           'div',
           {
-            className: 'mm-dialog' + (props.wide === true ? ' mm-dialog-wide' : ''),
+            className: 'mm-dialog' + sizeClass,
             role: 'dialog',
             'aria-modal': 'true',
             'aria-label': props.title,
@@ -960,6 +1175,9 @@ window.__ModuleLoader__.load({
             h('h2', { className: 'mm-dialog-title' }, props.title),
             h('button', { type: 'button', className: 'mm-icon-btn', 'aria-label': props.closeLabel, onClick: props.onClose }, '\u00d7'),
           ),
+          props.settings !== undefined && props.settings !== null ? h('div', { className: 'mm-dialog-settings' }, props.settings) : null,
+          props.tabs !== undefined && props.tabs !== null ? h('div', { className: 'mm-dialog-tabs' }, props.tabs) : null,
+          props.status !== undefined && props.status !== null ? h('div', { className: 'mm-status-slot' }, props.status) : null,
           h('div', { className: 'mm-dialog-body' }, props.children),
           props.footer !== undefined && props.footer !== null ? h('div', { className: 'mm-dialog-foot' }, props.footer) : null,
         ),
@@ -980,11 +1198,12 @@ window.__ModuleLoader__.load({
       const meta = []
       meta.push(h(Chip, { key: 'enabled', tone: enabled ? 'ok' : '' }, enabled ? t('row.enabled') : t('row.disabled')))
       meta.push(h(Chip, { key: 'live', tone: liveTone(live) }, liveLabel(t, live)))
-      if (live !== null && live !== undefined && live.phase === 'active' && toolCount !== null) {
-        meta.push(h('span', { key: 'tools', className: 'mm-muted' }, t('row.tools', { count: toolCount })))
-      }
+      /* Always rendered: probing fills `toolCount` in place, so the card never grows. */
+      meta.push(h('span', { key: 'tools', className: 'mm-muted mm-card-tools' }, toolCount !== null ? t('row.tools', { count: toolCount }) : DASH))
       if (readOnly === true) meta.push(h(Chip, { key: 'ro', tone: '' }, t('row.readOnly')))
       const rowWorkspaces = Array.isArray(row.workspaces) ? row.workspaces.filter((path) => textOf(path) !== '') : []
+      const probeText = probeSummary(t, row.lastProbe)
+      const targetText = textOf(row.target) !== '' ? row.target : DASH
       return h(
         'article',
         { className: 'mm-card' + (enabled ? '' : ' mm-card-off') },
@@ -1009,7 +1228,7 @@ window.__ModuleLoader__.load({
           { className: 'mm-card-meta' },
           meta,
         ),
-        h('div', { className: 'mm-target', 'aria-label': t('row.target') }, textOf(row.target) !== '' ? row.target : DASH),
+        h('div', { className: 'mm-target', title: targetText, 'aria-label': t('row.target') }, targetText),
         rowWorkspaces.length > 0
           ? h(
             'div',
@@ -1022,7 +1241,7 @@ window.__ModuleLoader__.load({
           )
           : null,
         readOnly === true ? h('p', { className: 'mm-hint' }, t('row.readOnlyHint')) : null,
-        h('div', { className: 'mm-card-probe' }, probeSummary(t, row.lastProbe)),
+        h('div', { className: 'mm-card-probe', title: probeText }, probeText),
         h(
           'div',
           { className: 'mm-row-actions' },
@@ -1074,18 +1293,24 @@ window.__ModuleLoader__.load({
       }, [props.row])
       return h(
         Dialog,
-        { title: t('dialog.jsonTitle') + ' · ' + props.row.serverName, closeLabel: t('action.close'), onClose: props.onClose, returnFocus: props.returnFocus, wide: true },
-        h('pre', { className: 'mm-code' }, text),
-        h(
-          'div',
-          { className: 'mm-inline' },
-          h(Button, {
-            onClick: async () => {
-              const copied = await copyText(text)
-              if (typeof props.onCopied === 'function') props.onCopied(copied)
-            },
-          }, t('action.copy')),
-        ),
+        {
+          title: t('dialog.jsonTitle') + ' · ' + props.row.serverName,
+          closeLabel: t('action.close'),
+          onClose: props.onClose,
+          returnFocus: props.returnFocus,
+          footer: h(
+            Fragment,
+            null,
+            h(Button, {
+              onClick: async () => {
+                const copied = await copyText(text)
+                if (typeof props.onCopied === 'function') props.onCopied(copied)
+              },
+            }, t('action.copy')),
+            h(Button, { onClick: props.onClose }, t('action.close')),
+          ),
+        },
+        h('pre', { className: 'mm-code mm-code-fill' }, text),
       )
     }
 
@@ -1116,8 +1341,8 @@ window.__ModuleLoader__.load({
       }
 
       const scopeOptions = [
-        { value: 'workspace', label: t('scope.workspace') },
         { value: 'global', label: t('scope.global') },
+        { value: 'workspace', label: t('scope.workspace') },
       ]
 
       const validate = () => {
@@ -1186,8 +1411,8 @@ window.__ModuleLoader__.load({
       }
 
       const formBody = h(
-        Fragment,
-        null,
+        'div',
+        { className: 'mm-form-body' },
         h(
           'div',
           { className: 'mm-grid2' },
@@ -1316,16 +1541,16 @@ window.__ModuleLoader__.load({
           ),
         ),
         h('p', { className: 'mm-hint' }, t('dialog.testHint')),
-        testResult !== null ? h('p', { className: 'mm-test-result' }, probeSummary(t, testResult)) : null,
       )
 
       const jsonBody = h(
-        Fragment,
-        null,
+        'div',
+        { className: 'mm-json-body' },
         h(TextArea, {
           value: jsonText,
           rows: 12,
           mono: true,
+          fill: true,
           placeholder: t('dialog.jsonHint'),
           onChange: (value) => {
             setJsonText(value)
@@ -1338,76 +1563,90 @@ window.__ModuleLoader__.load({
           h(Button, { onClick: generateJson }, t('action.generate')),
           h(Button, { onClick: parseJson, disabled: jsonText.trim() === '' }, t('action.parse')),
         ),
-        h(Notice, { notice: jsonNotice }),
+        h('div', { className: 'mm-notice-slot' }, h(Notice, { notice: jsonNotice })),
       )
 
-      const topRow = h(
-        'div',
-        { className: 'mm-dialog-top' },
+      const settingsRow = h(
+        Fragment,
+        null,
         h(
           'div',
-          { className: 'mm-tabs', role: 'tablist' },
-          h(
-            'button',
-            {
-              type: 'button',
-              role: 'tab',
-              'aria-selected': tab === 'form' ? 'true' : 'false',
-              className: 'mm-tab' + (tab === 'form' ? ' mm-tab-active' : ''),
-              onClick: () => setTab('form'),
-            },
-            t('dialog.tab.form'),
-          ),
-          h(
-            'button',
-            {
-              type: 'button',
-              role: 'tab',
-              'aria-selected': tab === 'json' ? 'true' : 'false',
-              className: 'mm-tab' + (tab === 'json' ? ' mm-tab-active' : ''),
-              onClick: () => setTab('json'),
-            },
-            t('dialog.tab.json'),
-          ),
-        ),
-        h(
-          'div',
-          { className: 'mm-top-right' },
+          { className: 'mm-settings-scope' },
+          h('span', { className: 'mm-scope-label' }, t('dialog.scope')),
           h(
             'div',
             {
-              className: 'mm-scope',
+              className: 'mm-seg',
               role: 'group',
               'aria-label': t('dialog.scope'),
               title: editing ? t('dialog.scopeLocked') : undefined,
             },
-            h('span', { className: 'mm-scope-label' }, t('dialog.scope')),
-            h(
-              'div',
-              { className: 'mm-seg' },
-              scopeOptions.map((option) => h(
-                'button',
-                {
-                  key: option.value,
-                  type: 'button',
-                  className: 'mm-seg-btn' + (draft.level === option.value ? ' mm-seg-btn-active' : ''),
-                  'aria-pressed': draft.level === option.value ? 'true' : 'false',
-                  disabled: editing,
-                  onClick: () => setField('level', option.value),
-                },
-                option.label,
-              )),
-            ),
+            scopeOptions.map((option) => h(
+              'button',
+              {
+                key: option.value,
+                type: 'button',
+                className: 'mm-seg-btn' + (draft.level === option.value ? ' mm-seg-btn-active' : ''),
+                'aria-pressed': draft.level === option.value ? 'true' : 'false',
+                disabled: editing,
+                onClick: () => setField('level', option.value),
+              },
+              option.label,
+            )),
           ),
-          draft.level === 'workspace'
-            ? h(WorkspacePicker, {
-              t: t,
-              workspaces: props.workspaces,
-              value: draft.workspaces,
-              onChange: (value) => setField('workspaces', value),
-            })
-            : null,
         ),
+        h(
+          'div',
+          { className: 'mm-settings-ws' + (draft.level === 'workspace' ? '' : ' mm-hidden') },
+          h(WorkspacePicker, {
+            t: t,
+            workspaces: props.workspaces,
+            value: draft.workspaces,
+            visible: draft.level === 'workspace',
+            onChange: (value) => setField('workspaces', value),
+          }),
+        ),
+      )
+
+      const tabsRow = h(
+        'div',
+        { className: 'mm-tabs', role: 'tablist' },
+        h(
+          'button',
+          {
+            type: 'button',
+            role: 'tab',
+            'aria-selected': tab === 'form' ? 'true' : 'false',
+            className: 'mm-tab' + (tab === 'form' ? ' mm-tab-active' : ''),
+            onClick: () => setTab('form'),
+          },
+          t('dialog.tab.form'),
+        ),
+        h(
+          'button',
+          {
+            type: 'button',
+            role: 'tab',
+            'aria-selected': tab === 'json' ? 'true' : 'false',
+            className: 'mm-tab' + (tab === 'json' ? ' mm-tab-active' : ''),
+            onClick: () => setTab('json'),
+          },
+          t('dialog.tab.json'),
+        ),
+      )
+
+      /* One fixed prompt slot shared by both tabs: validation error first, then the test result. */
+      const statusText = error !== '' ? error : testResult !== null ? probeSummary(t, testResult) : ''
+      const statusKind = error !== '' ? 'err' : testResult !== null ? (testResult.ok === true ? 'ok' : 'err') : ''
+      const statusLine = h(
+        'p',
+        {
+          className: 'mm-status-text' + (statusKind !== '' ? ' mm-status-' + statusKind : ''),
+          role: statusKind === 'err' ? 'alert' : 'status',
+          'aria-live': 'polite',
+          title: statusText !== '' ? statusText : undefined,
+        },
+        statusText,
       )
 
       return h(
@@ -1417,22 +1656,22 @@ window.__ModuleLoader__.load({
           closeLabel: t('action.close'),
           onClose: props.onClose,
           returnFocus: props.returnFocus,
-          wide: true,
+          settings: settingsRow,
+          tabs: tabsRow,
+          status: statusLine,
           footer: h(
             Fragment,
             null,
             h(
               'div',
               { className: 'mm-foot-left' },
-              h(Button, { onClick: testDraft, disabled: testing === true || props.busy === true }, testing === true ? t('state.testing') : t('action.testDraft')),
+              h(Button, { fixed: true, onClick: testDraft, disabled: testing === true || props.busy === true }, testing === true ? t('state.testing') : t('action.testDraft')),
             ),
             h(Button, { onClick: props.onClose }, t('action.cancel')),
-            h(Button, { variant: 'primary', onClick: submit, disabled: props.busy === true }, props.busy === true ? t('state.saving') : t('action.save')),
+            h(Button, { fixed: true, variant: 'primary', onClick: submit, disabled: props.busy === true }, props.busy === true ? t('state.saving') : t('action.save')),
           ),
         },
-        topRow,
         tab === 'form' ? formBody : jsonBody,
-        error !== '' ? h('p', { className: 'mm-err-text', role: 'alert' }, error) : null,
       )
     }
 
@@ -1567,9 +1806,6 @@ window.__ModuleLoader__.load({
           h(Button, { onClick: exportJson, disabled: busy === true }, t('action.export')),
           h(Button, { onClick: copyExported, disabled: exported === '' }, t('action.copy')),
         ),
-        exported !== ''
-          ? h(Fragment, null, h('span', { className: 'mm-muted' }, t('io.exported')), h('pre', { className: 'mm-code' }, exported))
-          : null,
         h(TextArea, {
           value: text,
           rows: 6,
@@ -1602,7 +1838,14 @@ window.__ModuleLoader__.load({
           h(Checkbox, { checked: overwrite, label: t('io.overwrite'), onChange: setOverwrite }),
           h(Button, { variant: 'primary', onClick: importJson, disabled: busy === true }, t('action.import')),
         ),
-        h(Notice, { notice: notice }),
+        h('div', { className: 'mm-notice-slot' }, h(Notice, { notice: notice })),
+        h(
+          'div',
+          { className: 'mm-export-slot' },
+          exported !== ''
+            ? h(Fragment, null, h('span', { className: 'mm-muted' }, t('io.exported')), h('pre', { className: 'mm-code' }, exported))
+            : null,
+        ),
       )
     }
 
@@ -1663,7 +1906,7 @@ window.__ModuleLoader__.load({
         { className: 'mm-section' },
         h('h2', { className: 'mm-section-title' }, t('library.title')),
         h('p', { className: 'mm-section-hint' }, t('library.hint')),
-        h(Notice, { notice: notice }),
+        h('div', { className: 'mm-notice-slot' }, h(Notice, { notice: notice })),
         entries.length === 0
           ? h(EmptyState, { title: t('empty.library') })
           : h(
@@ -1725,6 +1968,7 @@ window.__ModuleLoader__.load({
               closeLabel: t('action.close'),
               onClose: () => setConfirmEntry(null),
               returnFocus: confirmReturnFocus,
+              size: 'confirm',
               footer: h(
                 Fragment,
                 null,
@@ -1841,7 +2085,6 @@ window.__ModuleLoader__.load({
       const filteredRows = scopeFilter === 'all' ? visibleRows : visibleRows.filter((row) => row.level === scopeFilter)
       const globalRows = filteredRows.filter((row) => row.level === 'global')
       const workspaceRows = filteredRows.filter((row) => row.level === 'workspace')
-      const defaultLevel = scopeFilter === 'global' ? 'global' : 'workspace'
 
       const scopeOptions = [
         { value: 'all', label: t('scope.all') },
@@ -1850,7 +2093,7 @@ window.__ModuleLoader__.load({
       ]
 
       const openCreate = (event) => {
-        setEditor({ mode: 'create', level: defaultLevel, row: null, returnFocus: event !== undefined && event !== null ? event.currentTarget : null })
+        setEditor({ mode: 'create', level: 'global', row: null, returnFocus: event !== undefined && event !== null ? event.currentTarget : null })
       }
       const openEdit = (row, event) => {
         setEditor({ mode: 'edit', level: row.level, row: row, returnFocus: event !== undefined && event !== null ? event.currentTarget : null })
@@ -2010,20 +2253,29 @@ window.__ModuleLoader__.load({
         rowsBody = h('div', { className: 'mm-list' }, filteredRows.map((row) => h(RowCard, Object.assign({ key: row.id, row: row }, rowActions))))
       }
 
+      const warningText = warnings.map((warning) => textOf(warning)).join(' · ')
       const body = h(
         Fragment,
         null,
-        warnings.length > 0
-          ? h(
-            'div',
-            { className: 'mm-warn-banner', role: 'status' },
-            h('strong', null, t('warnings.title')),
-            h('ul', null, warnings.map((warning, index) => h('li', { key: index }, textOf(warning)))),
-          )
-          : null,
-        h(Notice, { notice: notice, dismissLabel: t('action.close'), onDismiss: () => setNotice(null) }),
+        h(
+          'div',
+          { className: 'mm-warn-slot' },
+          warnings.length > 0
+            ? h(
+              'div',
+              {
+                className: 'mm-warn-banner',
+                role: 'status',
+                title: warnings.map((warning) => textOf(warning)).join('\n'),
+              },
+              h('strong', null, t('warnings.title')),
+              h('span', { className: 'mm-warn-text' }, warningText),
+            )
+            : null,
+        ),
+        h('div', { className: 'mm-notice-slot' }, h(Notice, { notice: notice, dismissLabel: t('action.close'), onDismiss: () => setNotice(null) })),
         toolbar,
-        rowsBody,
+        h('div', { className: 'mm-results' }, rowsBody),
         h(ImportExportSection, { t: t, onImported: () => { void loadState() } }),
         h(LibrarySection, { t: t, profile: profile, entries: library, onChanged: () => { void loadState() } }),
       )
@@ -2054,7 +2306,20 @@ window.__ModuleLoader__.load({
         'section',
         { className: 'mm-page', 'aria-label': t('section.title') },
         header,
-        view.status === 'ready' && view.error !== null ? h('p', { className: 'mm-err-text' }, t('state.error') + ': ' + view.error) : null,
+        h(
+          'div',
+          { className: 'mm-err-slot' },
+          view.status === 'ready' && view.error !== null && view.error !== undefined
+            ? h(
+              'p',
+              {
+                className: 'mm-err-text',
+                title: t('state.error') + ': ' + view.error,
+              },
+              t('state.error') + ': ' + view.error,
+            )
+            : null,
+        ),
         content,
         editor !== null
           ? h(EditorDialog, {
@@ -2086,6 +2351,7 @@ window.__ModuleLoader__.load({
               closeLabel: t('action.close'),
               onClose: () => setConfirm(null),
               returnFocus: confirm.returnFocus,
+              size: 'confirm',
               footer: h(
                 Fragment,
                 null,
@@ -2109,11 +2375,12 @@ window.__ModuleLoader__.load({
       '.mm-head-text{display:flex;flex-direction:column;gap:2px;min-width:0}',
       '.mm-title{margin:0;font-size:16px;line-height:24px;font-weight:600;color:var(--dsw-alias-label-primary)}',
       '.mm-subtitle{margin:0;font-size:12px;line-height:18px;color:var(--dsw-alias-label-secondary)}',
-      '.mm-head-actions{display:flex;align-items:center;gap:8px;flex-wrap:wrap}',
-      '.mm-updated{font-size:11px;line-height:16px;color:var(--dsw-alias-label-tertiary)}',
+      '.mm-head-actions{display:flex;align-items:center;gap:8px;flex-wrap:nowrap}',
+      '.mm-updated{flex:none;width:140px;min-width:140px;text-align:right;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;font-variant-numeric:tabular-nums;font-size:11px;line-height:16px;color:var(--dsw-alias-label-tertiary)}',
       '.mm-btn{font:inherit;font-size:12px;line-height:18px;height:30px;padding:0 11px;display:inline-flex;align-items:center;justify-content:center;gap:6px;white-space:nowrap;cursor:pointer;color:var(--dsw-alias-label-primary);background:transparent;border:1px solid var(--dsw-alias-border-l2);border-radius:var(--dsw-radius-sm)}',
       '.mm-btn:hover:not(:disabled){background:var(--dsw-alias-interactive-bg-hover)}',
       '.mm-btn:disabled{opacity:.45;cursor:default}',
+      '.mm-btn-fixed{box-sizing:border-box;flex:0 1 auto;min-width:140px;justify-content:center;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}',
       '.mm-btn-primary{color:var(--dsw-alias-bg-base);background:var(--dsw-alias-brand-primary);border-color:var(--dsw-alias-brand-primary)}',
       '.mm-btn-primary:hover:not(:disabled){background:var(--dsw-alias-brand-primary)}',
       '.mm-btn-danger{color:var(--dsw-alias-state-error-primary);border-color:var(--dsw-alias-state-error-primary)}',
@@ -2130,14 +2397,17 @@ window.__ModuleLoader__.load({
       '.mm-seg-btn:hover{background:var(--dsw-alias-interactive-bg-hover)}',
       '.mm-seg-btn-active{background:var(--dsw-alias-bg-layer-2);color:var(--dsw-alias-label-primary)}',
       '.mm-seg-btn:disabled{opacity:.45;cursor:default}',
-      '.mm-ws{position:relative;display:inline-flex;align-items:center;gap:6px;flex-wrap:wrap;min-width:0}',
-      '.mm-ws-label{font-size:11px;line-height:16px;color:var(--dsw-alias-label-tertiary)}',
-      '.mm-ws-pop{position:absolute;top:calc(100% + 4px);right:0;z-index:2;display:flex;flex-direction:column;gap:6px;width:280px;max-height:240px;overflow:auto;padding:8px;border:1px solid var(--dsw-alias-border-l2);border-radius:var(--dsw-radius-sm);background:var(--dsw-alias-bg-layer-1);box-shadow:0 8px 24px var(--dsw-alias-bg-overlay,var(--dsw-alias-border-l2))}',
+      '.mm-ws{position:relative;display:flex;align-items:center;gap:6px;flex-wrap:nowrap;min-width:0;width:100%;flex:1 1 0}',
+      '.mm-ws-label{font-size:11px;line-height:16px;color:var(--dsw-alias-label-tertiary);flex:none}',
+      '.mm-ws-picker{position:relative;display:flex;flex:0 1 140px;min-width:0}',
+      '.mm-ws-picker > .mm-btn{flex:0 1 auto;box-sizing:border-box;width:140px;min-width:0;max-width:100%;padding:0 8px;justify-content:center;overflow:hidden;text-overflow:ellipsis}',
+      '.mm-ws-btn-text{display:block;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}',
+      '.mm-ws-pop{position:absolute;top:calc(100% + 4px);right:0;left:auto;z-index:2;display:flex;flex-direction:column;gap:6px;box-sizing:border-box;width:max-content;min-width:200px;max-width:min(280px,calc(100vw - 96px));max-height:240px;overflow:auto;overscroll-behavior:contain;padding:8px;border:1px solid var(--dsw-alias-border-l2);border-radius:var(--dsw-radius-sm);background:var(--dsw-alias-bg-layer-1);box-shadow:0 8px 24px var(--dsw-alias-bg-overlay,var(--dsw-alias-border-l2))}',
       '.mm-ws-actions{display:flex;gap:6px}',
       '.mm-ws-list{display:flex;flex-direction:column;gap:4px}',
       '.mm-ws-empty{margin:0;font-size:11px;line-height:16px;color:var(--dsw-alias-label-tertiary)}',
-      '.mm-ws-chips{display:flex;align-items:center;gap:4px;flex-wrap:wrap;min-width:0}',
-      '.mm-ws-chip{padding-right:3px;gap:4px}',
+      '.mm-ws-chips{display:flex;align-items:center;gap:4px;flex-wrap:nowrap;overflow-x:auto;overflow-y:hidden;overscroll-behavior:contain;min-width:0;flex:1 1 0;height:22px;scrollbar-width:thin}',
+      '.mm-ws-chip{padding-right:3px;gap:4px;flex:none}',
       '.mm-ws-chip-x{border:none;background:transparent;color:var(--dsw-alias-label-tertiary);font:inherit;line-height:1;padding:0 2px;cursor:pointer}',
       '.mm-ws-chip-x:hover{color:var(--dsw-alias-label-primary)}',
       '.mm-card-ws{display:flex;align-items:center;gap:4px;flex-wrap:wrap;min-width:0}',
@@ -2146,7 +2416,12 @@ window.__ModuleLoader__.load({
       '.mm-input:focus-visible{border-color:var(--dsw-alias-brand-primary);outline:2px solid var(--dsw-alias-brand-primary);outline-offset:1px}',
       '.mm-input::placeholder{color:var(--dsw-alias-label-tertiary)}',
       '.mm-textarea{resize:vertical;min-height:64px}',
+      '.mm-fill{flex:1 1 auto;min-height:0;resize:none}',
+      '.mm-form-body{display:flex;flex-direction:column;gap:10px;min-width:0}',
+      '.mm-json-body{display:flex;flex-direction:column;gap:8px;flex:1 1 auto;min-height:0}',
       '.mm-mono{font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;font-size:11px;line-height:17px}',
+      '.mm-results{flex:none;display:flex;flex-direction:column;height:360px;overflow:auto;overscroll-behavior:contain;scrollbar-gutter:stable}',
+      '.mm-results>.mm-empty{flex:1 1 auto;min-height:0}',
       '.mm-groups{display:flex;flex-direction:column;gap:16px}',
       '.mm-group{display:flex;flex-direction:column;gap:8px}',
       '.mm-group-title{margin:0;font-size:12px;line-height:18px;font-weight:600;color:var(--dsw-alias-label-secondary);padding-bottom:4px;border-bottom:1px solid var(--dsw-alias-border-l1)}',
@@ -2156,17 +2431,27 @@ window.__ModuleLoader__.load({
       '.mm-card-head{display:flex;align-items:center;gap:8px;flex-wrap:wrap;min-width:0}',
       '.mm-card-name{font-size:13px;line-height:20px;font-weight:600;color:var(--dsw-alias-label-primary);word-break:break-all}',
       '.mm-spacer{flex:1 1 auto}',
-      '.mm-card-meta{display:flex;align-items:center;gap:8px;flex-wrap:wrap;min-width:0}',
-      '.mm-target{font-size:11px;line-height:16px;color:var(--dsw-alias-label-tertiary);word-break:break-all}',
-      '.mm-card-probe{font-size:11px;line-height:16px;color:var(--dsw-alias-label-secondary)}',
+      '.mm-card-meta{display:flex;align-items:center;gap:8px;flex-wrap:nowrap;min-width:0;overflow:hidden;white-space:nowrap}',
+      '.mm-card-meta > *{flex:none}',
+      '.mm-card-tools{flex:none;white-space:nowrap}',
+      '.mm-target{font-size:11px;line-height:16px;color:var(--dsw-alias-label-tertiary);min-width:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}',
+      '.mm-card-probe{font-size:11px;line-height:16px;min-height:16px;color:var(--dsw-alias-label-secondary);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}',
       '.mm-row-actions{display:flex;align-items:center;gap:6px;flex-wrap:wrap}',
       '.mm-hint{margin:0;font-size:11px;line-height:16px;color:var(--dsw-alias-label-tertiary)}',
       '.mm-muted{font-size:11px;line-height:16px;color:var(--dsw-alias-label-tertiary);word-break:break-all}',
-      '.mm-test-result{margin:0;font-size:12px;line-height:18px;color:var(--dsw-alias-label-secondary);word-break:break-word}',
-      '.mm-err-text{margin:0;font-size:12px;line-height:18px;color:var(--dsw-alias-state-error-primary);word-break:break-word}',
-      '.mm-warn-banner{display:flex;flex-direction:column;gap:4px;padding:8px 10px;border:1px solid var(--dsw-alias-state-warn-primary);border-radius:var(--dsw-radius-sm);background:var(--dsw-alias-bg-layer-1);color:var(--dsw-alias-label-secondary);font-size:12px;line-height:18px}',
-      '.mm-warn-banner strong{color:var(--dsw-alias-state-warn-primary);font-weight:600}',
-      '.mm-warn-banner ul{margin:0;padding-left:18px}',
+      '.mm-status-slot{flex:none;height:26px;box-sizing:border-box;display:flex;align-items:center;padding:0 16px;overflow:hidden}',
+      '.mm-status-text{margin:0;flex:1 1 auto;min-width:0;font-size:12px;line-height:18px;color:var(--dsw-alias-label-secondary);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}',
+      '.mm-status-ok{color:var(--dsw-alias-state-success-primary)}',
+      '.mm-status-warn{color:var(--dsw-alias-state-warn-primary)}',
+      '.mm-status-err{color:var(--dsw-alias-state-error-primary)}',
+      '.mm-err-slot{flex:none;height:20px;display:flex;align-items:center;overflow:hidden}',
+      '.mm-err-text{margin:0;flex:1 1 auto;min-width:0;font-size:12px;line-height:18px;color:var(--dsw-alias-state-error-primary);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}',
+      '.mm-warn-slot{flex:none;height:32px;overflow:hidden}',
+      '.mm-warn-banner{display:flex;align-items:center;gap:8px;height:100%;box-sizing:border-box;padding:0 10px;border:1px solid var(--dsw-alias-state-warn-primary);border-radius:var(--dsw-radius-sm);background:var(--dsw-alias-bg-layer-1);color:var(--dsw-alias-label-secondary);font-size:12px;line-height:18px;white-space:nowrap;overflow:hidden}',
+      '.mm-warn-banner strong{flex:none;color:var(--dsw-alias-state-warn-primary);font-weight:600}',
+      '.mm-warn-text{flex:1 1 auto;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}',
+      '.mm-notice-slot{flex:none;height:46px;overflow:auto}',
+      '.mm-export-slot{flex:none;height:120px;overflow:auto;display:flex;flex-direction:column;gap:4px}',
       '.mm-notice{display:flex;align-items:flex-start;gap:8px;padding:8px 10px;border:1px solid var(--dsw-alias-border-l2);border-radius:var(--dsw-radius-sm);background:var(--dsw-alias-bg-layer-2);font-size:12px;line-height:18px;color:var(--dsw-alias-label-secondary)}',
       '.mm-notice-text{flex:1 1 auto;min-width:0;word-break:break-word}',
       '.mm-notice-ok{border-color:var(--dsw-alias-state-success-primary);color:var(--dsw-alias-state-success-primary)}',
@@ -2189,10 +2474,12 @@ window.__ModuleLoader__.load({
       '.mm-required{color:var(--dsw-alias-state-error-primary);margin-left:2px}',
       '.mm-check{display:inline-flex;align-items:center;gap:8px;font-size:12px;line-height:18px;color:var(--dsw-alias-label-secondary);cursor:pointer;user-select:none}',
       '.mm-check input{accent-color:var(--dsw-alias-brand-primary)}',
-      '.mm-dialog-top{display:flex;align-items:flex-end;justify-content:space-between;gap:10px;flex-wrap:wrap;padding-bottom:6px;border-bottom:1px solid var(--dsw-alias-border-l1)}',
-      '.mm-top-right{display:flex;align-items:center;gap:10px;flex-wrap:wrap;min-width:0}',
-      '.mm-scope{display:inline-flex;align-items:center;gap:6px}',
-      '.mm-scope-label{font-size:11px;line-height:16px;color:var(--dsw-alias-label-tertiary)}',
+      '.mm-dialog-settings{flex:none;height:44px;box-sizing:border-box;display:flex;align-items:center;gap:12px;flex-wrap:nowrap;padding:0 16px;border-bottom:1px solid var(--dsw-alias-border-l1)}',
+      '.mm-settings-scope{display:inline-flex;align-items:center;gap:6px;flex:none}',
+      '.mm-settings-ws{display:flex;align-items:center;justify-content:flex-end;flex:1 1 0;min-width:0;margin-left:auto}',
+      '.mm-settings-ws.mm-hidden{display:none}',
+      '.mm-dialog-tabs{flex:none;height:40px;box-sizing:border-box;display:flex;align-items:center;gap:4px;padding:0 16px;border-bottom:1px solid var(--dsw-alias-border-l1)}',
+      '.mm-scope-label{font-size:11px;line-height:16px;color:var(--dsw-alias-label-tertiary);flex:none}',
       '.mm-tabs{display:flex;gap:4px}',
       '.mm-tab{font:inherit;font-size:12px;line-height:18px;padding:5px 10px;background:transparent;border:none;border-bottom:2px solid transparent;color:var(--dsw-alias-label-secondary);cursor:pointer}',
       '.mm-tab:hover{color:var(--dsw-alias-label-primary)}',
@@ -2210,14 +2497,30 @@ window.__ModuleLoader__.load({
       '.mm-switch-on .mm-switch-thumb{transform:translateX(16px)}',
       '.mm-switch:disabled{opacity:.45;cursor:default}',
       '.mm-backdrop{position:fixed;inset:0;z-index:1000;display:flex;align-items:center;justify-content:center;padding:16px;background:transparent}',
-      '.mm-dialog{display:flex;flex-direction:column;width:min(600px,calc(100vw - 32px));max-height:min(84vh,860px);border:1px solid var(--dsw-alias-border-l2);border-radius:var(--dsw-radius-sm);background:var(--dsw-alias-bg-layer-1);color:var(--dsw-alias-label-primary);overflow:hidden;box-shadow:0 12px 36px var(--dsw-alias-bg-overlay,var(--dsw-alias-border-l2))}',
-      '.mm-dialog-wide{width:min(760px,calc(100vw - 32px))}',
-      '.mm-dialog-head{display:flex;align-items:center;justify-content:space-between;gap:12px;padding:12px 16px 10px;border-bottom:1px solid var(--dsw-alias-border-l1)}',
-      '.mm-dialog-title{margin:0;font-size:14px;line-height:22px;font-weight:600;color:var(--dsw-alias-label-primary);word-break:break-all}',
-      '.mm-dialog-body{display:flex;flex-direction:column;gap:10px;padding:12px 16px;overflow:auto}',
+      '.mm-code-fill{flex:1 1 auto;min-height:0;max-height:none;overflow:visible}',
+      '.mm-dialog{display:flex;flex-direction:column;width:min(680px,calc(100vw - 48px));height:min(720px,86vh);border:1px solid var(--dsw-alias-border-l2);border-radius:var(--dsw-radius-sm);background:var(--dsw-alias-bg-layer-1);color:var(--dsw-alias-label-primary);overflow:hidden;box-shadow:0 12px 36px var(--dsw-alias-bg-overlay,var(--dsw-alias-border-l2))}',
+      '.mm-dialog-confirm{width:min(440px,calc(100vw - 48px));height:auto;min-height:200px}',
+      '.mm-dialog-head{flex:none;height:48px;box-sizing:border-box;display:flex;align-items:center;justify-content:space-between;gap:12px;padding:0 16px;border-bottom:1px solid var(--dsw-alias-border-l1)}',
+      '.mm-dialog-title{margin:0;min-width:0;font-size:14px;line-height:22px;font-weight:600;color:var(--dsw-alias-label-primary);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}',
+      '.mm-dialog-body{display:flex;flex-direction:column;gap:10px;padding:12px 16px;flex:1 1 auto;min-height:0;overflow:auto;overscroll-behavior:contain}',
       '.mm-dialog-text{margin:0;font-size:12px;line-height:19px;color:var(--dsw-alias-label-secondary)}',
-      '.mm-dialog-foot{display:flex;align-items:center;justify-content:flex-end;gap:8px;padding:10px 16px;border-top:1px solid var(--dsw-alias-border-l1)}',
-      '.mm-foot-left{margin-right:auto}',
+      '.mm-dialog-foot{flex:none;height:56px;box-sizing:border-box;display:flex;align-items:center;justify-content:flex-end;gap:8px;flex-wrap:nowrap;min-width:0;padding:0 16px;border-top:1px solid var(--dsw-alias-border-l1)}',
+      '.mm-dialog-foot > .mm-btn:not(.mm-btn-fixed){flex:none}',
+      '.mm-foot-left{display:flex;align-items:center;flex:0 1 auto;min-width:0;margin-right:auto}',
+      '@media (max-width:480px){.mm-dialog-foot{gap:6px;padding:0 10px}.mm-foot-left{flex:1 1 0}.mm-btn-fixed{flex:1 1 0;min-width:0}}',
+      /* Narrow viewports: the workspace label is redundant with the picker button text,
+       * so reclaim its width for the chips. The picker becomes content-sized and the
+       * chips keep a usable minimum width and stay horizontally scrollable. */
+      '@media (max-width:480px){'
+        + '.mm-dialog-settings{gap:8px;padding:0 12px}'
+        + '.mm-settings-scope{gap:4px}'
+        + '.mm-dialog-settings .mm-seg-btn{padding:0 8px}'
+        + '.mm-ws{gap:4px}'
+        + '.mm-ws-label{display:none}'
+        + '.mm-ws-picker{flex:0 1 auto;max-width:120px}'
+        + '.mm-ws-picker > .mm-btn{width:auto;max-width:120px;padding:0 6px}'
+        + '.mm-ws-chips{flex:1 1 0;min-width:56px}'
+        + '}',
     ].join('\n')
 
     /* ------------------------------------------------------------------ *
