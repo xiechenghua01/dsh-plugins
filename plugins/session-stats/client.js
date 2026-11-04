@@ -296,7 +296,7 @@ window.__ModuleLoader__.load({
 .ss-table tbody tr:last-child td{border-bottom:0}
 .ss-table tbody tr:hover{background:var(--dsw-alias-interactive-bg-hover)}
 .ss-num{text-align:right;font-variant-numeric:tabular-nums;white-space:nowrap}
-.ss-session-head{display:flex;align-items:flex-start;gap:20px;min-width:0}
+.ss-session-head{display:flex;align-items:flex-start;gap:3px;min-width:0}
 .ss-session-title{display:block;flex:1;min-width:0;color:var(--dsw-alias-label-primary);font-weight:500;overflow-wrap:anywhere}
 .ss-session-id{display:block;color:var(--dsw-alias-label-caption);font-size:11px;line-height:16px;margin-top:2px;overflow-wrap:anywhere}
 /* Archived marker: a quiet warm chip at the title's top-right. */
