@@ -1,0 +1,6 @@
+{
+  "meta": {
+    "title": "MCP Manager",
+    "description": "A Settings page for the MCP servers of this Harness: global (home-layer) and workspace (profile-layer) servers with add, edit, enable/disable, delete, connection tests and JSON import/export, plus a machine-wide server library for reusing one server across workspaces."
+  }
+}

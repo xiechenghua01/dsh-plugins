@@ -1,0 +1,10 @@
+# MCP Manager bundle: one Host row serving the /mcp-manager/api route and one
+# browser half that renders the 设置 → MCP 服务 page.
+#
+# The row id `mcp-manager` belongs to this package. The third-party
+# `@xxxyz/dsh-mcp-manager` bundle uses `dsh-mcp-manager`, so installing both does
+# not collide at the Loader level (the two pages do manage the same MCP rows;
+# install one at a time).
+- insert:
+    - id: mcp-manager
+      name: '@xiechenghua01/dsh-mcp-manager'

@@ -17,6 +17,12 @@
         "en": "Observability",
         "zh": "可观测性"
       }
+    },
+    "integrations": {
+      "title": {
+        "en": "Integrations",
+        "zh": "集成"
+      }
     }
   },
   "labels": {
@@ -48,6 +54,30 @@
       "title": {
         "en": "Logs",
         "zh": "日志"
+      }
+    },
+    "mcp": {
+      "title": {
+        "en": "MCP",
+        "zh": "MCP"
+      }
+    },
+    "settings-page": {
+      "title": {
+        "en": "Settings page",
+        "zh": "设置页"
+      }
+    },
+    "configuration": {
+      "title": {
+        "en": "Configuration",
+        "zh": "配置"
+      }
+    },
+    "servers": {
+      "title": {
+        "en": "Servers",
+        "zh": "服务器"
       }
     }
   }

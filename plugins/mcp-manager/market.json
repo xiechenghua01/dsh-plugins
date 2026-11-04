@@ -1,0 +1,14 @@
+{
+  "title": {
+    "en": "MCP Manager",
+    "zh": "MCP 服务管理"
+  },
+  "description": {
+    "en": "Manage the MCP servers of this Harness from Settings: global (home-layer) and workspace (profile-layer) servers, add, edit, enable/disable, delete, test connectivity, import/export JSON, and reuse one configuration across workspaces from a machine-wide server library.",
+    "zh": "在设置页管理 Harness 的 MCP 服务器：全局（home 层）与工作区（profile 层）两层，支持新增、编辑、启用/停用、删除、连通性测试、JSON 导入导出，并可从全机共享的服务器库把同一份配置复用到其他工作区。"
+  },
+  "icon": "plugins/mcp-manager/icon.svg",
+  "category": "integrations",
+  "keywords": ["mcp", "mcp server", "servers", "settings", "stdio", "streamable-http", "json", "configuration", "服务管理", "配置"],
+  "labels": ["mcp", "settings-page", "configuration", "servers"]
+}
