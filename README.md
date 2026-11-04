@@ -100,7 +100,8 @@ git push origin main
 `pnpm run release` 的行为：
 
 - 工作区必须干净（索引固定的是 HEAD，先把插件改动提交）；
-- 同一版本重复发布到同一 commit 是 no-op；同一版本指向不同 commit 会拒绝，要求先升版本；
+- 已发布版本是 no-op（同一 commit，或该版本后插件随包发布的文件没有改动）；
+  同一版本下改动过可安装文件会拒绝，要求先升版本（只改 README/CONTRACT 等文档不算）；
 - 用 Harness 自己的 `@deepseek-ai/dsh-plugin-market-index` 校验生成的索引，失败不落盘；
 - 追加版本条目后提交 `index.json`，并打印每个新版本的 `plugin_manager` 安装目标。
 

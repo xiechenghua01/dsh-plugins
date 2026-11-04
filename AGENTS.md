@@ -61,7 +61,8 @@ The index pins a commit, so a release is always two commits: the plugin change, 
 generated `index.json`.
 
 1. Bump `version` in `plugins/<slug>/package.json` (required — releasing changed code under an
-   already published version is refused).
+   already published version is refused; files the package does not ship, such as this repo's
+   Markdown docs, do not require a bump).
 2. Commit the plugin change.
 3. `pnpm run release <slug>` (omit the slug to release every pending plugin version).
 4. `git push origin main`.
