@@ -15,6 +15,12 @@
           "en": "Observability",
           "zh": "可观测性"
         }
+      },
+      "integrations": {
+        "title": {
+          "en": "Integrations",
+          "zh": "集成"
+        }
       }
     },
     "labels": {
@@ -47,10 +53,88 @@
           "en": "Logs",
           "zh": "日志"
         }
+      },
+      "mcp": {
+        "title": {
+          "en": "MCP",
+          "zh": "MCP"
+        }
+      },
+      "settings-page": {
+        "title": {
+          "en": "Settings page",
+          "zh": "设置页"
+        }
+      },
+      "configuration": {
+        "title": {
+          "en": "Configuration",
+          "zh": "配置"
+        }
+      },
+      "servers": {
+        "title": {
+          "en": "Servers",
+          "zh": "服务器"
+        }
       }
     }
   },
   "plugins": [
+    {
+      "name": "@xiechenghua01/dsh-mcp-manager",
+      "author": "xiechenghua01",
+      "homepage": "https://github.com/xiechenghua01/dsh-plugins/tree/main/plugins/mcp-manager",
+      "repository": {
+        "url": "https://github.com/xiechenghua01/dsh-plugins",
+        "directory": "plugins/mcp-manager"
+      },
+      "metadata": {
+        "category": "integrations",
+        "keywords": [
+          "mcp",
+          "mcp server",
+          "servers",
+          "settings",
+          "stdio",
+          "streamable-http",
+          "json",
+          "configuration",
+          "服务管理",
+          "配置"
+        ],
+        "labels": [
+          "mcp",
+          "settings-page",
+          "configuration",
+          "servers"
+        ]
+      },
+      "versions": [
+        {
+          "version": "0.1.0",
+          "publishTimestamp": 1793787525,
+          "source": {
+            "type": "git",
+            "url": "https://github.com/xiechenghua01/dsh-plugins",
+            "commit": "c5742870b7d1f69978b1865891927f147051db6a",
+            "path": "plugins/mcp-manager"
+          },
+          "engines": {
+            "dsh": ">=0.2.1-rc.5 <0.3.0"
+          }
+        }
+      ],
+      "title": {
+        "en": "MCP Manager",
+        "zh": "MCP 服务管理"
+      },
+      "description": {
+        "en": "Manage the MCP servers of this Harness from Settings: global (home-layer) and workspace (profile-layer) servers, add, edit, enable/disable, delete, test connectivity, import/export JSON, and reuse one configuration across workspaces from a machine-wide server library.",
+        "zh": "在设置页管理 Harness 的 MCP 服务器：全局（home 层）与工作区（profile 层）两层，支持新增、编辑、启用/停用、删除、连通性测试、JSON 导入导出，并可从全机共享的服务器库把同一份配置复用到其他工作区。"
+      },
+      "icon": "plugins/mcp-manager/icon.svg"
+    },
     {
       "name": "@xiechenghua01/dsh-session-stats",
       "author": "xiechenghua01",
