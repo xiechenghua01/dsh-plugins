@@ -1,0 +1,54 @@
+{
+  "repository": "https://github.com/xiechenghua01/dsh-plugins",
+  "indexUrl": "https://raw.githubusercontent.com/xiechenghua01/dsh-plugins/main/index.json",
+  "branch": "main",
+  "author": "xiechenghua01",
+  "title": {
+    "en": "DSH Plugins by xiechenghua01",
+    "zh": "xiechenghua01 的 DSH 插件"
+  },
+  "description": {
+    "en": "Plugin index source for DeepSeek Harness: panels, tools and integrations installed from this repository.",
+    "zh": "DeepSeek Harness 插件索引源：从本仓库安装的面板、工具与集成。"
+  },
+  "categories": {
+    "observability": {
+      "title": {
+        "en": "Observability",
+        "zh": "可观测性"
+      }
+    }
+  },
+  "labels": {
+    "ui-panel": {
+      "title": {
+        "en": "UI panel",
+        "zh": "界面面板"
+      }
+    },
+    "tokens": {
+      "title": {
+        "en": "Tokens",
+        "zh": "Token 用量"
+      }
+    },
+    "cost": {
+      "title": {
+        "en": "Cost",
+        "zh": "成本"
+      }
+    },
+    "system": {
+      "title": {
+        "en": "System",
+        "zh": "系统"
+      }
+    },
+    "logs": {
+      "title": {
+        "en": "Logs",
+        "zh": "日志"
+      }
+    }
+  }
+}

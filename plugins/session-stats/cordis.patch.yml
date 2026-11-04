@@ -1,0 +1,13 @@
+# Session Stats bundle: one Host row serving /session-stats/* and one browser half
+# that renders the 统计 main panel plus its sidebar entry.
+# The row id must not collide with a shipped row: @deepseek-ai/dsh-web-app already
+# declares a `session-stats` row for @deepseek-ai/dsh-session-stats.
+- insert:
+    - id: session-stats-panel
+      name: '@xiechenghua01/dsh-session-stats'
+      config:
+        days: 30
+        budget:
+          amount: 10
+          currency: USD
+          period: monthly

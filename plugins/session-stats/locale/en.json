@@ -1,0 +1,6 @@
+{
+  "meta": {
+    "title": "Session Stats",
+    "description": "Token usage, session counts, estimated cost and budget, per-session usage, CPU runtime, and log footprint for this Harness."
+  }
+}

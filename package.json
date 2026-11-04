@@ -1,0 +1,25 @@
+{
+  "name": "dsh-plugins",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "description": "DeepSeek Harness plugin monorepo and plugin market index source",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/xiechenghua01/dsh-plugins.git"
+  },
+  "scripts": {
+    "check": "node scripts/check-plugins.mjs",
+    "validate": "node scripts/validate-index.mjs",
+    "release": "node scripts/release.mjs",
+    "test": "node scripts/check-plugins.mjs && node scripts/validate-index.mjs"
+  },
+  "devDependencies": {
+    "@deepseek-ai/dsh-plugin-market-index": "0.2.1-rc.5",
+    "semver": "^7.8.5"
+  },
+  "engines": {
+    "node": ">=22"
+  }
+}
