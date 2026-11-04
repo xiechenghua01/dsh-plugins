@@ -175,7 +175,8 @@ File: `$DSH_HOME/mcp-manager/library.json` (create the directory on first write)
       "config": { "serverName": "github", "transport": "stdio", "command": "npx", "args": [] },
       "createdAt": 1793698687874,
       "updatedAt": 1793698687874,
-      "origins": ["workspace:desktop"]
+      "origins": ["workspace:desktop"],
+      "workspaces": ["/…/Codes/xch/dsh-plugins", "/…/Codes/knowledge"]
     }
   }
 }
@@ -185,6 +186,10 @@ File: `$DSH_HOME/mcp-manager/library.json` (create the directory on first write)
   `workspace:<profileName>`. `state` recomputes them from the two patch layers on every call, so a
   server removed from every layer stays in the library with an empty `origins` array (the library is
   a catalog, not a mirror).
+- `workspaces` is the user's workspace-directory attachment (absolute paths taken from the
+  `workspaceRegistry`). It is **organizational metadata**, not a Loader scope: an MCP row is
+  profile-scoped and takes effect for every session of the profile. `syncLibrary` never rewrites
+  it; `create` / `update` / `libraryApply` write it (an omitted value keeps the catalog value).
 - Configurations are stored **verbatim**, including env/header values, because the library is what
   makes "A 工作区配好的，B 工作区一键复用" possible. It lives under `$DSH_HOME`, next to the
   patches that already contain the same secrets.
@@ -298,6 +303,7 @@ handler; wrap every op in try/catch.
     "homePatch": "/…/.dsh/cordis.patch.yml",
     "profilePatchExists": true, "homePatchExists": false
   },
+  "workspaces": [ { "id": "workspace-…", "path": "/…/Codes/xch/dsh-plugins", "title": "dsh-plugins" } ],
   "rows": [Row],
   "library": [LibraryEntry],
   "warnings": ["global: home patch is not readable: …"],
@@ -319,6 +325,7 @@ handler; wrap every op in try/catch.
   "transport": "stdio",
   "target": "npx -y @modelcontextprotocol/server-github",   // one-line display target
   "live": { "enabled": true, "phase": "active", "addressable": true },
+  "workspaces": ["/…/Codes/xch/dsh-plugins"],   // catalog attachment, [] when unset
   "toolCount": 12,                   // number | null: null means "not known yet", not zero
   "lastProbe": null,                 // ProbeResult from the in-memory cache
   "updatedAt": 1793698687874
@@ -334,7 +341,8 @@ the count instead of claiming zero. The probe cache is in memory, so a Host relo
 
 ### `create`
 
-args `{ level, config, enabled? }` → `{ ok: true, row: Row }`.
+args `{ level, config, enabled?, workspaces? }` → `{ ok: true, row: Row }`. `workspaces` is an
+array of absolute workspace directory paths (see §4); an omitted value keeps the catalog value.
 Validation: `serverName` matches `[A-Za-z0-9_-]{1,32}`, unique across **both** layers (a duplicate
 in either layer is `code: 'duplicate'`), `transport` valid, `command` required for stdio, `url`
 required and `http(s)://` for streamable-http, `args`/`env`/`headers` shapes correct, numbers
@@ -344,7 +352,8 @@ finite and within range, `reconnect` a plain object of the four fields. The row 
 
 ### `update`
 
-args `{ id, level, config, enabled? }` → `{ ok: true, row: Row }`. The row id never changes.
+args `{ id, level, config, enabled?, workspaces? }` → `{ ok: true, row: Row }`. The row id never
+changes. An omitted `workspaces` keeps the catalog value; an explicit array replaces it.
 Renaming `serverName` is allowed when the new name is unique across both layers.
 
 ### `remove`
@@ -384,9 +393,10 @@ args `{ format?, levels? }` → `{ ok: true, json: string }`. `format` is `'mcpS
 
 ### `libraryApply`
 
-args `{ level, serverName, serverNameOverride?, enabled? }` → `{ ok: true, row: Row }`. Copies a
-library entry into a layer. `serverNameOverride` lets the same server be added under a different
-name (still unique across both layers).
+args `{ level, serverName, serverNameOverride?, enabled?, workspaces? }` → `{ ok: true, row: Row }`.
+Copies a library entry into a layer, including the entry's `workspaces` attachment unless the
+caller overrides it. `serverNameOverride` lets the same server be added under a different name
+(still unique across both layers).
 
 ### `libraryRemove`
 
@@ -475,9 +485,9 @@ Page layout (tokens only — no literal colors):
 3. Row list, grouped by scope when the filter is `全部` (a `全局（home 层）` group and a
    `工作区（当前 profile）` group), otherwise one flat list. Each row card shows: `serverName`, a
    transport chip (`stdio` / `streamable-http`), a scope chip, the enable switch, the live phase
-   (`已加载` / `未加载` / `加载失败`) with the tool count, the one-line target, the last probe
-   result (`未测试` / `连通 · 12 工具 · 230 ms` / `失败 · <error message>`), and the actions
-   `编辑`, `JSON`, `测试`, `删除`.
+   (`已加载` / `未加载` / `加载失败`) with the tool count, the one-line target, the workspace
+   attachment chips (titles of `row.workspaces`), the last probe result (`未测试` / `连通 · 12 工具 ·
+   230 ms` / `失败 · <error message>`), and the actions `编辑`, `JSON`, `测试`, `删除`.
 4. Empty states per filter, plus a warning banner for `warnings`.
 5. `导入 / 导出` section: a `导出 JSON` button (copies `format: 'mcpServers'`), and an import
    textarea + target-scope select + `导入` button that calls `import` and reports
@@ -485,7 +495,11 @@ Page layout (tokens only — no literal colors):
 6. `服务器库` section: every library entry with its origins (`全局`, `工作区: desktop`), and an
    `添加到…` action that opens a small dialog choosing the target scope (and an optional name
    override) and calls `libraryApply`.
-7. Editor dialog (create/edit) with two tabs:
+7. Editor dialog (create/edit). Its **first row is the tab row**: `结构化` / `JSON` tabs on the
+   left, and on the right the `作用域` segmented choice (`全局` / `工作区`) plus — only while the
+   scope is `工作区` — a `工作目录` multi-select (a button opening a checkbox list built from
+   `state.workspaces`, showing each workspace `title`, with select-all/clear; chosen paths render
+   as removable chips). The dialog writes `workspaces: [...]` on create/update (`[]` for `全局`).
    - **结构化**: serverName, transport select, then transport-specific fields — command, args
      (one per line), env (one `key=value` per line), cwd for stdio; url, headers (one
      `key=value` per line) for streamable-http — plus an `高级` block with `toolCallTimeoutMs`,
@@ -494,7 +508,12 @@ Page layout (tokens only — no literal colors):
    - **JSON**: a textarea holding the server's JSON (the same shape as one `mcpServers` entry),
      a `从表单生成` and a `解析到表单` button, plus inline validation errors. `粘贴整份
      mcpServers JSON` is available in the import section, not here.
-   The dialog closes on Escape, on mask click, and restores focus to the invoking button.
+   - There is **no** "enable this server" checkbox: a new server is enabled by default and an
+     edit keeps the row's current `disabled` state (the switch on the card is the only control).
+   - The backdrop is **transparent** (`position: fixed; inset: 0; background: transparent`): it
+     captures outside clicks and closes the dialog, but it must not dim the Settings panel behind
+     it. The dialog itself keeps its own surface, border and shadow.
+   The dialog closes on Escape, on backdrop click, and restores focus to the invoking button.
 
 Rules: every visible string goes through `t()`; the dictionaries must have identical zh/en key
 sets and no unreferenced keys; use only `--dsw-alias-*` tokens (`--dsw-alias-bg-base`,

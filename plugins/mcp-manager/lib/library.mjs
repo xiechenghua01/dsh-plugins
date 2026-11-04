@@ -27,6 +27,12 @@ function normalizeOrigins(value) {
   return [...new Set(value.filter((entry) => typeof entry === 'string' && entry !== ''))]
 }
 
+/** Workspace directory paths attached to one server (deduplicated, non-empty strings). */
+export function normalizeWorkspaces(value) {
+  if (!Array.isArray(value)) return []
+  return [...new Set(value.filter((entry) => typeof entry === 'string' && entry.trim() !== '').map((entry) => entry.trim()))]
+}
+
 /**
  * Read the library document; a missing or unreadable file reads as empty.
  * @param {string} file
@@ -57,6 +63,7 @@ export async function readLibrary(file) {
       createdAt: Number.isFinite(value.createdAt) ? value.createdAt : 0,
       updatedAt: Number.isFinite(value.updatedAt) ? value.updatedAt : 0,
       origins: normalizeOrigins(value.origins),
+      workspaces: normalizeWorkspaces(value.workspaces),
     }
   }
   return {
@@ -85,8 +92,13 @@ function mergeOriginList(current, origin) {
 
 /**
  * Insert or refresh one library entry.
+ *
+ * `workspaces` is the user's workspace-directory attachment. Omitted means "keep what the entry
+ * already has"; an explicit array replaces it. `syncLibrary` never touches it, so a reconciling
+ * `state` call cannot erase a user's choice.
+ *
  * @param {object} library
- * @param {{ serverName: string, config: object, origin?: string }} server
+ * @param {{ serverName: string, config: object, origin?: string, workspaces?: string[] }} server
  * @param {number} now
  * @returns {{ library: object, action: 'inserted'|'updated'|'unchanged' }}
  */
@@ -94,6 +106,7 @@ export function upsertServer(library, server, now = Date.now()) {
   const serverName = typeof server.serverName === 'string' ? server.serverName : ''
   if (serverName === '') return { library, action: 'unchanged' }
   const config = isObject(server.config) ? server.config : {}
+  const workspaces = Array.isArray(server.workspaces) ? normalizeWorkspaces(server.workspaces) : undefined
   const existing = library.servers[serverName]
   if (existing === undefined) {
     const origins = mergeOriginList([], server.origin)
@@ -104,14 +117,19 @@ export function upsertServer(library, server, now = Date.now()) {
         updatedAt: now,
         servers: {
           ...library.servers,
-          [serverName]: { serverName, config, createdAt: now, updatedAt: now, origins },
+          [serverName]: { serverName, config, createdAt: now, updatedAt: now, origins, workspaces: workspaces ?? [] },
         },
       },
       action: 'inserted',
     }
   }
   const origins = mergeOriginList(existing.origins, server.origin)
-  if (sameValue(existing.config, config) && sameValue(existing.origins, origins)) {
+  const nextWorkspaces = workspaces === undefined ? normalizeWorkspaces(existing.workspaces) : workspaces
+  if (
+    sameValue(existing.config, config)
+    && sameValue(existing.origins, origins)
+    && sameValue(normalizeWorkspaces(existing.workspaces), nextWorkspaces)
+  ) {
     return { library, action: 'unchanged' }
   }
   return {
@@ -121,7 +139,7 @@ export function upsertServer(library, server, now = Date.now()) {
       updatedAt: now,
       servers: {
         ...library.servers,
-        [serverName]: { ...existing, config, updatedAt: now, origins },
+        [serverName]: { ...existing, config, updatedAt: now, origins, workspaces: nextWorkspaces },
       },
     },
     action: 'updated',
@@ -166,7 +184,7 @@ export function syncLibrary(library, entries, now = Date.now()) {
     const existing = servers[serverName]
     const config = isObject(entry.config) ? entry.config : {}
     if (existing === undefined) {
-      servers = { ...servers, [serverName]: { serverName, config, createdAt: now, updatedAt: now, origins } }
+      servers = { ...servers, [serverName]: { serverName, config, createdAt: now, updatedAt: now, origins, workspaces: [] } }
       changed = true
       continue
     }

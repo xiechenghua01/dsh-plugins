@@ -171,10 +171,14 @@ export async function run(report) {
 
   // ---- library -----------------------------------------------------------
   let library = emptyLibrary()
-  const first = upsertServer(library, { serverName: 'github', config: { serverName: 'github' }, origin: 'workspace:desktop' }, 1)
+  const first = upsertServer(library, { serverName: 'github', config: { serverName: 'github' }, origin: 'workspace:desktop', workspaces: ['/tmp/a'] }, 1)
   expect(report, first.action === 'inserted', 'the first library write must insert')
   library = first.library
+  expect(report, library.servers.github?.workspaces?.[0] === '/tmp/a', 'upsertServer must persist the workspace attachment')
   const synced = syncLibrary(library, [{ serverName: 'github', config: { serverName: 'github' }, origin: 'global' }], 2)
+  expect(report, synced.library.servers.github?.workspaces?.[0] === '/tmp/a', 'syncLibrary must not erase the workspace attachment')
+  const reattached = upsertServer(synced.library, { serverName: 'github', config: { serverName: 'github' }, workspaces: ['/tmp/b', '/tmp/c'] }, 3)
+  expect(report, reattached.library.servers.github?.workspaces?.length === 2, 'an explicit workspaces array must replace the attachment')
   expect(report, synced.changed === true, 'syncLibrary must record a new origin')
   expect(report, synced.library.servers.github?.origins.includes('global') === true, 'the global origin must be recorded')
   const dropped = syncLibrary(synced.library, [], 3)

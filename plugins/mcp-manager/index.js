@@ -32,9 +32,11 @@ import {
 import {
   emptyLibrary,
   listServers,
+  normalizeWorkspaces,
   readLibrary,
   removeServer,
   syncLibrary,
+  upsertServer,
   writeLibrary,
 } from './lib/library.mjs'
 import { probeServer } from './lib/probe.mjs'
@@ -509,6 +511,7 @@ export function apply(ctx, config) {
           config,
           transport: config?.transport === 'streamable-http' ? 'streamable-http' : 'stdio',
           target: displayTarget(config),
+          workspaces: [],
           live: null,
           toolCount: 0,
           lastProbe: probeCache.get(`${level}:${row.id}`) ?? null,
@@ -602,10 +605,25 @@ export function apply(ctx, config) {
     }
   }
 
+  /** Registered workspace directories, as the client's 工作目录 multi-select shows them. */
+  function workspaceList() {
+    const registry = ctx.get('workspaceRegistry')
+    if (registry === undefined || registry === null || typeof registry.list !== 'function') return []
+    try {
+      const list = registry.list()
+      if (!Array.isArray(list)) return []
+      return list
+        .map((workspace) => ({ id: text(workspace?.id), path: text(workspace?.path), title: text(workspace?.title) }))
+        .filter((workspace) => workspace.path !== '')
+    } catch {
+      return []
+    }
+  }
+
   async function statePayload() {
     const warnings = []
     const paths = await resolvePaths()
-    const rows = await decorateRows(await collectRows(warnings))
+    const rows = await collectRows(warnings)
     const library = await readLibraryOrEmpty(paths, warnings)
     let synced = library
     try {
@@ -620,6 +638,13 @@ export function apply(ctx, config) {
     } catch (error) {
       warnings.push(`library: ${message(error)}`)
     }
+    // Workspace attachments live in the catalog, not in the Loader config: the MCP row is
+    // profile-scoped, so the attachment organizes and filters servers instead of scoping them.
+    for (const row of rows) {
+      const entry = synced.servers[row.serverName]
+      row.workspaces = Array.isArray(entry?.workspaces) ? [...entry.workspaces] : []
+    }
+    await decorateRows(rows)
     return {
       ok: true,
       scope: {
@@ -631,6 +656,7 @@ export function apply(ctx, config) {
         homePatchExists: await exists(paths.homePatch),
         libraryFile: paths.libraryFile,
       },
+      workspaces: workspaceList(),
       rows,
       library: listServers(synced),
       warnings,
@@ -654,12 +680,17 @@ export function apply(ctx, config) {
     return next
   }
 
-  async function saveLibraryServer(serverName, config, origin) {
+  async function saveLibraryServer(serverName, config, origin, workspaces) {
     const paths = await resolvePaths()
     const warnings = []
     const library = await readLibraryOrEmpty(paths, warnings)
-    const result = syncLibrary(library, [{ serverName, config, origin }])
-    if (result.changed) await writeLibrary(paths.libraryFile, result.library)
+    const result = upsertServer(library, { serverName, config, origin, workspaces })
+    if (result.action !== 'unchanged') await writeLibrary(paths.libraryFile, result.library)
+  }
+
+  /** The workspace attachment an operation carries; `undefined` keeps the catalog value. */
+  function workspacesFromArgs(args) {
+    return Array.isArray(args.workspaces) ? normalizeWorkspaces(args.workspaces) : undefined
   }
 
   // ---- operations --------------------------------------------------------
@@ -688,7 +719,7 @@ export function apply(ctx, config) {
         disabled: args.enabled === false ? true : undefined,
         config,
       })
-      await saveLibraryServer(config.serverName, config, level === 'global' ? 'global' : `workspace:${paths.profileName}`)
+      await saveLibraryServer(config.serverName, config, level === 'global' ? 'global' : `workspace:${paths.profileName}`, workspacesFromArgs(args))
       const created = await rowById(level, id)
       return { ok: true, row: created }
     })
@@ -713,7 +744,7 @@ export function apply(ctx, config) {
         disabled: disabled ? true : undefined,
         config,
       })
-      await saveLibraryServer(config.serverName, config, level === 'global' ? 'global' : `workspace:${paths.profileName}`)
+      await saveLibraryServer(config.serverName, config, level === 'global' ? 'global' : `workspace:${paths.profileName}`, workspacesFromArgs(args))
       const updated = await rowById(level, id)
       return { ok: true, row: updated }
     })
@@ -868,7 +899,8 @@ export function apply(ctx, config) {
       const config = normalizeConfig({ ...entry.config, serverName: targetName })
       const id = nextRowId(level, targetName, rows)
       await writeRow(level, { id, name: MCP_CLIENT_NAME, disabled: args.enabled === false ? true : undefined, config })
-      await saveLibraryServer(targetName, config, level === 'global' ? 'global' : `workspace:${paths.profileName}`)
+      const workspaces = Array.isArray(args.workspaces) ? normalizeWorkspaces(args.workspaces) : normalizeWorkspaces(entry.workspaces)
+      await saveLibraryServer(targetName, config, level === 'global' ? 'global' : `workspace:${paths.profileName}`, workspaces)
       const created = await rowById(level, id)
       return { ok: true, row: created }
     })

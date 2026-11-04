@@ -67,7 +67,15 @@ plugin_manager action=install_bundle target=/absolute/path/to/dsh-plugins/plugin
 `$DSH_HOME` 默认 `~/.dsh`；`$DSH_PROFILE_DIR` 是当前 profile 目录。同一个 `serverName`
 不能在两层同时存在（后加载的一行会失败），页面会在出现这种情况时给出警告。
 
-服务器库文件：`$DSH_HOME/mcp-manager/library.json`（含完整配置，包括 env / headers 里的凭据）。
+### 工作目录归属
+
+作用域选「工作区」时，可以在同一行选择**一个或多个工作目录**（来自 Harness 的工作区列表）。
+这份归属关系存在服务器库条目里，用于列表展示与跨工作区复用；它是**组织元数据**，不是 Loader
+作用域——DSH 的 MCP 行按 profile 生效，对当前 profile 的所有会话都可用。需要「只在某些目录
+生效」时，请为不同 profile 分别配置。
+
+服务器库文件：`$DSH_HOME/mcp-manager/library.json`（含完整配置，包括 env / headers 里的凭据，
+以及每个服务器的工作目录归属）。
 
 ### 结构化配置字段
 

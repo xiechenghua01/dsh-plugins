@@ -83,6 +83,7 @@ window.__ModuleLoader__.load({
       'aria.json': '查看 {name} 的 JSON',
       'aria.test': '测试 {name}',
       'aria.delete': '删除 {name}',
+      'aria.removeWorkspace': '移除工作目录 {name}',
       'empty.none': '还没有 MCP 服务器',
       'empty.noneHint': '点击「新增服务器」添加第一个 MCP 服务器。',
       'empty.filtered': '没有匹配的服务器',
@@ -127,7 +128,12 @@ window.__ModuleLoader__.load({
       'dialog.advanced': '高级',
       'dialog.scope': '作用域',
       'dialog.scopeLocked': '作用域在创建后不可更改',
-      'dialog.enabled': '启用该服务器',
+      'dialog.workspaces': '工作目录',
+      'dialog.workspacesChoose': '选择工作目录',
+      'dialog.workspacesCount': '已选 {count} 个目录',
+      'dialog.workspacesAll': '全选',
+      'dialog.workspacesClear': '清空',
+      'dialog.workspacesEmpty': '暂无工作区',
       'dialog.deleteTitle': '删除 MCP 服务器',
       'dialog.deleteBody': '删除后该服务器的配置会从补丁文件中移除，相关工具立即下线。此操作不可撤销。',
       'dialog.removeTitle': '从服务器库移除',
@@ -217,6 +223,7 @@ window.__ModuleLoader__.load({
       'aria.json': 'View the JSON of {name}',
       'aria.test': 'Test {name}',
       'aria.delete': 'Delete {name}',
+      'aria.removeWorkspace': 'Remove workspace {name}',
       'empty.none': 'No MCP servers yet',
       'empty.noneHint': 'Click "Add server" to create the first MCP server.',
       'empty.filtered': 'No matching servers',
@@ -261,7 +268,12 @@ window.__ModuleLoader__.load({
       'dialog.advanced': 'Advanced',
       'dialog.scope': 'Scope',
       'dialog.scopeLocked': 'The scope cannot change after creation',
-      'dialog.enabled': 'Enable this server',
+      'dialog.workspaces': 'Workspace directories',
+      'dialog.workspacesChoose': 'Choose directories',
+      'dialog.workspacesCount': '{count} selected',
+      'dialog.workspacesAll': 'Select all',
+      'dialog.workspacesClear': 'Clear',
+      'dialog.workspacesEmpty': 'No workspaces yet',
       'dialog.deleteTitle': 'Delete MCP server',
       'dialog.deleteBody': 'Deleting removes this server from its patch file and takes its tools offline immediately. This cannot be undone.',
       'dialog.removeTitle': 'Remove from the server library',
@@ -415,12 +427,12 @@ window.__ModuleLoader__.load({
         reconnectInitialDelayMs: '',
         reconnectMaxDelayMs: '',
         reconnectMaxAttempts: '',
-        enabled: true,
+        workspaces: [],
       }
     }
 
     /** `config` (wire shape) or one `mcpServers` entry -> draft fields. */
-    function configToDraft(config, enabled, level) {
+    function configToDraft(config, level, workspaces) {
       const source = config !== null && typeof config === 'object' ? config : {}
       const reconnect = source.reconnect !== null && typeof source.reconnect === 'object' ? source.reconnect : {}
       const declared = textOf(source.transport !== undefined ? source.transport : source.type).toLowerCase()
@@ -444,7 +456,9 @@ window.__ModuleLoader__.load({
       draft.reconnectInitialDelayMs = numberText(reconnect.initialDelayMs)
       draft.reconnectMaxDelayMs = numberText(reconnect.maxDelayMs)
       draft.reconnectMaxAttempts = numberText(reconnect.maxAttempts)
-      draft.enabled = enabled !== false
+      draft.workspaces = Array.isArray(workspaces)
+        ? workspaces.map((entry) => textOf(entry)).filter((entry) => entry !== '')
+        : []
       return draft
     }
 
@@ -555,6 +569,26 @@ window.__ModuleLoader__.load({
       return textOf(origin)
     }
 
+    /** Last path segment, used when a workspace has no title. */
+    function lastPathSegment(path) {
+      const target = textOf(path)
+      const parts = target.split(/[\\/]+/u).filter((part) => part !== '')
+      return parts.length > 0 ? parts[parts.length - 1] : target
+    }
+
+    /** Display label for one workspace path: its title when known, else the last path segment. */
+    function workspaceLabel(workspaces, path) {
+      const target = textOf(path)
+      const list = Array.isArray(workspaces) ? workspaces : []
+      for (const entry of list) {
+        if (entry === null || typeof entry !== 'object') continue
+        if (textOf(entry.path) !== target) continue
+        const title = textOf(entry.title)
+        return title !== '' ? title : lastPathSegment(target)
+      }
+      return lastPathSegment(target)
+    }
+
     async function copyText(text) {
       try {
         if (typeof navigator !== 'undefined' && navigator !== null && navigator.clipboard !== undefined && navigator.clipboard !== null && typeof navigator.clipboard.writeText === 'function') {
@@ -642,7 +676,7 @@ window.__ModuleLoader__.load({
 
     function Chip(props) {
       const className = 'mm-chip' + (props.tone !== undefined && props.tone !== '' ? ' mm-chip-' + props.tone : '')
-      return h('span', { className: className }, props.children)
+      return h('span', { className: className, title: props.title }, props.children)
     }
 
     function Switch(props) {
@@ -726,7 +760,99 @@ window.__ModuleLoader__.load({
             if (typeof props.onChange === 'function') props.onChange(event.target.checked)
           },
         }),
-        h('span', null, props.label),
+        h('span', { title: props.title }, props.label),
+      )
+    }
+
+    /**
+     * Multi-select for the workspace-directory attachment. The list comes from `state.workspaces`
+     * (`[{ id, path, title }]`); the value is an array of absolute paths kept in the draft.
+     */
+    function WorkspacePicker(props) {
+      const t = props.t
+      const workspaces = Array.isArray(props.workspaces) ? props.workspaces : []
+      const selected = Array.isArray(props.value) ? props.value : []
+      const [open, setOpen] = useState(false)
+      const rootRef = useRef(null)
+      useEffect(() => {
+        if (open !== true) return undefined
+        const onMouseDown = (event) => {
+          const node = rootRef.current
+          if (node !== null && typeof node.contains === 'function' && !node.contains(event.target)) setOpen(false)
+        }
+        document.addEventListener('mousedown', onMouseDown)
+        return () => {
+          document.removeEventListener('mousedown', onMouseDown)
+        }
+      }, [open])
+      const change = (next) => {
+        if (typeof props.onChange === 'function') props.onChange(next)
+      }
+      const toggle = (path, checked) => {
+        if (path === '') return
+        if (checked === true) change(selected.includes(path) ? selected : selected.concat([path]))
+        else change(selected.filter((entry) => entry !== path))
+      }
+      return h(
+        'div',
+        { className: 'mm-ws', ref: rootRef },
+        h('span', { className: 'mm-ws-label' }, t('dialog.workspaces')),
+        h(
+          Button,
+          { onClick: () => setOpen((previous) => !previous) },
+          selected.length === 0 ? t('dialog.workspacesChoose') : t('dialog.workspacesCount', { count: selected.length }),
+        ),
+        open === true
+          ? h(
+            'div',
+            { className: 'mm-ws-pop', role: 'group', 'aria-label': t('dialog.workspaces') },
+            workspaces.length === 0
+              ? h('p', { className: 'mm-ws-empty' }, t('dialog.workspacesEmpty'))
+              : h(
+                Fragment,
+                null,
+                h(
+                  'div',
+                  { className: 'mm-ws-actions' },
+                  h(Button, {
+                    onClick: () => change(workspaces.map((entry) => textOf(entry !== null && entry !== undefined ? entry.path : '')).filter((entry) => entry !== '')),
+                  }, t('dialog.workspacesAll')),
+                  h(Button, { onClick: () => change([]) }, t('dialog.workspacesClear')),
+                ),
+                h(
+                  'div',
+                  { className: 'mm-ws-list' },
+                  workspaces.map((entry, index) => {
+                    const path = textOf(entry !== null && entry !== undefined ? entry.path : '')
+                    return h(Checkbox, {
+                      key: path !== '' ? path : 'workspace-' + index,
+                      checked: selected.includes(path),
+                      label: workspaceLabel(workspaces, path),
+                      title: path,
+                      onChange: (checked) => toggle(path, checked),
+                    })
+                  }),
+                ),
+              ),
+          )
+          : null,
+        selected.length > 0
+          ? h(
+            'div',
+            { className: 'mm-ws-chips' },
+            selected.map((path) => h(
+              'span',
+              { key: path, className: 'mm-chip mm-ws-chip', title: path },
+              workspaceLabel(workspaces, path),
+              h('button', {
+                type: 'button',
+                className: 'mm-ws-chip-x',
+                'aria-label': t('aria.removeWorkspace', { name: workspaceLabel(workspaces, path) }),
+                onClick: () => toggle(path, false),
+              }, '×'),
+            )),
+          )
+          : null,
       )
     }
 
@@ -858,6 +984,7 @@ window.__ModuleLoader__.load({
         meta.push(h('span', { key: 'tools', className: 'mm-muted' }, t('row.tools', { count: toolCount })))
       }
       if (readOnly === true) meta.push(h(Chip, { key: 'ro', tone: '' }, t('row.readOnly')))
+      const rowWorkspaces = Array.isArray(row.workspaces) ? row.workspaces.filter((path) => textOf(path) !== '') : []
       return h(
         'article',
         { className: 'mm-card' + (enabled ? '' : ' mm-card-off') },
@@ -883,6 +1010,17 @@ window.__ModuleLoader__.load({
           meta,
         ),
         h('div', { className: 'mm-target', 'aria-label': t('row.target') }, textOf(row.target) !== '' ? row.target : DASH),
+        rowWorkspaces.length > 0
+          ? h(
+            'div',
+            { className: 'mm-card-ws' },
+            rowWorkspaces.map((path) => h(
+              Chip,
+              { key: path, title: path },
+              workspaceLabel(props.workspaces, path),
+            )),
+          )
+          : null,
         readOnly === true ? h('p', { className: 'mm-hint' }, t('row.readOnlyHint')) : null,
         h('div', { className: 'mm-card-probe' }, probeSummary(t, row.lastProbe)),
         h(
@@ -959,7 +1097,7 @@ window.__ModuleLoader__.load({
       const t = props.t
       const editing = props.mode === 'edit'
       const [draft, setDraft] = useState(() => {
-        if (editing) return configToDraft(props.row.config, props.row.disabled !== true, props.row.level)
+        if (editing) return configToDraft(props.row.config, props.row.level, props.row.workspaces)
         return blankDraft(props.level)
       })
       const [tab, setTab] = useState('form')
@@ -1016,7 +1154,7 @@ window.__ModuleLoader__.load({
           setJsonNotice({ kind: 'err', text: t('dialog.jsonShape') })
           return
         }
-        const next = configToDraft(candidate, draft.enabled, draft.level)
+        const next = configToDraft(candidate, draft.level, draft.workspaces)
         setDraft(next)
         setJsonNotice({ kind: 'ok', text: t('dialog.parseOk') })
         setError('')
@@ -1040,7 +1178,8 @@ window.__ModuleLoader__.load({
         const config = validate()
         if (config === null) return
         if (typeof props.onSubmit !== 'function') return
-        const result = await props.onSubmit({ level: draft.level, config: config, enabled: draft.enabled !== false })
+        const workspaces = draft.level === 'workspace' && Array.isArray(draft.workspaces) ? draft.workspaces : []
+        const result = await props.onSubmit({ level: draft.level, config: config, workspaces: workspaces })
         if (result !== null && result !== undefined && result.ok === false) {
           setError(t('state.operationFailed') + ': ' + result.error)
         }
@@ -1072,25 +1211,6 @@ window.__ModuleLoader__.load({
               onChange: (value) => setField('transport', value),
             }),
           ),
-        ),
-        h(
-          'div',
-          { className: 'mm-grid2' },
-          h(
-            Field,
-            { label: t('dialog.scope'), hint: editing ? t('dialog.scopeLocked') : null },
-            h(Select, {
-              value: draft.level,
-              options: scopeOptions,
-              disabled: editing,
-              onChange: (value) => setField('level', value),
-            }),
-          ),
-          h('div', { className: 'mm-check-wrap' }, h(Checkbox, {
-            checked: draft.enabled,
-            label: t('dialog.enabled'),
-            onChange: (value) => setField('enabled', value),
-          })),
         ),
         draft.transport === 'stdio'
           ? h(
@@ -1221,26 +1341,9 @@ window.__ModuleLoader__.load({
         h(Notice, { notice: jsonNotice }),
       )
 
-      return h(
-        Dialog,
-        {
-          title: editing ? t('dialog.editTitle') : t('dialog.addTitle'),
-          closeLabel: t('action.close'),
-          onClose: props.onClose,
-          returnFocus: props.returnFocus,
-          wide: true,
-          footer: h(
-            Fragment,
-            null,
-            h(
-              'div',
-              { className: 'mm-foot-left' },
-              h(Button, { onClick: testDraft, disabled: testing === true || props.busy === true }, testing === true ? t('state.testing') : t('action.testDraft')),
-            ),
-            h(Button, { onClick: props.onClose }, t('action.cancel')),
-            h(Button, { variant: 'primary', onClick: submit, disabled: props.busy === true }, props.busy === true ? t('state.saving') : t('action.save')),
-          ),
-        },
+      const topRow = h(
+        'div',
+        { className: 'mm-dialog-top' },
         h(
           'div',
           { className: 'mm-tabs', role: 'tablist' },
@@ -1267,6 +1370,67 @@ window.__ModuleLoader__.load({
             t('dialog.tab.json'),
           ),
         ),
+        h(
+          'div',
+          { className: 'mm-top-right' },
+          h(
+            'div',
+            {
+              className: 'mm-scope',
+              role: 'group',
+              'aria-label': t('dialog.scope'),
+              title: editing ? t('dialog.scopeLocked') : undefined,
+            },
+            h('span', { className: 'mm-scope-label' }, t('dialog.scope')),
+            h(
+              'div',
+              { className: 'mm-seg' },
+              scopeOptions.map((option) => h(
+                'button',
+                {
+                  key: option.value,
+                  type: 'button',
+                  className: 'mm-seg-btn' + (draft.level === option.value ? ' mm-seg-btn-active' : ''),
+                  'aria-pressed': draft.level === option.value ? 'true' : 'false',
+                  disabled: editing,
+                  onClick: () => setField('level', option.value),
+                },
+                option.label,
+              )),
+            ),
+          ),
+          draft.level === 'workspace'
+            ? h(WorkspacePicker, {
+              t: t,
+              workspaces: props.workspaces,
+              value: draft.workspaces,
+              onChange: (value) => setField('workspaces', value),
+            })
+            : null,
+        ),
+      )
+
+      return h(
+        Dialog,
+        {
+          title: editing ? t('dialog.editTitle') : t('dialog.addTitle'),
+          closeLabel: t('action.close'),
+          onClose: props.onClose,
+          returnFocus: props.returnFocus,
+          wide: true,
+          footer: h(
+            Fragment,
+            null,
+            h(
+              'div',
+              { className: 'mm-foot-left' },
+              h(Button, { onClick: testDraft, disabled: testing === true || props.busy === true }, testing === true ? t('state.testing') : t('action.testDraft')),
+            ),
+            h(Button, { onClick: props.onClose }, t('action.cancel')),
+            h(Button, { variant: 'primary', onClick: submit, disabled: props.busy === true }, props.busy === true ? t('state.saving') : t('action.save')),
+          ),
+        },
+        topRow,
         tab === 'form' ? formBody : jsonBody,
         error !== '' ? h('p', { className: 'mm-err-text', role: 'alert' }, error) : null,
       )
@@ -1662,6 +1826,7 @@ window.__ModuleLoader__.load({
       const data = view.data !== null && view.data !== undefined ? view.data : {}
       const rows = Array.isArray(data.rows) ? data.rows : []
       const library = Array.isArray(data.library) ? data.library : []
+      const workspaces = Array.isArray(data.workspaces) ? data.workspaces : []
       const warnings = Array.isArray(data.warnings) ? data.warnings : []
       const scope = data.scope !== null && data.scope !== undefined && typeof data.scope === 'object' ? data.scope : {}
       const profile = textOf(scope.profile)
@@ -1701,9 +1866,10 @@ window.__ModuleLoader__.load({
         if (editor === null) return
         const editing = editor.mode === 'edit'
         const op = editing ? 'update' : 'create'
+        const workspaces = Array.isArray(input.workspaces) ? input.workspaces : []
         const args = editing
-          ? { id: editor.row.id, level: editor.row.level, config: input.config, enabled: input.enabled }
-          : { level: input.level, config: input.config, enabled: input.enabled }
+          ? { id: editor.row.id, level: editor.row.level, config: input.config, workspaces: workspaces }
+          : { level: input.level, config: input.config, workspaces: workspaces }
         const name = textOf(input.config.serverName)
         const successText = editing ? t('notice.updated', { name: name }) : t('notice.created', { name: name })
         const result = await mutate(op, args, successText)
@@ -1805,6 +1971,7 @@ window.__ModuleLoader__.load({
 
       const rowActions = {
         t: t,
+        workspaces: workspaces,
         busy: busy !== '',
         onEdit: openEdit,
         onJson: openJson,
@@ -1895,6 +2062,7 @@ window.__ModuleLoader__.load({
             mode: editor.mode,
             row: editor.row,
             level: editor.level,
+            workspaces: workspaces,
             returnFocus: editor.returnFocus,
             busy: busy !== '',
             onClose: () => setEditor(null),
@@ -1961,6 +2129,18 @@ window.__ModuleLoader__.load({
       '.mm-seg-btn{font:inherit;font-size:12px;height:28px;padding:0 11px;background:transparent;border:none;color:var(--dsw-alias-label-secondary);cursor:pointer}',
       '.mm-seg-btn:hover{background:var(--dsw-alias-interactive-bg-hover)}',
       '.mm-seg-btn-active{background:var(--dsw-alias-bg-layer-2);color:var(--dsw-alias-label-primary)}',
+      '.mm-seg-btn:disabled{opacity:.45;cursor:default}',
+      '.mm-ws{position:relative;display:inline-flex;align-items:center;gap:6px;flex-wrap:wrap;min-width:0}',
+      '.mm-ws-label{font-size:11px;line-height:16px;color:var(--dsw-alias-label-tertiary)}',
+      '.mm-ws-pop{position:absolute;top:calc(100% + 4px);right:0;z-index:2;display:flex;flex-direction:column;gap:6px;width:280px;max-height:240px;overflow:auto;padding:8px;border:1px solid var(--dsw-alias-border-l2);border-radius:var(--dsw-radius-sm);background:var(--dsw-alias-bg-layer-1);box-shadow:0 8px 24px var(--dsw-alias-bg-overlay,var(--dsw-alias-border-l2))}',
+      '.mm-ws-actions{display:flex;gap:6px}',
+      '.mm-ws-list{display:flex;flex-direction:column;gap:4px}',
+      '.mm-ws-empty{margin:0;font-size:11px;line-height:16px;color:var(--dsw-alias-label-tertiary)}',
+      '.mm-ws-chips{display:flex;align-items:center;gap:4px;flex-wrap:wrap;min-width:0}',
+      '.mm-ws-chip{padding-right:3px;gap:4px}',
+      '.mm-ws-chip-x{border:none;background:transparent;color:var(--dsw-alias-label-tertiary);font:inherit;line-height:1;padding:0 2px;cursor:pointer}',
+      '.mm-ws-chip-x:hover{color:var(--dsw-alias-label-primary)}',
+      '.mm-card-ws{display:flex;align-items:center;gap:4px;flex-wrap:wrap;min-width:0}',
       '.mm-search{flex:1 1 200px;min-width:160px}',
       '.mm-input{font:inherit;font-size:12px;line-height:18px;box-sizing:border-box;width:100%;color:var(--dsw-alias-label-primary);background:var(--dsw-alias-bg-base);border:1px solid var(--dsw-alias-border-l2);border-radius:var(--dsw-radius-sm);padding:5px 8px;outline:none;min-width:0}',
       '.mm-input:focus-visible{border-color:var(--dsw-alias-brand-primary);outline:2px solid var(--dsw-alias-brand-primary);outline-offset:1px}',
@@ -2009,8 +2189,11 @@ window.__ModuleLoader__.load({
       '.mm-required{color:var(--dsw-alias-state-error-primary);margin-left:2px}',
       '.mm-check{display:inline-flex;align-items:center;gap:8px;font-size:12px;line-height:18px;color:var(--dsw-alias-label-secondary);cursor:pointer;user-select:none}',
       '.mm-check input{accent-color:var(--dsw-alias-brand-primary)}',
-      '.mm-check-wrap{display:flex;align-items:flex-end;padding-bottom:5px}',
-      '.mm-tabs{display:flex;gap:4px;border-bottom:1px solid var(--dsw-alias-border-l1);margin-bottom:2px}',
+      '.mm-dialog-top{display:flex;align-items:flex-end;justify-content:space-between;gap:10px;flex-wrap:wrap;padding-bottom:6px;border-bottom:1px solid var(--dsw-alias-border-l1)}',
+      '.mm-top-right{display:flex;align-items:center;gap:10px;flex-wrap:wrap;min-width:0}',
+      '.mm-scope{display:inline-flex;align-items:center;gap:6px}',
+      '.mm-scope-label{font-size:11px;line-height:16px;color:var(--dsw-alias-label-tertiary)}',
+      '.mm-tabs{display:flex;gap:4px}',
       '.mm-tab{font:inherit;font-size:12px;line-height:18px;padding:5px 10px;background:transparent;border:none;border-bottom:2px solid transparent;color:var(--dsw-alias-label-secondary);cursor:pointer}',
       '.mm-tab:hover{color:var(--dsw-alias-label-primary)}',
       '.mm-tab-active{color:var(--dsw-alias-brand-primary);border-bottom-color:var(--dsw-alias-brand-primary)}',
@@ -2026,8 +2209,8 @@ window.__ModuleLoader__.load({
       '.mm-switch-thumb{position:absolute;top:2px;left:2px;width:14px;height:14px;border-radius:50%;background:var(--dsw-alias-bg-base);transition:transform .15s ease}',
       '.mm-switch-on .mm-switch-thumb{transform:translateX(16px)}',
       '.mm-switch:disabled{opacity:.45;cursor:default}',
-      '.mm-backdrop{position:fixed;inset:0;z-index:1000;display:flex;align-items:center;justify-content:center;padding:16px;background:var(--dsw-alias-bg-overlay,var(--dsw-alias-bg-layer-2))}',
-      '.mm-dialog{display:flex;flex-direction:column;width:min(600px,calc(100vw - 32px));max-height:min(84vh,860px);border:1px solid var(--dsw-alias-border-l2);border-radius:var(--dsw-radius-sm);background:var(--dsw-alias-bg-layer-1);color:var(--dsw-alias-label-primary);overflow:hidden}',
+      '.mm-backdrop{position:fixed;inset:0;z-index:1000;display:flex;align-items:center;justify-content:center;padding:16px;background:transparent}',
+      '.mm-dialog{display:flex;flex-direction:column;width:min(600px,calc(100vw - 32px));max-height:min(84vh,860px);border:1px solid var(--dsw-alias-border-l2);border-radius:var(--dsw-radius-sm);background:var(--dsw-alias-bg-layer-1);color:var(--dsw-alias-label-primary);overflow:hidden;box-shadow:0 12px 36px var(--dsw-alias-bg-overlay,var(--dsw-alias-border-l2))}',
       '.mm-dialog-wide{width:min(760px,calc(100vw - 32px))}',
       '.mm-dialog-head{display:flex;align-items:center;justify-content:space-between;gap:12px;padding:12px 16px 10px;border-bottom:1px solid var(--dsw-alias-border-l1)}',
       '.mm-dialog-title{margin:0;font-size:14px;line-height:22px;font-weight:600;color:var(--dsw-alias-label-primary);word-break:break-all}',
