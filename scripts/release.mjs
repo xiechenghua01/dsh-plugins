@@ -15,11 +15,13 @@ import { join } from 'node:path'
 import {
   ROOT,
   gitClean,
+  gitDiffClean,
   gitHead,
   listPlugins,
   readJson,
   readMarketConfig,
   run,
+  shippedPaths,
 } from './lib/repo.mjs'
 import {
   buildIndexDocument,
@@ -91,6 +93,12 @@ async function main() {
     if (existing !== undefined) {
       if (existing.source.commit === head) {
         console.log(`${entry.name}@${version} is already published at ${short(head)}; nothing to do`)
+        continue
+      }
+      if (gitDiffClean(existing.source.commit, head, shippedPaths(plugin))) {
+        console.log(
+          `${entry.name}@${version} is already published at ${short(existing.source.commit)} and the files it ships are unchanged since; nothing to do`,
+        )
         continue
       }
       throw new Error(

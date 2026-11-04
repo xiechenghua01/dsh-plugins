@@ -105,3 +105,30 @@ export function gitClean() {
 export function hasCommit(commit) {
   return run('git', ['cat-file', '-e', `${commit}^{commit}`], { allowFailure: true }) !== undefined
 }
+
+/**
+ * Whether nothing changed between two commits under the given repository-relative paths.
+ * @returns {boolean} true when every diff is empty.
+ */
+export function gitDiffClean(from, to, paths) {
+  const result = spawnSync('git', ['diff', '--quiet', from, to, '--', ...paths], { encoding: 'utf8' })
+  if (result.status === 0) return true
+  if (result.status === 1) return false
+  throw new Error(`git diff ${from} ${to} failed: ${(result.stderr || result.stdout || '').trim()}`)
+}
+
+/**
+ * The paths a release must compare for changes: everything the package ships, minus Markdown.
+ * A glob (`locale/*.json`) becomes the directory that contains it.
+ */
+export function shippedPaths(plugin) {
+  const paths = new Set()
+  for (const entry of plugin.manifest.files ?? []) {
+    if (entry.endsWith('.md')) continue
+    const glob = entry.indexOf('*')
+    const path = glob === -1 ? entry : entry.slice(0, glob).replace(/\/+$/u, '')
+    if (path !== '') paths.add(`${plugin.relDir}/${path}`)
+  }
+  paths.add(`${plugin.relDir}/package.json`)
+  return [...paths]
+}
