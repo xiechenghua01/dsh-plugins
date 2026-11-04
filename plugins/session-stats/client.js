@@ -67,6 +67,7 @@ window.__ModuleLoader__.load({
       'sessions.empty': '暂无会话记录',
       'sessions.showing': '显示 {shown} / {total} 个会话',
       'sessions.more': '查看更多',
+      'sessions.archived': '已归档',
       'table.session': '会话',
       'table.created': '创建时间',
       'table.requests': '请求数',
@@ -149,6 +150,7 @@ window.__ModuleLoader__.load({
       'sessions.empty': 'No sessions recorded',
       'sessions.showing': 'Showing {shown} of {total} sessions',
       'sessions.more': 'Show more',
+      'sessions.archived': 'Archived',
       'table.session': 'Session',
       'table.created': 'Created',
       'table.requests': 'Requests',
@@ -294,9 +296,11 @@ window.__ModuleLoader__.load({
 .ss-table tbody tr:last-child td{border-bottom:0}
 .ss-table tbody tr:hover{background:var(--dsw-alias-interactive-bg-hover)}
 .ss-num{text-align:right;font-variant-numeric:tabular-nums;white-space:nowrap}
-.ss-session-title{display:block;color:var(--dsw-alias-label-primary);font-weight:500;overflow-wrap:anywhere}
+.ss-session-head{display:flex;align-items:flex-start;gap:20px;min-width:0}
+.ss-session-title{display:block;flex:1;min-width:0;color:var(--dsw-alias-label-primary);font-weight:500;overflow-wrap:anywhere}
 .ss-session-id{display:block;color:var(--dsw-alias-label-caption);font-size:11px;line-height:16px;margin-top:2px;overflow-wrap:anywhere}
-.ss-live-dot{display:inline-block;width:6px;height:6px;border-radius:50%;background:var(--dsw-alias-state-success-primary);margin-left:6px;vertical-align:middle}
+/* Archived marker: a quiet warm chip at the title's top-right. */
+.ss-archived-badge{flex:none;display:inline-block;margin-top:3px;padding:0 4px;border-radius:4px;font-size:10px;font-weight:500;line-height:14px;white-space:nowrap;color:var(--dsw-alias-state-warn-primary);background:var(--dsw-alias-bg-layer-2);background:color-mix(in srgb,var(--dsw-alias-state-warn-primary) 14%,transparent);border:.5px solid transparent;border-color:color-mix(in srgb,var(--dsw-alias-state-warn-primary) 35%,transparent)}
 .ss-split{color:var(--dsw-alias-label-secondary)}
 .ss-segmented{display:inline-flex;gap:2px;padding:2px;border-radius:10px;background:var(--dsw-alias-bg-layer-2)}
 .ss-segment{display:inline-flex;align-items:center;gap:4px;height:26px;padding:0 10px;border:0;border-radius:8px;background:transparent;color:var(--dsw-alias-label-tertiary);font:inherit;font-size:12px;line-height:18px;cursor:pointer}
@@ -1387,7 +1391,7 @@ window.__ModuleLoader__.load({
         id: toText(record.id),
         title: toText(record.title),
         createdAt: toNumber(record.createdAt),
-        live: record.live === true,
+        archived: record.archived === true,
         turns: toNumber(record.turns),
         requests: toNumber(record.requests),
         input: toNumber(tokens.input),
@@ -1476,8 +1480,12 @@ window.__ModuleLoader__.load({
           h(
             'td',
             null,
-            h('span', { className: 'ss-session-title' }, session.title === '' ? t('table.untitled') : session.title),
-            session.live ? h('span', { className: 'ss-live-dot', 'aria-hidden': 'true' }) : null,
+            h(
+              'span',
+              { className: 'ss-session-head' },
+              h('span', { className: 'ss-session-title' }, session.title === '' ? t('table.untitled') : session.title),
+              session.archived ? h('span', { className: 'ss-archived-badge' }, t('sessions.archived')) : null,
+            ),
             h('span', { className: 'ss-session-id' }, shortSessionId(session.id)),
           ),
           h('td', null, fmt.date(session.createdAt)),

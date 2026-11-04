@@ -10,13 +10,14 @@
  * can be exercised in plain Node.
  *
  *   computeOverview({ records, eventsById?, summaries?, unreadable?, titles?, sizes?,
- *                     now, days?, config? })
+ *                     archivedIds?, now, days?, config? })
  *     records    SessionRecord[] from `sessionQuery.listSessions()` (newest first)
  *     eventsById Map|object sessionId -> SessionEvent[] from `sessionQuery.readSession()`
  *     summaries  Map|object sessionId -> pre-folded per-session summary (cache path)
  *     unreadable Set|array of session ids whose log could not be read
  *     titles     `readTitleSnapshots()` result, or Map|object sessionId -> title
  *     sizes      `sessionPersistence.list()` result, or Map|object sessionId -> size facts
+ *     archivedIds Set|array of archived session ids from `storages/workspace.json`
  *     now        epoch ms
  *     days       timeline window (1..365), defaults to config.days
  *     config     the plugin row config (merged over DEFAULTS)
@@ -35,7 +36,7 @@
  * Both helpers never throw, sanitize every number, and never emit NaN/Infinity/-0.
  */
 import { cpus, freemem, homedir, loadavg, totalmem, uptime } from 'node:os'
-import { lstat, readdir } from 'node:fs/promises'
+import { lstat, readFile, readdir } from 'node:fs/promises'
 import { join } from 'node:path'
 
 /** Cordis function-plugin name. */
@@ -590,6 +591,7 @@ export function computeOverview(input) {
     const titles = titleLookup(source.titles)
     const sizes = toLookup(source.sizes)
     const unreadable = toIdSet(source.unreadable)
+    const archivedIds = toIdSet(source.archivedIds)
 
     const payloadSessions = []
     const folds = []
@@ -644,6 +646,7 @@ export function computeOverview(input) {
         createdAt,
         updatedAt: toEpoch(summary.updatedAt, createdAt),
         live,
+        archived: archivedIds.has(id),
         turns: toCount(summary.turns),
         requests: toCount(summary.requests),
         tokens,
@@ -1462,6 +1465,20 @@ export function apply(ctx, config) {
     }
   }
 
+  /**
+   * Best-effort archived-session ids from `storages/workspace.json`.
+   * A missing or malformed file (or an older schema) simply yields an empty set.
+   */
+  const readArchivedSessionIds = async () => {
+    try {
+      const raw = await readFile(join(home, 'storages', 'workspace.json'), 'utf8')
+      const parsed = JSON.parse(raw)
+      return toIdSet(parsed?.global?.archivedSessionIds)
+    } catch {
+      return new Set()
+    }
+  }
+
   /** Build (or serve from cache) the §4 overview payload for one timeline window. */
   const buildOverview = async (days, force = false) => {
     const now = Date.now()
@@ -1565,10 +1582,15 @@ export function apply(ctx, config) {
         })
       }
 
+      // Archive state is not part of the log revision, so it must not live in the
+      // per-session summary cache; re-read it on every overview build.
+      const archivedIds = await readArchivedSessionIds()
+
       const payload = computeOverview({
         records,
         summaries,
         sizes,
+        archivedIds,
         now,
         days,
         config: settings,

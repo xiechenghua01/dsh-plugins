@@ -122,7 +122,8 @@ keyed by session id, validated by `revision` from `sessionPersistence.list()` (i
 purpose: "equal revisions may be treated as an unchanged log"). Cache shape
 `{ revision, summary }`. Cache the whole overview for `overviewCacheMs` (default 5000) and
 the system payload for `systemCacheMs` (default 1000). Purge cache entries for ids that
-disappeared.
+disappeared. Archive state is not part of a session summary: read `storages/workspace.json`
+fresh for each overview build (the whole-overview TTL still applies).
 
 **Manual refresh.** Both routes accept `refresh=1` (or `refresh=true`) and must bypass their
 response caches for that request: the client's Refresh button re-requests with that flag so a
@@ -209,7 +210,7 @@ The session-log number comes from `sessionPersistence` (`sizeBytes` sum); the wa
                              "tokens": 0, "cost": 0, "requests": 0 } ] } ],
   "sessions": [ {
     "id": "session-...", "title": "…" , "createdAt": 1793697469184,
-    "updatedAt": 1793757595111, "live": false,
+    "updatedAt": 1793757595111, "live": false, "archived": false,
     "turns": 2, "requests": 33,
     "tokens": { "input": 0, "output": 0, "cacheRead": 0, "cacheWrite": 0,
                 "reasoning": 0, "total": 0 },
@@ -225,6 +226,10 @@ Rules:
   `days` query parameter (1..365, default from config `days`, default 30).
 - Bucket `key` = local `YYYY-MM-DD`; `start` = local midnight epoch ms.
 - A session appears in `sessions` even when it has no usage (`requests: 0`).
+- `sessions[].archived` mirrors `storages/workspace.json` → `global.archivedSessionIds`.
+  Read it best-effort on every overview build (missing/malformed file ⇒ empty set) and pass
+  it to the pure `computeOverview({ archivedIds })`; never store it in the per-session
+  summary cache, because archiving does not change the log `revision`.
 - `sessions` sorted by `cost` desc, then `tokens.total` desc, then `createdAt` desc.
 - `totals` sums **all** sessions ever, not just the timeline window.
 - `budget.used` / `withinPeriod*` count only events inside the budget period
@@ -370,7 +375,9 @@ Sections required (each a `section.ss-card` or heading + grid):
 3. **Per-session table**: title (fallback = short id), created date, requests, total tokens,
    in/out/cache split, cost, log size. Sortable by cost / tokens / size via a small
    segmented control; default cost desc. Cap the rendered rows at 50 with a localized
-   "showing N of M" note.
+   "showing N of M" note. Archived sessions carry a small warm-orange `已归档` chip at the
+   title's top-right (`.ss-archived-badge`, warn token, `color-mix` tint); unarchived rows
+   carry no marker. Do not render the retired live green dot.
 4. **Model breakdown**: rows of provider/model, requests, tokens, cost, share bar.
 5. **Runtime (CPU)**: process % / system % / cores / load average / RSS / heap / uptime,
    plus a small SVG sparkline of `cpu.history`.
@@ -405,7 +412,8 @@ summary.sessionsHint  summary.cost  summary.costHint  summary.budget
 summary.budgetHint  summary.remaining  summary.noBudget  chart.title  chart.window
 chart.modeModel  chart.modeType  chart.total  chart.other  chart.legend  chart.hint
 chart.empty  chart.allHidden  chart.input  chart.output  chart.cacheRead
-sessions.title  sessions.empty  sessions.showing  sessions.more  table.session  table.created
+sessions.title  sessions.empty  sessions.showing  sessions.more  sessions.archived
+table.session  table.created
 table.requests  table.tokens  table.split  table.cost  table.logSize  table.sortCost
 table.sortTokens  table.sortSize  table.untitled  models.title  models.empty
 models.share  models.window  models.shareTokens  models.sparkline  runtime.title

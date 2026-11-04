@@ -24,6 +24,8 @@ usage, CPU/memory runtime, and log footprint.
 - **概览卡**：总 Token 与估算成本卡内置每日迷你走势；预算卡保留进度条。
 - **会话用量**：默认只列前 5 个会话，底部「查看更多」一次展开到全部；展开后表格固定
   10 行窗口高度，超出部分在表内滚动（表头吸顶）。Token 列附加相对占比条，一眼看出各会话量级。
+  已归档会话在名称右上角显示橙色「已归档」小徽章（数据来自 `storages/workspace.json`），
+  未归档会话不显示标记。
 - **运行状态 / 日志占用**：CPU 走势附峰值；日志四类占用各带相对占比条。
 
 ## 安装
@@ -100,6 +102,8 @@ plugin_manager action=install_bundle target=/absolute/path/to/dsh-plugins/plugin
   与真实账单可能有差异（缓存命中率、阶梯价、赠送额度等）。
 - 日志体积包含会话日志、`storages`、`attachments`、`spill` 四部分，目录遍历有
   20k 条目 / 2 秒上限，超出部分不计入。
+- 归档标记读取 `~/.dsh/storages/workspace.json` 的 `global.archivedSessionIds`；
+  文件缺失或格式不符时按「无归档会话」处理，不影响面板其余数据。
 
 ## 验证
 

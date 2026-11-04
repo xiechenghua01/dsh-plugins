@@ -80,6 +80,18 @@ export async function run(report) {
   sameNumber(overview.timeline.buckets.length, 30, 'timeline length', report)
   sameNumber(overview.timeline.buckets[29].key, '2026-11-04', 'last bucket key', report)
 
+  // Archive state is passed in (never read from disk by the pure function): only the
+  // listed ids are flagged, and omitting the input leaves every session unarchived.
+  if (overview.sessions.some((session) => session.archived !== false)) {
+    report('sessions must default to archived: false without archivedIds')
+  }
+  const archivedOverview = computeOverview({ ...input, archivedIds: ['s2'], now, days: 30, config: {} })
+  const archivedById = new Map(archivedOverview.sessions.map((session) => [session.id, session.archived]))
+  if (archivedById.get('s2') !== true) report('an archived session id must set sessions[].archived = true')
+  if (archivedById.get('s1') !== false) report('a session outside archivedIds must stay archived: false')
+  if (archivedById.get('s3') !== false) report('an unreadable session outside archivedIds must stay archived: false')
+  sameNumber(archivedOverview.totals.sessions, 3, 'archived corpus sessions', report)
+
   const timelineTotal = overview.timeline.buckets.reduce((sum, bucket) => sum + bucket.tokens.total, 0)
   sameNumber(overview.totals.tokens.total, timelineTotal, 'totals equal the timeline sum', report)
   if (!(timelineTotal > 0)) report('timeline total must be positive')

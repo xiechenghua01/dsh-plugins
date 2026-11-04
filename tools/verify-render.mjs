@@ -14,7 +14,7 @@
  */
 import { readFileSync } from 'node:fs'
 import { join } from 'node:path'
-import { PLUGIN_DIR, loadPayloads } from './lib/local-corpus.mjs'
+import { DSH_HOME, PLUGIN_DIR, loadPayloads } from './lib/local-corpus.mjs'
 import {
   PRESET_INDEX,
   buildClientDefinition,
@@ -37,6 +37,17 @@ const bad = (label, detail = '') => {
   console.log(`  FAIL ${label}${detail ? ` — ${detail}` : ''}`)
 }
 const check = (label, condition, detail = '') => (condition ? ok(label, detail) : bad(label, detail))
+
+/** Archived session ids straight from the machine's workspace store (never throws). */
+function readArchivedIds() {
+  try {
+    const parsed = JSON.parse(readFileSync(join(DSH_HOME, 'storages', 'workspace.json'), 'utf8'))
+    const ids = parsed && parsed.global && parsed.global.archivedSessionIds
+    return new Set(Array.isArray(ids) ? ids.filter((id) => typeof id === 'string') : [])
+  } catch {
+    return new Set()
+  }
+}
 
 function pad2(value) {
   return value < 10 ? `0${String(value)}` : String(value)
@@ -170,6 +181,13 @@ async function main() {
   )
   check('model daily keys match the timeline buckets', overview.models.every((model) => model.daily.every((day, index) => day.key === buckets[index].key)))
 
+  const archivedIds = readArchivedIds()
+  check(
+    'overview flags exactly the workspace archived sessions',
+    overview.sessions.every((session) => session.archived === archivedIds.has(session.id)),
+    `${archivedIds.size} archived ids`,
+  )
+
   const timelineTotal = buckets.reduce((sum, bucket) => sum + bucket.tokens.total, 0)
   const folded = independentFold(payloads)
   check('timeline total equals an independent corpus fold', timelineTotal === folded.total, `${timelineTotal} vs ${folded.total}`)
@@ -228,6 +246,7 @@ async function main() {
       (found.classCounts.get('ss-more') || 0) === (payloads.sessions > 5 ? 1 : 0),
     )
     check('session token bars rendered', (found.classCounts.get('ss-row-bar') || 0) > 0)
+    check('the retired live dot is gone', (found.classCounts.get('ss-live-dot') || 0) === 0)
     check('log footprint bars rendered', (found.classCounts.get('ss-log-bar') || 0) >= 1)
     check('progress bars (budget/share) rendered', found.roles.includes('progressbar'))
 
@@ -264,6 +283,17 @@ async function main() {
     check('expanded window is a focusable region', found.roles.includes('region'))
     check('show-more affordance disappears once expanded', (found.classCounts.get('ss-more') || 0) === 0)
     check('expanded table keeps its sorting controls', (found.classCounts.get('ss-segment') || 0) >= 3)
+
+    // The client sorts cost desc then createdAt desc and caps at 50 rows; mirror that
+    // order so the expected badge count comes from real data, not a hard-coded 1.
+    const expandedRows = overview.sessions
+      .slice()
+      .sort((left, right) => (right.cost - left.cost) || (right.createdAt - left.createdAt))
+      .slice(0, 50)
+    const expectedBadges = expandedRows.filter((session) => session.archived === true).length
+    const badges = elementsByClass(expandedTree, 'ss-archived-badge')
+    check('archived sessions render exactly one badge each', badges.length === expectedBadges, `${badges.length} badges, expected ${expectedBadges}`)
+    check('archived badges read 已归档', badges.every((badge) => textOf(badge) === '已归档'))
   } catch (error) {
     bad('expanded session table renders', error.message)
   }
