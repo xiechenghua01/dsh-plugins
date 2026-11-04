@@ -41,8 +41,8 @@ import { join } from 'node:path'
 /** Cordis function-plugin name. */
 export const name = 'session-stats'
 
-/** The route carrier, the trust fence, the session corpus, and the stored-log facts. */
-export const inject = ['webServer', 'connection', 'sessionQuery', 'sessionPersistence']
+/** The route carrier, the trust fence, the session corpus, the stored-log facts, and timers. */
+export const inject = ['webServer', 'connection', 'sessionQuery', 'sessionPersistence', 'timer']
 
 const OVERVIEW_PATH = '/session-stats/overview'
 const SYSTEM_PATH = '/session-stats/system'
@@ -1627,11 +1627,11 @@ export function apply(ctx, config) {
     },
   }), `session-stats: GET ${SYSTEM_PATH}`)
 
-  // `ctx.interval` self-registers as an effect and returns its disposer; the outer
-  // effect additionally ties the sampler to this plugin's fiber so a reload of the
-  // bundle cannot leave a sampler running.
+  // `timer.interval` returns the disposer of the effect it registers; wrapping it in
+  // this plugin's effect also disposes the sampler when the bundle is unloaded or
+  // reloaded, so a stale sampler cannot outlive its row.
   try {
-    ctx.effect(() => ctx.interval(sampler.sample, settings.sampleMs), 'session-stats: cpu sampler')
+    ctx.effect(() => ctx.timer.interval(sampler.sample, settings.sampleMs), 'session-stats: cpu sampler')
   } catch {
     /* no timer service in this composition: the system route reports null percents */
   }

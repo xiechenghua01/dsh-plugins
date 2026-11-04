@@ -59,7 +59,7 @@ export async function loadPayloads(pluginDir = PLUGIN_DIR, corpus = readCorpus()
   const routes = new Map()
   const ctx = {
     effect(callback) { callback(); return () => {} },
-    interval() { return () => {} },
+    timer: { interval() { return () => {} } },
     get(name) {
       if (name === 'sessionQuery') {
         return {

@@ -5,7 +5,7 @@
  * unreadable session, model-less usage) and checks the published overview contract,
  * including the model daily series the trend chart reads.
  */
-import { computeOverview, computeSystem } from './index.js'
+import { computeOverview, computeSystem, inject } from './index.js'
 
 const DAY = 86_400_000
 
@@ -65,6 +65,12 @@ function sameNumber(actual, expected, label, report) {
  * @param {(message: string) => void} report - called with one problem per failed check.
  */
 export async function run(report) {
+  // The CPU sampler registers through `ctx.timer`; a missing inject entry makes the
+  // host throw at registration, silently leaving the CPU trend empty forever.
+  if (!Array.isArray(inject) || !inject.includes('timer')) {
+    report('inject must declare the timer service used by the CPU sampler')
+  }
+
   const now = new Date(2026, 10, 4, 12, 0, 0).getTime() // local noon, 2026-11-04
   const input = corpus(now)
   const overview = computeOverview({ ...input, now, days: 30, config: {} })

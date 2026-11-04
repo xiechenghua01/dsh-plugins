@@ -133,10 +133,15 @@ emit `error: 'unreadable'` with zeroed tokens. If `sessionPersistence` is absent
 `process.cpuUsage()` and `cpus()` are deltas, so keep a sampler started in `apply`:
 
 ```js
+export const inject = ['webServer', 'connection', 'sessionQuery', 'sessionPersistence', 'timer']
 const sample = () => { /* compute deltas vs previous sample, push into a ring buffer */ }
-ctx.effect(() => ctx.interval(sample, 2000), 'session-stats: cpu sampler')  // returns disposer
+ctx.effect(() => ctx.timer.interval(sample, 2000), 'session-stats: cpu sampler')  // returns disposer
 ```
-`ctx.interval(cb, ms)` exists on the Host context (see the `timer` service). Compute:
+`ctx.timer.interval(cb, ms)` is the `timer` service (`@deepseek-ai/cordis-plugin-timer`); the
+service is only readable when `timer` is declared in `inject` — reading `ctx.timer` or the
+mixed-in `ctx.interval` otherwise throws `cannot get property "timer" without inject`.
+`interval()` returns the disposer of the effect it registers; the outer `ctx.effect` also
+disposes it when the bundle is unloaded or reloaded. Compute:
 - process percent = `(deltaUser + deltaSystem) / (deltaWallMicros) * 100` (one core = 100%),
   clamp 0..100.
 - system percent from summed `cpus()` times deltas (idle vs total), clamp 0..100.
