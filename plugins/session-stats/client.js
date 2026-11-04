@@ -14,7 +14,7 @@ window.__ModuleLoader__.load({
     const PANEL_ID = 'session-stats'
     /** Timeline window requested from the Host; matches the Host config default. */
     const DAYS = 30
-    const OVERVIEW_POLL_MS = 30000
+    const OVERVIEW_POLL_MS = 10000
     const SYSTEM_POLL_MS = 2000
     const TABLE_LIMIT = 50
     /** Collapsed session table rows; the expanded table is a fixed ten-row window. */
@@ -620,11 +620,13 @@ window.__ModuleLoader__.load({
       useEffect(() => {
         let stopped = false
         let controller = null
-        const request = () => {
+        /** A manual refresh must bypass the Host response caches (`refresh=1`). */
+        const request = (force) => {
           if (controller !== null) controller.abort()
           const current = new AbortController()
           controller = current
-          load(path, current.signal).then(
+          const target = force ? path + (path.indexOf('?') === -1 ? '?' : '&') + 'refresh=1' : path
+          load(target, current.signal).then(
             (data) => {
               if (stopped || current.signal.aborted) return
               if (controller === current) controller = null
@@ -642,8 +644,8 @@ window.__ModuleLoader__.load({
             },
           )
         }
-        request()
-        const timer = setInterval(request, intervalMs)
+        request(refreshToken > 0)
+        const timer = setInterval(() => request(false), intervalMs)
         return () => {
           stopped = true
           clearInterval(timer)

@@ -1,6 +1,6 @@
 {
   "name": "@xiechenghua01/dsh-session-stats",
-  "version": "1.1.4",
+  "version": "1.1.5",
   "private": true,
   "type": "module",
   "description": "Session statistics panel for the DeepSeek Harness Web GUI: token usage, session counts, estimated cost and budget, per-session usage, CPU/runtime and log footprint.",

@@ -64,9 +64,9 @@ const DEFAULTS = {
   days: 30,
   budget: { amount: 10, currency: 'USD', period: 'monthly' },
   pricing: { default: { ...DEFAULT_RATES }, models: {} },
-  overviewCacheMs: 15_000,
+  overviewCacheMs: 5_000,
   systemCacheMs: 1_000,
-  logCacheMs: 10_000,
+  logCacheMs: 5_000,
   sampleMs: 2_000,
 }
 
@@ -1128,6 +1128,17 @@ function daysFromRequest(req, fallback) {
   }
 }
 
+/** Whether the request asks to bypass every response cache (`refresh=1`). */
+function forceFromRequest(req) {
+  try {
+    const url = new URL(String(req.url ?? ''), 'http://localhost')
+    const value = url.searchParams.get('refresh')
+    return value === '1' || value === 'true'
+  } catch {
+    return false
+  }
+}
+
 // ---------------------------------------------------------------------------
 // Host-only runtime facts (I/O is allowed here; the pure helpers above stay pure)
 // ---------------------------------------------------------------------------
@@ -1405,12 +1416,29 @@ export function apply(ctx, config) {
         sized.push({ id, bytes })
       }
       sized.sort((left, right) => right.bytes - left.bytes)
-      sessionLog.largest = sized.slice(0, MAX_LARGEST).map((item) => {
-        const cached = sessionCache.get(item.id)
-        const title = cached?.summary?.title
+      const largest = sized.slice(0, MAX_LARGEST)
+      // Fold the titles from the corpus observation rather than the overview summary
+      // cache: a renamed session must show its new title even before its folded
+      // summary is rebuilt.
+      let liveTitles = new Map()
+      const query = ctx.get('sessionQuery')
+      if (query !== null && query !== undefined && largest.length > 0) {
+        try {
+          const snapshots = await query.readTitleSnapshots(largest.map((item) => item.id))
+          if (Array.isArray(snapshots)) liveTitles = titleLookup(snapshots)
+        } catch {
+          liveTitles = new Map()
+        }
+      }
+      sessionLog.largest = largest.map((item) => {
+        const live = liveTitles.get(item.id)
+        const cached = sessionCache.get(item.id)?.summary?.title
+        const title = typeof live === 'string' && live.trim() !== ''
+          ? live.trim()
+          : (typeof cached === 'string' && cached.trim() !== '' ? cached.trim() : null)
         return {
           id: item.id,
-          title: typeof title === 'string' && title.trim() !== '' ? title.trim() : null,
+          title,
           bytes: item.bytes,
         }
       })
@@ -1435,10 +1463,11 @@ export function apply(ctx, config) {
   }
 
   /** Build (or serve from cache) the §4 overview payload for one timeline window. */
-  const buildOverview = async (days) => {
+  const buildOverview = async (days, force = false) => {
     const now = Date.now()
     if (
-      overviewCache.payload !== null
+      !force
+      && overviewCache.payload !== null
       && overviewCache.days === days
       && now - overviewCache.at < settings.overviewCacheMs
     ) {
@@ -1559,13 +1588,13 @@ export function apply(ctx, config) {
   }
 
   /** Build (or serve from cache) the §5 system payload. */
-  const buildSystem = async () => {
+  const buildSystem = async (force = false) => {
     const now = Date.now()
-    if (systemCache.payload !== null && now - systemCache.at < settings.systemCacheMs) {
+    if (!force && systemCache.payload !== null && now - systemCache.at < settings.systemCacheMs) {
       return systemCache.payload
     }
     let logs
-    if (logCache.payload !== null && now - logCache.at < settings.logCacheMs) {
+    if (!force && logCache.payload !== null && now - logCache.at < settings.logCacheMs) {
       logs = logCache.payload
     } else if (logCache.inFlight !== null) {
       logs = await logCache.inFlight
@@ -1603,7 +1632,7 @@ export function apply(ctx, config) {
           sendMethodNotAllowed(res, 'GET')
           return
         }
-        sendJson(res, 200, await buildOverview(daysFromRequest(req, settings.days)))
+        sendJson(res, 200, await buildOverview(daysFromRequest(req, settings.days), forceFromRequest(req)))
       } catch (error) {
         sendFailure(res, error)
       }
@@ -1620,7 +1649,7 @@ export function apply(ctx, config) {
           sendMethodNotAllowed(res, 'GET')
           return
         }
-        sendJson(res, 200, await buildSystem())
+        sendJson(res, 200, await buildSystem(forceFromRequest(req)))
       } catch (error) {
         sendFailure(res, error)
       }

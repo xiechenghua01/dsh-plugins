@@ -120,9 +120,16 @@ key → token vector, cost, requests). `computeOverview` folds it per timeline b
 **Cost/caching.** Reading every log on every request is too slow. Keep a per-session cache
 keyed by session id, validated by `revision` from `sessionPersistence.list()` (its documented
 purpose: "equal revisions may be treated as an unchanged log"). Cache shape
-`{ revision, summary }`. Cache the whole overview for `overviewCacheMs` (default 15000) and
+`{ revision, summary }`. Cache the whole overview for `overviewCacheMs` (default 5000) and
 the system payload for `systemCacheMs` (default 1000). Purge cache entries for ids that
 disappeared.
+
+**Manual refresh.** Both routes accept `refresh=1` (or `refresh=true`) and must bypass their
+response caches for that request: the client's Refresh button re-requests with that flag so a
+renamed session shows its new title immediately instead of after the cache window. Titles
+come from `sessionQuery.readTitleSnapshots`; the log-footprint `largest` rows fold their own
+titles from the corpus observation rather than the overview summary cache, so a rename is
+visible in both cards.
 
 **Resilience.** One unreadable session must not fail the payload: catch per session and
 emit `error: 'unreadable'` with zeroed tokens. If `sessionPersistence` is absent at runtime
@@ -273,9 +280,9 @@ const DEFAULTS = {
     default: { input: 0.28, output: 0.42, cacheRead: 0.028, cacheWrite: 0.28 },
     models: {},                     // exact model id -> partial rate override
   },
-  overviewCacheMs: 15000,
+  overviewCacheMs: 5000,
   systemCacheMs: 1000,
-  logCacheMs: 10000,     // the bounded on-disk walk, separate from the 2 s CPU poll
+  logCacheMs: 5000,      // the bounded on-disk walk, separate from the 2 s CPU poll
   sampleMs: 2000,
 }
 ```
@@ -327,8 +334,9 @@ panel through `ctx.layout.selectPanel`.
 Data loading: `fetch('session-stats/overview?days=' + days)` — **relative** URL, no leading
 slash (the document mount prefix is preserved), `headers: { accept: 'application/json' }`.
 Same for `session-stats/system`. Never throw from render: keep `{status, data, error}` state.
-Poll `system` every 2000 ms while mounted, `overview` every 30000 ms, and expose a manual
-Refresh button. Clear every timer in the effect cleanup. Abort in-flight requests on unmount.
+Poll `system` every 2000 ms while mounted, `overview` every 10000 ms, and expose a manual
+Refresh button that re-requests with `refresh=1` (bypassing the Host response caches).
+Clear every timer in the effect cleanup. Abort in-flight requests on unmount.
 If `response.status === 401` show the localized "not authorized" state instead of a raw error.
 
 ### 7.1 Page layout (copy the host page shell)
