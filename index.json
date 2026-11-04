@@ -1,0 +1,111 @@
+{
+  "format": 1,
+  "title": {
+    "en": "DSH Plugins by xiechenghua01",
+    "zh": "xiechenghua01 的 DSH 插件"
+  },
+  "description": {
+    "en": "Plugin index source for DeepSeek Harness: panels, tools and integrations installed from this repository.",
+    "zh": "DeepSeek Harness 插件索引源：从本仓库安装的面板、工具与集成。"
+  },
+  "metadata": {
+    "categories": {
+      "observability": {
+        "title": {
+          "en": "Observability",
+          "zh": "可观测性"
+        }
+      }
+    },
+    "labels": {
+      "ui-panel": {
+        "title": {
+          "en": "UI panel",
+          "zh": "界面面板"
+        }
+      },
+      "tokens": {
+        "title": {
+          "en": "Tokens",
+          "zh": "Token 用量"
+        }
+      },
+      "cost": {
+        "title": {
+          "en": "Cost",
+          "zh": "成本"
+        }
+      },
+      "system": {
+        "title": {
+          "en": "System",
+          "zh": "系统"
+        }
+      },
+      "logs": {
+        "title": {
+          "en": "Logs",
+          "zh": "日志"
+        }
+      }
+    }
+  },
+  "plugins": [
+    {
+      "name": "@xiechenghua01/dsh-session-stats",
+      "author": "xiechenghua01",
+      "homepage": "https://github.com/xiechenghua01/dsh-plugins/tree/main/plugins/session-stats",
+      "repository": {
+        "url": "https://github.com/xiechenghua01/dsh-plugins",
+        "directory": "plugins/session-stats"
+      },
+      "metadata": {
+        "category": "observability",
+        "keywords": [
+          "token",
+          "usage",
+          "cost",
+          "budget",
+          "session",
+          "cpu",
+          "memory",
+          "logs",
+          "statistics",
+          "统计",
+          "成本"
+        ],
+        "labels": [
+          "ui-panel",
+          "tokens",
+          "cost",
+          "system",
+          "logs"
+        ]
+      },
+      "versions": [
+        {
+          "version": "1.0.0",
+          "publishTimestamp": 1793764085,
+          "source": {
+            "type": "git",
+            "url": "https://github.com/xiechenghua01/dsh-plugins",
+            "commit": "4abdb90429733ce26a858eb67a24e990c6b2f554",
+            "path": "plugins/session-stats"
+          },
+          "engines": {
+            "dsh": ">=0.2.1-rc.5 <0.3.0"
+          }
+        }
+      ],
+      "title": {
+        "en": "Session Stats",
+        "zh": "会话统计"
+      },
+      "description": {
+        "en": "Token usage, session counts, estimated cost and budget, per-session usage, CPU/memory runtime and log footprint, derived from this machine's real session logs.",
+        "zh": "基于本机真实会话日志的统计面板：token 消耗、会话数量、按用量估算的成本与预算、各会话用量、CPU/内存运行状态与日志占用。"
+      },
+      "icon": "plugins/session-stats/icon.svg"
+    }
+  ]
+}
