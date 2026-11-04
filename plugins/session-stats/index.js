@@ -2,8 +2,8 @@
  * Session Stats — Host half of the `@xiechenghua01/dsh-session-stats` bundle.
  *
  * Routes (registered on `ctx.webServer`, behind the `ctx.connection` trust fence):
- *   GET /session-stats/overview?days=N   -> the `overview` payload (NOTES §5)
- *   GET /session-stats/system            -> the `system` payload   (NOTES §6)
+ *   GET /session-stats/overview?days=N   -> the `overview` payload (CONTRACT §4)
+ *   GET /session-stats/system            -> the `system` payload   (CONTRACT §5)
  *
  * The two exported `compute*` helpers are pure: they take every fact they need as
  * arguments (no Cordis context, no I/O, no `Date.now()`, no `process.env`), so they
@@ -59,7 +59,7 @@ const BUDGET_PERIODS = new Set(['monthly', 'weekly', 'daily', 'total'])
 /** Per-million-token USD rates used when the row config names none. */
 const DEFAULT_RATES = { input: 0.28, output: 0.42, cacheRead: 0.028, cacheWrite: 0.28 }
 
-/** Documented Host config defaults (NOTES §7); the row config is merged over these. */
+/** Documented Host config defaults (CONTRACT §6); the row config is merged over these. */
 const DEFAULTS = {
   days: 30,
   budget: { amount: 10, currency: 'USD', period: 'monthly' },
@@ -366,6 +366,7 @@ function emptySummary(id, createdAt) {
     cost: 0,
     models: [],
     perModel: {},
+    perModelDay: {},
     perDay: {},
     eventCount: 0,
     title: null,
@@ -405,7 +406,7 @@ function summarizeSession(record, events, pricing) {
     tokens.cacheRead = toCount(usage.cacheReadTokens)
     tokens.cacheWrite = toCount(usage.cacheWriteTokens)
     tokens.reasoning = toCount(usage.reasoningTokens)
-    // NOTES §4.2: totalTokens already equals input + output + cacheRead when present,
+    // CONTRACT §3.2: totalTokens already equals input + output + cacheRead when present,
     // so the component sum is the canonical total (and keeps the vector consistent).
     tokens.total = tokens.input + tokens.output + tokens.cacheRead + tokens.cacheWrite
 
@@ -440,6 +441,21 @@ function summarizeSession(record, events, pricing) {
       aggregate.requests += 1
       addTokens(aggregate.tokens, tokens)
       aggregate.cost += cost
+      // Per-model per-local-day fold for the daily token trend; the client reads it
+      // through `models[].daily`, aligned with `timeline.buckets`.
+      let modelDay = summary.perModelDay[modelKey]
+      if (modelDay === undefined) {
+        modelDay = {}
+        summary.perModelDay[modelKey] = modelDay
+      }
+      let dayForModel = modelDay[key]
+      if (dayForModel === undefined) {
+        dayForModel = { start: localMidnightOf(date), tokens: emptyTokens(), cost: 0, requests: 0 }
+        modelDay[key] = dayForModel
+      }
+      addTokens(dayForModel.tokens, tokens)
+      dayForModel.cost += cost
+      dayForModel.requests += 1
       if (!seenModels.has(model)) {
         seenModels.add(model)
         summary.models.push(model)
@@ -498,7 +514,7 @@ function budgetPeriodOf(now, period) {
   }
 }
 
-/** The exact §5 payload shape with every number zeroed (last-resort fallback). */
+/** The exact §4 payload shape with every number zeroed (last-resort fallback). */
 function emptyOverview(now, days, config) {
   const currency = config.budget.currency
   let buckets = []
@@ -552,13 +568,13 @@ function emptyOverview(now, days, config) {
 }
 
 // ---------------------------------------------------------------------------
-// computeOverview — pure (NOTES §5)
+// computeOverview — pure (CONTRACT §4)
 // ---------------------------------------------------------------------------
 
 /**
  * Build the `overview` payload from already-read session facts.
  * @param {object} input - see the module header; every fact is passed in.
- * @returns the exact §5 payload, never throwing.
+ * @returns the exact §4 payload, never throwing.
  */
 export function computeOverview(input) {
   const source = isPlainObject(input) ? input : {}
@@ -683,20 +699,32 @@ export function computeOverview(input) {
       }
 
       const perModel = isPlainObject(fold.summary.perModel) ? fold.summary.perModel : {}
-      for (const value of Object.values(perModel)) {
+      const perModelDay = isPlainObject(fold.summary.perModelDay) ? fold.summary.perModelDay : {}
+      for (const [modelKey, value] of Object.entries(perModel)) {
         if (!isPlainObject(value)) continue
         const model = typeof value.model === 'string' ? value.model : ''
         if (model === '') continue
         const provider = typeof value.provider === 'string' ? value.provider : ''
-        const key = `${provider}\u0000${model}`
-        let aggregate = modelAggregates.get(key)
+        let aggregate = modelAggregates.get(modelKey)
         if (aggregate === undefined) {
-          aggregate = { provider, model, requests: 0, tokens: emptyTokens(), cost: 0 }
-          modelAggregates.set(key, aggregate)
+          aggregate = { provider, model, requests: 0, tokens: emptyTokens(), cost: 0, daily: new Map() }
+          modelAggregates.set(modelKey, aggregate)
         }
         aggregate.requests += toCount(value.requests)
         addTokens(aggregate.tokens, value.tokens)
         aggregate.cost += num(value.cost, 0)
+        const byDay = isPlainObject(perModelDay[modelKey]) ? perModelDay[modelKey] : {}
+        for (const [dayKey, dayValue] of Object.entries(byDay)) {
+          if (!isPlainObject(dayValue)) continue
+          let cell = aggregate.daily.get(dayKey)
+          if (cell === undefined) {
+            cell = { tokens: 0, cost: 0, requests: 0 }
+            aggregate.daily.set(dayKey, cell)
+          }
+          cell.tokens += normalizeTokens(dayValue.tokens).total
+          cell.cost += num(dayValue.cost, 0)
+          cell.requests += toCount(dayValue.requests)
+        }
         observedModels.add(model)
       }
     }
@@ -718,14 +746,44 @@ export function computeOverview(input) {
       || (right.createdAt - left.createdAt)
     ))
 
+    // One entry per model with its all-time totals plus a windowed daily series:
+    // `daily` is aligned index-for-index with `timeline.buckets` (same `days` window),
+    // and `window` is the sum over exactly those buckets. The client's model trend and
+    // model list read the window fields, so both stay consistent with the chart axis.
     const modelRows = [...modelAggregates.values()]
-      .map((aggregate) => ({
-        provider: aggregate.provider,
-        model: aggregate.model,
-        requests: toCount(aggregate.requests),
-        tokens: normalizeTokens(aggregate.tokens),
-        cost: money(aggregate.cost),
-      }))
+      .map((aggregate) => {
+        const daily = buckets.map((bucket) => {
+          const cell = aggregate.daily.get(bucket.key)
+          return {
+            key: bucket.key,
+            start: bucket.start,
+            tokens: cell === undefined ? 0 : toCount(cell.tokens),
+            cost: money(cell === undefined ? 0 : cell.cost),
+            requests: cell === undefined ? 0 : toCount(cell.requests),
+          }
+        })
+        let windowTokens = 0
+        let windowCost = 0
+        let windowRequests = 0
+        for (const day of daily) {
+          windowTokens += day.tokens
+          windowCost += day.cost
+          windowRequests += day.requests
+        }
+        return {
+          provider: aggregate.provider,
+          model: aggregate.model,
+          requests: toCount(aggregate.requests),
+          tokens: normalizeTokens(aggregate.tokens),
+          cost: money(aggregate.cost),
+          window: {
+            tokens: toCount(windowTokens),
+            cost: money(windowCost),
+            requests: toCount(windowRequests),
+          },
+          daily,
+        }
+      })
       .sort((left, right) => (
         (right.cost - left.cost)
         || (right.tokens.total - left.tokens.total)
@@ -789,7 +847,7 @@ export function computeOverview(input) {
 }
 
 // ---------------------------------------------------------------------------
-// computeSystem — pure (NOTES §6)
+// computeSystem — pure (CONTRACT §5)
 // ---------------------------------------------------------------------------
 
 /**
@@ -798,7 +856,7 @@ export function computeOverview(input) {
  * `process`/`cpus`/`loadavg`/`uptime`/`totalmem`/`freemem`/`memory` facts, plus an
  * optional `previous` raw snapshot from which the CPU deltas are derived.
  * @param {object} input - see the module header; every fact is passed in.
- * @returns the exact §6 payload, never throwing.
+ * @returns the exact §5 payload, never throwing.
  */
 export function computeSystem(input) {
   const source = isPlainObject(input) ? input : {}
@@ -1376,7 +1434,7 @@ export function apply(ctx, config) {
     }
   }
 
-  /** Build (or serve from cache) the §5 overview payload for one timeline window. */
+  /** Build (or serve from cache) the §4 overview payload for one timeline window. */
   const buildOverview = async (days) => {
     const now = Date.now()
     if (
@@ -1500,7 +1558,7 @@ export function apply(ctx, config) {
     }
   }
 
-  /** Build (or serve from cache) the §6 system payload. */
+  /** Build (or serve from cache) the §5 system payload. */
   const buildSystem = async () => {
     const now = Date.now()
     if (systemCache.payload !== null && now - systemCache.at < settings.systemCacheMs) {

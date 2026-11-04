@@ -21,6 +21,18 @@ pnpm run release --dry-run
 pnpm run validate     # index-only check (also prints install targets)
 ```
 
+Local-only tools for this plugin (they read real session logs; never in CI):
+
+```bash
+node tools/verify-render.mjs   # payload invariants + headless render checks against ~/.dsh
+node tools/preview.mjs         # static panel preview -> .preview/session-stats.html
+node tools/preview.mjs --theme light|dark --mode model|type --hover N|none --out <path>
+```
+
+They require `zstd`. For a screenshot, open the preview in a headless browser, e.g.
+`"/Applications/Google Chrome.app/Contents/MacOS/Google Chrome" --headless=new --hide-scrollbars
+--screenshot=/abs/path.png --window-size=1180,2400 file:///abs/path/.preview/session-stats.html`.
+
 CI (`.github/workflows/validate.yml`) runs `pnpm install --frozen-lockfile && pnpm test` on
 every push and pull request. A red check blocks the release.
 
@@ -38,6 +50,8 @@ every push and pull request. A red check blocks the release.
   path relative to the repository root, and a `category`/`labels` declared in the root
   `market.json`.
 - No committed file contains an absolute home path (`/Users/...`, `/home/...`).
+- A plugin may ship `selftest.mjs` exporting `run(report)`; `pnpm test` runs it with
+  synthetic input only, so plugin payload logic is covered in CI. Keep it dependency-free.
 - `index.json`: every plugin directory is listed, every version pins a commit present in this
   Git history, `repository.url`/`directory` match the plugin, and the document equals a
   regeneration from the committed metadata.
@@ -52,8 +66,9 @@ every push and pull request. A red check blocks the release.
 4. Give the bundle patch a row id that collides with neither shipped rows nor other plugins.
    Shipped `@deepseek-ai/dsh-web-app` already uses `session-stats`; this repository uses
    `session-stats-panel`.
-5. `pnpm test`, then commit the new plugin.
-6. `pnpm run release <slug>` to publish its first version, then `git push origin main`.
+5. Add `selftest.mjs` (pure synthetic payload checks); `pnpm test` runs it.
+6. `pnpm test`, then commit the new plugin.
+7. `pnpm run release <slug>` to publish its first version, then `git push origin main`.
 
 ## Releasing
 
@@ -95,3 +110,9 @@ generated `index.json`.
   editing an entry.
 - `version` in `package.json` and the latest index version are expected to differ between a
   plugin change and its release commit; that is normal.
+- UI plugins style with `--dsw-*` tokens only. Data-visualization series may use the eight
+  `--ss-series-1..8` colors the panel defines on `.ss-page`; they exist because a
+  multi-model chart needs distinguishable hues in both light and dark mode.
+- The browser half is `require('react')` only. Interactive parts of charts should stay
+  CSS-driven where possible (the trend hover is per-day hit regions plus `:hover`); the
+  headless test shim can prescribe `useState` values, not events.

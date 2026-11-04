@@ -25,7 +25,9 @@ index. Paths below are relative to this plugin directory.
   included). Only `require('react')`. No second React, no CDN, no `document.body` writes,
   no iframe, no DOM reads of other plugins.
 - Style **only** with `--dsw-*` theme tokens (list below). No literal colors except inside
-  SVG artwork/icon paths, which may use `currentColor` and one brand accent.
+  SVG artwork/icon paths, which may use `currentColor` and one brand accent, and the eight
+  `--ss-series-1..8` data-visualization colors defined on `.ss-page`: a multi-model chart
+  needs several distinguishable hues in both light and dark mode.
 - Every visible string goes through the client locale service; no hard-coded UI text.
 - Do not append session events. Do not write to `document` outside your own component/style.
 
@@ -111,6 +113,10 @@ Titles: `await ctx.sessionQuery.readTitleSnapshots(ids)` →
 Log sizes: `await ctx.sessionPersistence.list()` → `[{ header, revision, eventCount?, sizeBytes? }]`.
 Also `stat(id)` for a single revision. Use `sizeBytes` when present.
 
+**Model-day fold.** `summarizeSession` also records `perModelDay` (model key → local day
+key → token vector, cost, requests). `computeOverview` folds it per timeline bucket into
+`models[].daily`, keeping the cached per-session summary a set of aggregates only.
+
 **Cost/caching.** Reading every log on every request is too slow. Keep a per-session cache
 keyed by session id, validated by `revision` from `sessionPersistence.list()` (its documented
 purpose: "equal revisions may be treated as an unchanged log"). Cache shape
@@ -185,7 +191,10 @@ The session-log number comes from `sessionPersistence` (`sizeBytes` sum); the wa
                 "requests": 40,
                 "tokens": { "input": 0, "output": 0, "cacheRead": 0, "cacheWrite": 0,
                             "reasoning": 0, "total": 0 },
-                "cost": 0.9 } ],
+                "cost": 0.9,
+                "window": { "tokens": 1234567, "cost": 0.31, "requests": 12 },
+                "daily": [ { "key": "2026-11-03", "start": 1793462400000,
+                             "tokens": 0, "cost": 0, "requests": 0 } ] } ],
   "sessions": [ {
     "id": "session-...", "title": "…" , "createdAt": 1793697469184,
     "updatedAt": 1793757595111, "live": false,
@@ -213,6 +222,13 @@ Rules:
   sanitize every number (`Number.isFinite(x) ? x : 0`).
 - `pricing.models` is the merged effective table (config overrides over defaults), so the
   client can show which rate was applied.
+- `models[]` carries all-time totals (`requests`, `tokens`, `cost`) **and** the window
+  view: `window` is the sum over exactly the timeline buckets and `daily` is one entry per
+  bucket, aligned index-for-index with `timeline.buckets` (same `key`/`start`), so the
+  trend chart can plot one series per model without re-deriving days client-side.
+- `models[].daily[].tokens` is a plain token count (not a vector). Model-less
+  `assistant/message` events stay in the timeline/totals but belong to no model row; the
+  client folds that remainder, plus any model beyond the top six, into its "other" series.
 
 ## 5. `system` payload
 
@@ -365,17 +381,19 @@ dictionaries in `client.js`. Both halves must use the same key set. Use these ke
 ```
 panel.title  panel.description  action.refresh  state.loading  state.error  state.retry
 state.unauthorized  state.empty  updated.at
-summary.tokens  summary.tokensHint  summary.sessions  summary.sessionsHint
-summary.cost  summary.costHint  summary.budget  summary.budgetHint
-summary.remaining  summary.noBudget
-chart.title  chart.empty  chart.input  chart.output  chart.cacheRead  chart.legend
-chart.dayTip
+summary.tokens  summary.tokensHint  summary.tokensSpark  summary.sessions
+summary.sessionsHint  summary.cost  summary.costHint  summary.costSpark
+summary.budget  summary.budgetHint  summary.remaining  summary.noBudget
+chart.title  chart.window  chart.modeModel  chart.modeType  chart.total  chart.other
+chart.legend  chart.hint  chart.empty  chart.input  chart.output  chart.cacheRead
 sessions.title  sessions.empty  sessions.showing
 table.session  table.created  table.requests  table.tokens  table.split  table.cost
 table.logSize  table.sortCost  table.sortTokens  table.sortSize  table.untitled
-models.title  models.empty  models.share
+models.title  models.empty  models.share  models.window  models.shareTokens
+models.sparkline
 runtime.title  runtime.process  runtime.system  runtime.cores  runtime.load
-runtime.rss  runtime.heap  runtime.uptime  runtime.sparkline  runtime.unavailable
+runtime.rss  runtime.heap  runtime.uptime  runtime.sparkline  runtime.peak
+runtime.unavailable
 logs.title  logs.total  logs.sessionLog  logs.sessions  logs.largest  logs.storage
 logs.attachments  logs.spill  logs.available
 unit.tokens  unit.ms  unit.seconds
@@ -387,6 +405,9 @@ unit.tokens  unit.ms  unit.seconds
 node --check index.js
 node --check client.js
 node -e "import('./index.js').then(m => console.log(Object.keys(m).sort()))"
+pnpm test                # repository: plugin checks + this plugin's synthetic selftest
+node tools/verify-render.mjs   # local: real session logs, full payload + render checks
+node tools/preview.mjs         # local: static panel preview at .preview/session-stats.html
 ```
 
 `computeOverview({ records, eventsById, titles, sizes, now, config })` must be callable

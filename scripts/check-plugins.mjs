@@ -153,6 +153,21 @@ async function checkPlugin(plugin, config, report) {
     const pathMatch = HOME_PATH.exec(await readFile(path, 'utf8'))
     if (pathMatch !== null) report(`${file} contains an absolute home path (${pathMatch[0]}); use a relative or placeholder path`)
   }
+
+  // Optional plugin self-test: pure, synthetic input only, so it also runs in CI.
+  const selftestFile = join(dir, 'selftest.mjs')
+  if (await exists(selftestFile)) {
+    try {
+      const module = await import(pathToFileURL(selftestFile).href)
+      if (typeof module.run !== 'function') {
+        report('selftest.mjs must export `run(report)`')
+      } else {
+        await module.run((message) => report(`selftest: ${message}`))
+      }
+    } catch (error) {
+      report(`selftest failed to run: ${error.message}`)
+    }
+  }
 }
 
 async function main() {

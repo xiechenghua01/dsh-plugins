@@ -4,8 +4,8 @@
     "zh": "会话统计"
   },
   "description": {
-    "en": "Token usage, session counts, estimated cost and budget, per-session usage, CPU/memory runtime and log footprint, derived from this machine's real session logs.",
-    "zh": "基于本机真实会话日志的统计面板：token 消耗、会话数量、按用量估算的成本与预算、各会话用量、CPU/内存运行状态与日志占用。"
+    "en": "Token usage, session counts, estimated cost and budget, a per-model daily token trend, per-session usage, CPU/memory runtime and log footprint, derived from this machine's real session logs.",
+    "zh": "基于本机真实会话日志的统计面板：token 消耗、会话数量、按用量估算的成本与预算、按模型的每日 Token 趋势、各会话用量、CPU/内存运行状态与日志占用。"
   },
   "icon": "plugins/session-stats/icon.svg",
   "category": "observability",
