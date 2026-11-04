@@ -360,6 +360,11 @@ window.__ModuleLoader__.load({
 .ss-empty{margin:0;padding:20px 0;text-align:center;color:var(--dsw-alias-label-tertiary);font-size:13px}
 .ss-icon{display:block}
 .ss-icon-accent{fill:var(--dsw-alias-brand-primary);stroke:var(--dsw-alias-brand-primary)}
+.ss-footer-entry{display:flex;align-items:center;gap:8px;width:100%;height:36px;padding:0 10px;margin:0;border:0;border-radius:10px;background:transparent;color:var(--dsw-alias-label-secondary);font:inherit;font-size:13px;line-height:20px;cursor:pointer;transition:background .15s,color .15s}
+.ss-footer-entry:hover{background:var(--dsw-alias-interactive-bg-hover);color:var(--dsw-alias-label-primary)}
+.ss-footer-entry:focus-visible{outline:2px solid var(--dsw-focus-ring-color,var(--dsw-alias-state-business-primary));outline-offset:-2px}
+.ss-footer-entry[data-collapsed="true"]{width:36px;padding:0;justify-content:center}
+.ss-footer-label{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 @media (max-width:720px){.ss-table th:nth-child(5),.ss-table td:nth-child(5){display:none}.ss-heading{align-items:flex-start}.ss-model{grid-template-columns:auto minmax(0,1fr)}.ss-model-spark{display:none}.ss-yaxis{width:38px}.ss-xaxis{margin-left:48px}.ss-plot-wrap,.ss-yaxis{height:170px}}
 @media (prefers-reduced-motion:reduce){.ss-guide,.ss-dot,.ss-tip{transition:none}}
 `
@@ -678,6 +683,31 @@ window.__ModuleLoader__.load({
         h('rect', { x: 3.5, y: 13, width: 4, height: 7.5, rx: 1.2 }),
         h('rect', { x: 10, y: 9, width: 4, height: 11.5, rx: 1.2 }),
         h('rect', { x: 16.5, y: 4.5, width: 4, height: 16, rx: 1.2, className: 'ss-icon-accent' }),
+      )
+    }
+
+    /**
+     * Sidebar-foot entry (`sidebar.footer.action`), rendered directly above the
+     * account menu at the bottom of the sidebar. The owner hands it only `wide`;
+     * the panel title and the navigation callback come from the registration.
+     */
+    function FooterEntry(props) {
+      const source = props !== null && typeof props === 'object' ? props : {}
+      const wide = source.wide === true
+      const t = typeof source.t === 'function' ? source.t : (key) => key
+      const openPanel = typeof source.openPanel === 'function' ? source.openPanel : () => {}
+      return h(
+        'button',
+        {
+          type: 'button',
+          className: 'ss-footer-entry',
+          'data-collapsed': wide ? 'false' : 'true',
+          'aria-label': t('panel.title'),
+          title: wide ? undefined : t('panel.title'),
+          onClick: openPanel,
+        },
+        h(StatsIcon, { size: 18, active: false }),
+        wide ? h('span', { className: 'ss-footer-label' }, t('panel.title')) : null,
       )
     }
 
@@ -1993,7 +2023,7 @@ window.__ModuleLoader__.load({
      * ------------------------------------------------------------------ */
 
     return {
-      inject: ['slots', 'locale'],
+      inject: ['slots', 'locale', 'layout'],
       apply(ctx) {
         ctx.effect(() => ctx.locale.register(NS, { zh: zh, en: en }), 'session-stats: dictionaries')
 
@@ -2032,19 +2062,23 @@ window.__ModuleLoader__.load({
 
         ctx.effect(
           () =>
-            ctx.slots.inject('sidebar.panellist', () =>
+            ctx.slots.inject('sidebar.footer.action', () =>
               ctx.slots.register(
                 {
-                  name: 'sidebar.panellist',
+                  name: 'sidebar.footer.action',
                   id: PANEL_ID,
-                  order: 20,
+                  order: 10,
                   locale: NS,
                   label: () => t('panel.title'),
+                  inject: () => ({
+                    t: t,
+                    openPanel: () => ctx.layout.selectPanel(PANEL_ID),
+                  }),
                 },
-                StatsIcon,
+                FooterEntry,
               ),
             ),
-          'session-stats: sidebar entry',
+          'session-stats: sidebar footer entry',
         )
       },
     }

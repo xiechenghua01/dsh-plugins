@@ -8,7 +8,7 @@ logs: token usage, session counts, estimated cost and budget, a token timeline, 
 usage, CPU/memory runtime, and log footprint.
 
 - 包名：`@xiechenghua01/dsh-session-stats`，属于 [dsh-plugins](../../README.md) 仓库与插件索引源
-- 面板入口：左侧栏「会话统计」图标（`sidebar.panellist`，order 20）→ 主面板 `main` / key `session-stats`
+- 面板入口：侧边栏底部、账号菜单上方「会话统计」按钮（`sidebar.footer.action`，order 10）→ 主面板 `main` / key `session-stats`
 - 数据来源：`ctx.sessionQuery` 读取的会话日志 + `ctx.sessionPersistence` 的日志体积 + `process`/`os` 采样
 - 两个受连接鉴权保护的路由：`GET /session-stats/overview`、`GET /session-stats/system`
 - 零 npm 依赖、无构建步骤；Host 半边只 import `node:` 内置模块
@@ -109,7 +109,7 @@ node -e "import('./index.js').then(m => console.log(Object.keys(m).sort()))"
 ```
 
 安装后在 Harness 会话里用 `cordis_inspect_query`（Client `Slots.listSubTree`）确认
-`main` 槽位有 `session-stats` 占用者、`sidebar.panellist` 有 `id: session-stats`；
+`main` 槽位有 `session-stats` 占用者、`sidebar.footer.action` 有 `id: session-stats`；
 用未鉴权的 `curl` 访问 `/session-stats/overview` 应返回 `401`（已注册且被鉴权门保护），
 未安装时是 `404`。
 

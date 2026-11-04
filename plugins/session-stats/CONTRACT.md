@@ -309,17 +309,20 @@ ctx.slots.inject('main', () => ctx.slots.register({
   inject: () => ({ t, load: fetchJson }),
 }, StatsPage))
 ```
-5. Register the sidebar entry (id **must** equal the main key):
+5. Register the sidebar-foot entry (id **must** equal the main key). The account menu
+   (`settings.launcher`) has no list extension point, so the entry lives in
+   `sidebar.footer.action`, directly above the account menu at the sidebar foot:
 ```js
-ctx.slots.inject('sidebar.panellist', () => ctx.slots.register({
-  name: 'sidebar.panellist', id: 'session-stats', order: 20,
+ctx.slots.inject('sidebar.footer.action', () => ctx.slots.register({
+  name: 'sidebar.footer.action', id: 'session-stats', order: 10,
   locale: 'session-stats', label: () => t('panel.title'),
-}, StatsIcon))
+  inject: () => ({ t, openPanel: () => ctx.layout.selectPanel('session-stats') }),
+}, FooterEntry))
 ```
-`StatsIcon` receives `{ size, active }` (owner props of that slot) and returns an inline
-`<svg width={size} height={size} viewBox="0 0 24 24">` using `currentColor` for strokes and
-a small accent for the tallest bar; `aria-hidden="true"`, no wrapper element (the sidebar
-expects the icon as the direct glyph child).
+The client plugin therefore injects `layout` in addition to `slots` and `locale`.
+`FooterEntry` receives the owner's `{ wide }` plus `{ t, openPanel }`: wide renders the
+icon and the panel title, the 56px rail renders the icon only; clicking selects the main
+panel through `ctx.layout.selectPanel`.
 
 Data loading: `fetch('session-stats/overview?days=' + days)` — **relative** URL, no leading
 slash (the document mount prefix is preserved), `headers: { accept: 'application/json' }`.
