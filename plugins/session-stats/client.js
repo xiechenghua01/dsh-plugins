@@ -296,8 +296,8 @@ window.__ModuleLoader__.load({
 .ss-table tbody tr:last-child td{border-bottom:0}
 .ss-table tbody tr:hover{background:var(--dsw-alias-interactive-bg-hover)}
 .ss-num{text-align:right;font-variant-numeric:tabular-nums;white-space:nowrap}
-.ss-session-head{display:flex;align-items:flex-start;gap:3px;min-width:0}
-.ss-session-title{display:block;flex:1;min-width:0;color:var(--dsw-alias-label-primary);font-weight:500;overflow-wrap:anywhere}
+.ss-session-head{display:flex;align-items:flex-start;gap:5px;min-width:0}
+.ss-session-title{display:block;flex:0 1 auto;min-width:0;color:var(--dsw-alias-label-primary);font-weight:500;overflow-wrap:anywhere}
 .ss-session-id{display:block;color:var(--dsw-alias-label-caption);font-size:11px;line-height:16px;margin-top:2px;overflow-wrap:anywhere}
 /* Archived marker: a quiet warm chip at the title's top-right. */
 .ss-archived-badge{flex:none;display:inline-block;margin-top:3px;padding:0 4px;border-radius:4px;font-size:10px;font-weight:500;line-height:14px;white-space:nowrap;color:var(--dsw-alias-state-warn-primary);background:var(--dsw-alias-bg-layer-2);background:color-mix(in srgb,var(--dsw-alias-state-warn-primary) 14%,transparent);border:.5px solid transparent;border-color:color-mix(in srgb,var(--dsw-alias-state-warn-primary) 35%,transparent)}

@@ -18,7 +18,7 @@ A monorepo of DeepSeek Harness plugins **and** a plugin market index source that
 
 | 插件 / Plugin | 版本 | 说明 / Description |
 | --- | --- | --- |
-| [`@xiechenghua01/dsh-session-stats`](plugins/session-stats) | 1.1.7 | 会话统计面板：token 消耗、会话数、成本与预算、按模型的每日 Token 趋势（可悬停/切换视角）、各会话用量、CPU/内存、日志占用。 Session stats panel: tokens, sessions, cost & budget, per-model daily token trend with hover and view toggle, per-session usage, CPU/memory, log footprint. |
+| [`@xiechenghua01/dsh-session-stats`](plugins/session-stats) | 1.1.8 | 会话统计面板：token 消耗、会话数、成本与预算、按模型的每日 Token 趋势（可悬停/切换视角）、各会话用量、CPU/内存、日志占用。 Session stats panel: tokens, sessions, cost & budget, per-model daily token trend with hover and view toggle, per-session usage, CPU/memory, log footprint. |
 
 ## 使用 / Usage
 
