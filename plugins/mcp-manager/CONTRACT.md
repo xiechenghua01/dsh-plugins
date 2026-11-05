@@ -172,7 +172,15 @@ File: `$DSH_HOME/mcp-manager/library.json` (create the directory on first write)
   "servers": {
     "github": {
       "serverName": "github",
+      "description": "跨业务共享的代码仓库查询服务",
       "config": { "serverName": "github", "transport": "stdio", "command": "npx", "args": [] },
+      "extra": {
+        "capabilities": { "tools": true, "resources": true, "prompts": false },
+        "autoApprove": ["list_issues"],
+        "disabledTools": ["delete_repository"],
+        "oauth": { "enabled": false, "clientId": "", "scopes": "" },
+        "maxRetries": 3
+      },
       "createdAt": 1793698687874,
       "updatedAt": 1793698687874,
       "origins": ["workspace:desktop"],
@@ -189,7 +197,12 @@ File: `$DSH_HOME/mcp-manager/library.json` (create the directory on first write)
 - `workspaces` is the user's workspace-directory attachment (absolute paths taken from the
   `workspaceRegistry`). It is **organizational metadata**, not a Loader scope: an MCP row is
   profile-scoped and takes effect for every session of the profile. `syncLibrary` never rewrites
-  it; `create` / `update` / `libraryApply` write it (an omitted value keeps the catalog value).
+  it; `create` / `update` / `libraryApply` / `setWorkspaces` write it (an omitted value keeps the
+  catalog value).
+- `description` and `extra` are **catalog-only metadata** the DSH MCP client does not accept in its
+  Loader config (`capabilities`, `autoApprove`, `disabledTools`, `oauth`, `maxRetries`). They exist
+  so the UI can round-trip the full prototype form; only `config` reaches the Loader. `syncLibrary`
+  preserves both.
 - Configurations are stored **verbatim**, including env/header values, because the library is what
   makes "A 工作区配好的，B 工作区一键复用" possible. It lives under `$DSH_HOME`, next to the
   patches that already contain the same secrets.
@@ -326,6 +339,8 @@ handler; wrap every op in try/catch.
   "target": "npx -y @modelcontextprotocol/server-github",   // one-line display target
   "live": { "enabled": true, "phase": "active", "addressable": true },
   "workspaces": ["/…/Codes/xch/dsh-plugins"],   // catalog attachment, [] when unset
+  "description": "跨业务共享的代码仓库查询服务",  // catalog-only, '' when unset
+  "extra": { "capabilities": {}, "autoApprove": [], "disabledTools": [], "oauth": {}, "maxRetries": 3 },
   "toolCount": 12,                   // number | null: null means "not known yet", not zero
   "lastProbe": null,                 // ProbeResult from the in-memory cache
   "updatedAt": 1793698687874
@@ -341,8 +356,9 @@ the count instead of claiming zero. The probe cache is in memory, so a Host relo
 
 ### `create`
 
-args `{ level, config, enabled?, workspaces? }` → `{ ok: true, row: Row }`. `workspaces` is an
-array of absolute workspace directory paths (see §4); an omitted value keeps the catalog value.
+args `{ level, config, enabled?, workspaces?, description?, extra? }` → `{ ok: true, row: Row }`.
+`workspaces` is an array of absolute workspace directory paths (see §4); an omitted value keeps the
+catalog value. `description` / `extra` are catalog-only metadata (see §4).
 Validation: `serverName` matches `[A-Za-z0-9_-]{1,32}`, unique across **both** layers (a duplicate
 in either layer is `code: 'duplicate'`), `transport` valid, `command` required for stdio, `url`
 required and `http(s)://` for streamable-http, `args`/`env`/`headers` shapes correct, numbers
@@ -352,18 +368,39 @@ finite and within range, `reconnect` a plain object of the four fields. The row 
 
 ### `update`
 
-args `{ id, level, config, enabled?, workspaces? }` → `{ ok: true, row: Row }`. The row id never
-changes. An omitted `workspaces` keeps the catalog value; an explicit array replaces it.
+args `{ id, level, config, enabled?, workspaces?, description?, extra? }` → `{ ok: true, row: Row }`.
+The row id never changes. An omitted `workspaces` keeps the catalog value; an explicit array
+replaces it; `description` / `extra` behave the same way.
 Renaming `serverName` is allowed when the new name is unique across both layers.
 
 ### `remove`
 
-args `{ id, level }` → `{ ok: true }`. Refuses `readOnly` rows with `code: 'read-only'`.
+args `{ id, level, purge? }` → `{ ok: true }`. Refuses `readOnly` rows with `code: 'read-only'`.
+`purge: true` also drops the catalog entry (the prototype's "delete from all workspaces").
 
 ### `setEnabled`
 
 args `{ id, level, enabled }` → `{ ok: true, row: Row }`. Writes `disabled: true` (or removes the
 `disabled` key) on the insert.
+
+### `setWorkspaces`
+
+args `{ id, level, workspaces }` → `{ ok: true, row: Row }`. Replaces the catalog workspace
+attachment of one configured row (the prototype's "管理生效工作区" dialog). The Loader row itself is
+untouched.
+
+### `moveLevel`
+
+args `{ id, level, targetLevel }` → `{ ok: true, row: Row }`. Re-creates one configured server in the
+other patch layer (fresh row id, same config and disabled state), removes the source row, and keeps
+the catalog entry. Refuses when the target layer already holds that `serverName`
+(`code: 'duplicate'`) or the source row is read-only. A failed target write restores the source
+document.
+
+### `configText`
+
+args `{ level }` → `{ ok: true, level, path, exists, text }`. Returns the raw YAML patch text of one
+layer for the read-only config viewer (comments and other plugins' rows included).
 
 ### `probe`
 

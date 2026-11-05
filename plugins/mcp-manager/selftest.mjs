@@ -123,7 +123,28 @@ export async function run(report) {
     config: { serverName: 'x', transport: 'stdio', command: 'npx', env: { TOKEN: { $js: 'process.env.TOKEN' } } },
   })
   expect(report, jsRow.includes("name: '@deepseek-ai/dsh-mcp-client'"), 'the package name must be quoted (leading @)')
-  expect(report, jsRow.includes('TOKEN: !!js process.env.TOKEN'), 'a !!js marker must serialize back as !!js')
+  expect(report, jsRow.includes('TOKEN: !!js "process.env.TOKEN"'), 'a !!js marker must serialize back as a quoted !!js scalar')
+
+  // Multi-line args and !!js expressions survive a write/read round-trip.
+  const multiline = renderInsertRow({
+    id: 'mcp-w-multi',
+    name: '@deepseek-ai/dsh-mcp-client',
+    config: { serverName: 'multi', transport: 'stdio', command: 'node', args: ['line1\nline2', { $js: '(\n1 + 2\n)' }] },
+  })
+  expect(report, multiline.includes('"line1\\nline2"'), 'a multi-line arg must be quoted and escaped')
+  const multiRows = insertRows(`- insert:\n${multiline.split('\n').map((line) => `    ${line}`).join('\n')}\n`)
+  expect(report, multiRows[0]?.config?.args?.[0] === 'line1\nline2', 'a multi-line arg must parse back unchanged')
+  expect(report, multiRows[0]?.config?.args?.[1]?.$js === '(\n1 + 2\n)', 'a multi-line !!js expression must parse back unchanged')
+
+  // A !!js expression keeps its own quotes and newlines through a round-trip.
+  const quotedJs = renderInsertRow({
+    id: 'mcp-w-js',
+    name: '@deepseek-ai/dsh-mcp-client',
+    config: { serverName: 'js', transport: 'stdio', command: 'node', args: [{ $js: '"token"' }, { $js: '(\n1 + 2\n)' }] },
+  })
+  const quotedRows = insertRows(`- insert:\n${quotedJs.split('\n').map((line) => `    ${line}`).join('\n')}\n`)
+  expect(report, quotedRows[0]?.config?.args?.[0]?.$js === '"token"', 'a quoted !!js expression must keep its quotes')
+  expect(report, quotedRows[0]?.config?.args?.[1]?.$js === '(\n1 + 2\n)', 'a multi-line !!js expression must keep its newlines')
 
   // ---- config normalization ---------------------------------------------
   const stdio = normalizeConfig({ serverName: 'fs', transport: 'stdio', command: 'npx', args: ['a'], env: { A: '1' } })

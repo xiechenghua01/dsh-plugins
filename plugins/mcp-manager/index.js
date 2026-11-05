@@ -137,7 +137,9 @@ function normalizeTransport(value) {
 
 function stringList(value) {
   if (value === undefined || value === null) return []
-  if (Array.isArray(value)) return value.map((entry) => (isJsMarker(entry) ? entry : String(entry ?? ''))).filter((entry) => entry !== '')
+  // An empty string is a legitimate argv entry (it occupies a position), so arrays keep it;
+  // only the newline-delimited text form drops blank lines.
+  if (Array.isArray(value)) return value.map((entry) => (isJsMarker(entry) ? entry : String(entry ?? '')))
   if (typeof value === 'string') {
     return value
       .split('\n')
@@ -500,7 +502,11 @@ export function apply(ctx, config) {
       for (const row of parsed) {
         if (typeof row.id !== 'string' || row.id === '') continue
         const config = isObject(row.config) ? row.config : null
-        const serverName = text(config?.serverName) || row.id
+        // A recovered read-only row may carry its real serverName; fall back to the row id.
+        const serverName = text(config?.serverName) || text(row.serverName) || row.id
+        if (row.parseable !== true) {
+          warnings.push(`${level}: row "${row.id}" cannot be parsed safely and is read-only (${text(row.reason) || 'unknown reason'})`)
+        }
         rows.push({
           id: row.id,
           serverName,
@@ -512,6 +518,8 @@ export function apply(ctx, config) {
           transport: config?.transport === 'streamable-http' ? 'streamable-http' : 'stdio',
           target: displayTarget(config),
           workspaces: [],
+          description: '',
+          extra: {},
           live: null,
           toolCount: 0,
           lastProbe: probeCache.get(`${level}:${row.id}`) ?? null,
@@ -643,6 +651,8 @@ export function apply(ctx, config) {
     for (const row of rows) {
       const entry = synced.servers[row.serverName]
       row.workspaces = Array.isArray(entry?.workspaces) ? [...entry.workspaces] : []
+      row.description = typeof entry?.description === 'string' ? entry.description : ''
+      row.extra = isObject(entry?.extra) ? entry.extra : {}
     }
     await decorateRows(rows)
     return {
@@ -671,6 +681,19 @@ export function apply(ctx, config) {
     return row
   }
 
+  /** One row with its catalog metadata attached (the shape `state` returns). */
+  async function rowWithMeta(level, id) {
+    const row = await rowById(level, id)
+    const paths = await resolvePaths()
+    const warnings = []
+    const library = await readLibraryOrEmpty(paths, warnings)
+    const entry = library.servers[row.serverName]
+    row.workspaces = Array.isArray(entry?.workspaces) ? [...entry.workspaces] : []
+    row.description = typeof entry?.description === 'string' ? entry.description : ''
+    row.extra = isObject(entry?.extra) ? entry.extra : {}
+    return row
+  }
+
   async function writeRow(level, row) {
     const paths = await resolvePaths()
     const file = patchFileFor(paths, level)
@@ -680,17 +703,53 @@ export function apply(ctx, config) {
     return next
   }
 
-  async function saveLibraryServer(serverName, config, origin, workspaces) {
+  async function saveLibraryServer(serverName, config, origin, workspaces, description, extra) {
     const paths = await resolvePaths()
     const warnings = []
     const library = await readLibraryOrEmpty(paths, warnings)
-    const result = upsertServer(library, { serverName, config, origin, workspaces })
+    const result = upsertServer(library, { serverName, config, origin, workspaces, description, extra })
     if (result.action !== 'unchanged') await writeLibrary(paths.libraryFile, result.library)
   }
 
   /** The workspace attachment an operation carries; `undefined` keeps the catalog value. */
   function workspacesFromArgs(args) {
     return Array.isArray(args.workspaces) ? normalizeWorkspaces(args.workspaces) : undefined
+  }
+
+  /**
+   * Catalog-only metadata the DSH MCP client does not accept in its Loader config
+   * (capabilities, autoApprove, disabledTools, OAuth, retry count). It is stored in the
+   * machine-wide library so the UI can round-trip the full prototype form.
+   */
+  function extraFromArgs(args) {
+    if (!isObject(args.extra)) return undefined
+    const source = args.extra
+    const extra = {}
+    if (isObject(source.capabilities)) {
+      extra.capabilities = {
+        tools: source.capabilities.tools !== false,
+        resources: source.capabilities.resources !== false,
+        prompts: source.capabilities.prompts !== false,
+      }
+    }
+    if (Array.isArray(source.autoApprove)) extra.autoApprove = source.autoApprove.map((entry) => text(entry)).filter((entry) => entry !== '')
+    if (Array.isArray(source.disabledTools)) extra.disabledTools = source.disabledTools.map((entry) => text(entry)).filter((entry) => entry !== '')
+    if (isObject(source.oauth)) {
+      extra.oauth = {
+        enabled: source.oauth.enabled === true,
+        clientId: text(source.oauth.clientId),
+        scopes: text(source.oauth.scopes),
+      }
+    }
+    if (source.maxRetries !== undefined && source.maxRetries !== null && source.maxRetries !== '') {
+      extra.maxRetries = boundedInt(source.maxRetries, 0, 100, 'maxRetries')
+    }
+    return extra
+  }
+
+  /** Description is catalog-only metadata too. */
+  function descriptionFromArgs(args) {
+    return typeof args.description === 'string' ? args.description.trim() : undefined
   }
 
   // ---- operations --------------------------------------------------------
@@ -719,8 +778,15 @@ export function apply(ctx, config) {
         disabled: args.enabled === false ? true : undefined,
         config,
       })
-      await saveLibraryServer(config.serverName, config, level === 'global' ? 'global' : `workspace:${paths.profileName}`, workspacesFromArgs(args))
-      const created = await rowById(level, id)
+      await saveLibraryServer(
+        config.serverName,
+        config,
+        level === 'global' ? 'global' : `workspace:${paths.profileName}`,
+        workspacesFromArgs(args),
+        descriptionFromArgs(args),
+        extraFromArgs(args),
+      )
+      const created = await rowWithMeta(level, id)
       return { ok: true, row: created }
     })
   }
@@ -744,8 +810,15 @@ export function apply(ctx, config) {
         disabled: disabled ? true : undefined,
         config,
       })
-      await saveLibraryServer(config.serverName, config, level === 'global' ? 'global' : `workspace:${paths.profileName}`, workspacesFromArgs(args))
-      const updated = await rowById(level, id)
+      await saveLibraryServer(
+        config.serverName,
+        config,
+        level === 'global' ? 'global' : `workspace:${paths.profileName}`,
+        workspacesFromArgs(args),
+        descriptionFromArgs(args),
+        extraFromArgs(args),
+      )
+      const updated = await rowWithMeta(level, id)
       return { ok: true, row: updated }
     })
   }
@@ -763,6 +836,12 @@ export function apply(ctx, config) {
       const next = removeInsert(document, id)
       if (!next.removed) throw apiError('not-found', `no ${level} row with id "${id}"`)
       await writePatchFile(file, next.text)
+      if (args.purge === true) {
+        const warnings = []
+        const library = await readLibraryOrEmpty(paths, warnings)
+        const purged = removeServer(library, current.serverName)
+        if (purged.removed) await writeLibrary(paths.libraryFile, purged.library)
+      }
       return { ok: true, removed: true }
     })
   }
@@ -781,9 +860,100 @@ export function apply(ctx, config) {
       const next = setInsertDisabled(document, id, args.enabled !== true)
       if (next.action === 'missing') throw apiError('not-found', `no ${level} row with id "${id}"`)
       if (next.action === 'updated') await writePatchFile(file, next.text)
-      const updated = await rowById(level, id)
+      const updated = await rowWithMeta(level, id)
       return { ok: true, row: updated }
     })
+  }
+
+  async function opSetWorkspaces(args) {
+    const level = normalizeLevel(args.level)
+    const id = text(args.id)
+    if (id === '') throw apiError('invalid', 'id is required')
+    const workspaces = normalizeWorkspaces(args.workspaces)
+    return withWriteLock(async () => {
+      const paths = await resolvePaths()
+      const current = await rowById(level, id)
+      if (current.readOnly) throw apiError('read-only', `row "${id}" cannot be parsed and is read-only`)
+      const warnings = []
+      const library = await readLibraryOrEmpty(paths, warnings)
+      const entry = library.servers[current.serverName]
+      const result = upsertServer(library, {
+        serverName: current.serverName,
+        config: isObject(entry?.config) ? entry.config : (current.config ?? {}),
+        description: typeof entry?.description === 'string' ? entry.description : '',
+        extra: isObject(entry?.extra) ? entry.extra : {},
+        origin: level === 'global' ? 'global' : `workspace:${paths.profileName}`,
+        workspaces,
+      })
+      if (result.action !== 'unchanged') await writeLibrary(paths.libraryFile, result.library)
+      const updated = await rowWithMeta(level, id)
+      return { ok: true, row: updated }
+    })
+  }
+
+  /**
+   * Move one configured server between the two patch layers (the prototype's
+   * "设为全局" / "改为工作区"). The Loader row is re-created in the target layer with a fresh
+   * row id; the catalog entry follows it. The old row is removed only after the new one is
+   * written, and a failed target write restores the source document.
+   */
+  async function opMoveLevel(args) {
+    const level = normalizeLevel(args.level)
+    const targetLevel = normalizeLevel(args.targetLevel)
+    if (level === targetLevel) throw apiError('invalid', 'targetLevel must differ from level')
+    const id = text(args.id)
+    if (id === '') throw apiError('invalid', 'id is required')
+    return withWriteLock(async () => {
+      const paths = await resolvePaths()
+      const current = await rowById(level, id)
+      if (current.readOnly) throw apiError('read-only', `row "${id}" cannot be parsed and is read-only`)
+      if (!isObject(current.config)) throw apiError('invalid', `row "${id}" has no parseable config`)
+      const rows = await collectRows([])
+      const clash = rows.find((row) => row.level === targetLevel && row.serverName === current.serverName)
+      if (clash !== undefined) throw apiError('duplicate', `serverName "${current.serverName}" already exists in the ${targetLevel} layer`)
+      const newId = nextRowId(targetLevel, current.serverName, rows)
+      const sourceFile = patchFileFor(paths, level)
+      const targetFile = patchFileFor(paths, targetLevel)
+      const sourceDocument = await readPatchFile(sourceFile)
+      const targetDocument = await readPatchFile(targetFile)
+      const created = upsertInsert(targetDocument, {
+        id: newId,
+        name: MCP_CLIENT_NAME,
+        disabled: current.disabled ? true : undefined,
+        config: current.config,
+      })
+      const removed = removeInsert(sourceDocument, id)
+      if (!removed.removed) throw apiError('not-found', `no ${level} row with id "${id}"`)
+      await writePatchFile(targetFile, created.text)
+      try {
+        await writePatchFile(sourceFile, removed.text)
+      } catch (error) {
+        await writePatchFile(targetFile, targetDocument)
+        throw error
+      }
+      const warnings = []
+      const library = await readLibraryOrEmpty(paths, warnings)
+      const entry = library.servers[current.serverName]
+      const synced = upsertServer(library, {
+        serverName: current.serverName,
+        config: current.config,
+        description: typeof entry?.description === 'string' ? entry.description : '',
+        extra: isObject(entry?.extra) ? entry.extra : {},
+        origin: targetLevel === 'global' ? 'global' : `workspace:${paths.profileName}`,
+      })
+      if (synced.action !== 'unchanged') await writeLibrary(paths.libraryFile, synced.library)
+      const moved = await rowWithMeta(targetLevel, newId)
+      return { ok: true, row: moved }
+    })
+  }
+
+  /** The raw patch text of one layer, for the prototype's read-only config viewer. */
+  async function opConfigText(args) {
+    const level = normalizeLevel(args.level)
+    const paths = await resolvePaths()
+    const file = patchFileFor(paths, level)
+    const document = await readPatchFile(file)
+    return { ok: true, level, path: file, exists: (await exists(file)) && document.trim() !== '', text: document }
   }
 
   async function opProbe(args) {
@@ -901,7 +1071,7 @@ export function apply(ctx, config) {
       await writeRow(level, { id, name: MCP_CLIENT_NAME, disabled: args.enabled === false ? true : undefined, config })
       const workspaces = Array.isArray(args.workspaces) ? normalizeWorkspaces(args.workspaces) : normalizeWorkspaces(entry.workspaces)
       await saveLibraryServer(targetName, config, level === 'global' ? 'global' : `workspace:${paths.profileName}`, workspaces)
-      const created = await rowById(level, id)
+      const created = await rowWithMeta(level, id)
       return { ok: true, row: created }
     })
   }
@@ -926,6 +1096,9 @@ export function apply(ctx, config) {
     update: opUpdate,
     remove: opRemove,
     setEnabled: opSetEnabled,
+    setWorkspaces: opSetWorkspaces,
+    configText: opConfigText,
+    moveLevel: opMoveLevel,
     probe: opProbe,
     probeAll: opProbeAll,
     import: opImport,

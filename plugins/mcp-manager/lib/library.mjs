@@ -59,7 +59,9 @@ export async function readLibrary(file) {
     const serverName = typeof value.serverName === 'string' && value.serverName !== '' ? value.serverName : key
     servers[serverName] = {
       serverName,
+      description: typeof value.description === 'string' ? value.description : '',
       config: isObject(value.config) ? value.config : {},
+      extra: isObject(value.extra) ? value.extra : {},
       createdAt: Number.isFinite(value.createdAt) ? value.createdAt : 0,
       updatedAt: Number.isFinite(value.updatedAt) ? value.updatedAt : 0,
       origins: normalizeOrigins(value.origins),
@@ -107,6 +109,8 @@ export function upsertServer(library, server, now = Date.now()) {
   if (serverName === '') return { library, action: 'unchanged' }
   const config = isObject(server.config) ? server.config : {}
   const workspaces = Array.isArray(server.workspaces) ? normalizeWorkspaces(server.workspaces) : undefined
+  const description = typeof server.description === 'string' ? server.description : undefined
+  const extra = isObject(server.extra) ? server.extra : undefined
   const existing = library.servers[serverName]
   if (existing === undefined) {
     const origins = mergeOriginList([], server.origin)
@@ -117,7 +121,16 @@ export function upsertServer(library, server, now = Date.now()) {
         updatedAt: now,
         servers: {
           ...library.servers,
-          [serverName]: { serverName, config, createdAt: now, updatedAt: now, origins, workspaces: workspaces ?? [] },
+          [serverName]: {
+            serverName,
+            description: description ?? '',
+            config,
+            extra: extra ?? {},
+            createdAt: now,
+            updatedAt: now,
+            origins,
+            workspaces: workspaces ?? [],
+          },
         },
       },
       action: 'inserted',
@@ -125,10 +138,14 @@ export function upsertServer(library, server, now = Date.now()) {
   }
   const origins = mergeOriginList(existing.origins, server.origin)
   const nextWorkspaces = workspaces === undefined ? normalizeWorkspaces(existing.workspaces) : workspaces
+  const nextDescription = description === undefined ? (typeof existing.description === 'string' ? existing.description : '') : description
+  const nextExtra = extra === undefined ? (isObject(existing.extra) ? existing.extra : {}) : extra
   if (
     sameValue(existing.config, config)
     && sameValue(existing.origins, origins)
     && sameValue(normalizeWorkspaces(existing.workspaces), nextWorkspaces)
+    && (existing.description ?? '') === nextDescription
+    && sameValue(existing.extra ?? {}, nextExtra)
   ) {
     return { library, action: 'unchanged' }
   }
@@ -139,7 +156,7 @@ export function upsertServer(library, server, now = Date.now()) {
       updatedAt: now,
       servers: {
         ...library.servers,
-        [serverName]: { ...existing, config, updatedAt: now, origins, workspaces: nextWorkspaces },
+        [serverName]: { ...existing, description: nextDescription, config, extra: nextExtra, updatedAt: now, origins, workspaces: nextWorkspaces },
       },
     },
     action: 'updated',
@@ -184,7 +201,7 @@ export function syncLibrary(library, entries, now = Date.now()) {
     const existing = servers[serverName]
     const config = isObject(entry.config) ? entry.config : {}
     if (existing === undefined) {
-      servers = { ...servers, [serverName]: { serverName, config, createdAt: now, updatedAt: now, origins, workspaces: [] } }
+      servers = { ...servers, [serverName]: { serverName, description: '', config, extra: {}, createdAt: now, updatedAt: now, origins, workspaces: [] } }
       changed = true
       continue
     }

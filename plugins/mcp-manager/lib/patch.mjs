@@ -143,34 +143,107 @@ function parseMapping(nodes, start, indent) {
 }
 
 function parseInlineValue(inline, line) {
-  if (inline.startsWith('!!js')) return { [JS_KEY]: inline.slice(4).trim() }
+  if (inline.startsWith('!!js')) {
+    const rest = inline.slice(4).trim()
+    if (rest.startsWith('"') || rest.startsWith("'")) return { [JS_KEY]: unquote(rest) }
+    return { [JS_KEY]: stripTrailingComment(rest).trim() }
+  }
   if (inline.startsWith('{') || inline.startsWith('[')) throw new Error(`flow collections are not supported (line ${line + 1})`)
   if (inline.startsWith('|') || inline.startsWith('>')) throw new Error(`block scalars are not supported (line ${line + 1})`)
   if (inline.startsWith('&') || inline.startsWith('*')) throw new Error(`anchors and aliases are not supported (line ${line + 1})`)
   return parseScalar(inline)
 }
 
+/** Cut a YAML comment: a `#` preceded by whitespace, which ends a plain scalar. */
+function stripTrailingComment(raw) {
+  const match = /[ \t]#/u.exec(raw)
+  return match === null ? raw : raw.slice(0, match.index)
+}
+
 function parseScalar(raw) {
-  const value = raw.trim()
+  const trimmed = raw.trim()
+  // Quoted scalars own their content (including `#`); `unquote` strips any real comment.
+  if (trimmed.startsWith('"') || trimmed.startsWith("'")) return unquote(trimmed)
+  // A bare scalar that starts with `#` carries no value at all.
+  if (trimmed.startsWith('#')) return null
+  // A plain scalar ends at a whitespace + `#` comment marker.
+  const withoutComment = stripTrailingComment(trimmed)
+  const value = withoutComment.trim()
+  if (value === '') return null
   if (value === '' || value === '~' || value === 'null' || value === 'Null' || value === 'NULL') return null
   if (value === 'true' || value === 'True' || value === 'TRUE') return true
   if (value === 'false' || value === 'False' || value === 'FALSE') return false
-  if (value.startsWith('!!js')) return { [JS_KEY]: value.slice(4).trim() }
+  if (value.startsWith('!!js')) {
+    const rest = value.slice(4).trim()
+    if (rest.startsWith('"') || rest.startsWith("'")) return { [JS_KEY]: unquote(rest) }
+    return { [JS_KEY]: stripTrailingComment(rest).trim() }
+  }
   if (/^-?\d+$/u.test(value)) return Number(value)
   if (/^-?\d+\.\d+$/u.test(value)) return Number(value)
   return unquote(value)
 }
 
+/** Slice a double-quoted scalar up to its closing quote, honoring backslash escapes. */
+function sliceDoubleQuoted(text) {
+  let index = 1
+  while (index < text.length) {
+    const char = text[index]
+    if (char === '\\') {
+      index += 2
+      continue
+    }
+    if (char === '"') return text.slice(0, index + 1)
+    index += 1
+  }
+  return null
+}
+
+/** Slice a single-quoted scalar up to its closing quote, honoring the doubled `''` escape. */
+function sliceSingleQuoted(text) {
+  let index = 1
+  while (index < text.length) {
+    if (text[index] === "'") {
+      if (text[index + 1] === "'") {
+        index += 2
+        continue
+      }
+      return text.slice(0, index + 1)
+    }
+    index += 1
+  }
+  return null
+}
+
+/** Reject text after a closing quote unless it is a YAML comment. */
+function assertOnlyComment(rest, original) {
+  const tail = rest.trim()
+  if (tail !== '' && !tail.startsWith('#')) {
+    throw new Error(`unexpected text after a quoted scalar: ${original.slice(0, 40)}`)
+  }
+}
+
 function unquote(value) {
   const text = value.trim()
-  if (text.length >= 2 && text.startsWith("'") && text.endsWith("'")) return text.slice(1, -1).replace(/''/gu, "'")
-  if (text.length >= 2 && text.startsWith('"') && text.endsWith('"')) {
-    return text
-      .slice(1, -1)
-      .replace(/\\"/gu, '"')
-      .replace(/\\n/gu, '\n')
-      .replace(/\\\\/gu, '\\')
+  if (text.startsWith('"')) {
+    const quoted = sliceDoubleQuoted(text)
+    if (quoted === null) throw new Error(`unterminated double-quoted scalar ${text.slice(0, 40)}`)
+    assertOnlyComment(text.slice(quoted.length), text)
+    try {
+      return JSON.parse(quoted)
+    } catch {
+      // YAML-only escapes (`\x41`, `\e`, …) cannot be decoded exactly with JSON semantics.
+      // Refusing the parse keeps that row read-only instead of silently rewriting its value.
+      throw new Error(`unsupported escape in the double-quoted scalar ${quoted.slice(0, 40)}`)
+    }
   }
+  if (text.startsWith("'")) {
+    const quoted = sliceSingleQuoted(text)
+    if (quoted === null) throw new Error(`unterminated single-quoted scalar ${text.slice(0, 40)}`)
+    assertOnlyComment(text.slice(quoted.length), text)
+    return quoted.slice(1, -1).replace(/''/gu, "'")
+  }
+  if (text.length >= 2 && text.startsWith("'") && text.endsWith("'")) return text.slice(1, -1).replace(/''/gu, "'")
+
   return text
 }
 
@@ -183,9 +256,17 @@ function renderScalar(value) {
   if (typeof value === 'boolean') return value ? 'true' : 'false'
   if (typeof value === 'number' && Number.isFinite(value)) return String(value)
   if (value === null || value === undefined) return 'null'
-  if (isJsMarker(value)) return `!!js ${value[JS_KEY]}`
+  if (isJsMarker(value)) {
+    // Always quote the expression: it may contain quotes or newlines of its own, and an
+    // unquoted scalar would lose them on the way back (`unquote` restores the exact text).
+    return `!!js ${JSON.stringify(value[JS_KEY])}`
+  }
   const text = String(value)
   if (text === '') return "''"
+  // Multi-line or control-character values use a double-quoted scalar whose escapes are
+  // JSON-compatible; `unquote` reads it back with JSON.parse, so `args` entries that contain
+  // newlines survive a write/read round-trip.
+  if (/[\u0000-\u001f\u007f]/u.test(text)) return JSON.stringify(text)
   // A plain scalar may not start with a YAML indicator (`@ - * & ! % # ? : , [ ] { } | > ' "`),
   // so only a conservative leading set stays unquoted.
   const plain = /^[A-Za-z0-9_./+][A-Za-z0-9_./@+ -]*$/u.test(text)
@@ -357,6 +438,7 @@ export function parsePatch(text) {
       kind: classified.kind,
       value: classified.value,
       rows: classified.rows,
+      parseError: classified.parseError,
       raw: lines.slice(item.start, item.end + 1).join('\n'),
     })
   })
@@ -368,7 +450,56 @@ export function insertRows(text) {
   const { items } = parsePatch(text)
   const rows = []
   for (const item of items) {
-    if (item.kind !== 'insert') continue
+    if (item.kind !== 'insert') {
+      // An `insert` item whose YAML could not be parsed still owns rows: list each one as
+      // read-only (by id) so it never disappears from the page or looks free to re-create.
+      if (item.parseError !== null && /\binsert\s*:/u.test(item.raw)) {
+        // Scan the broken item row by row: only rows whose `name` is the MCP client package are
+        // ours, and a `serverName` found below the row keeps duplicate detection accurate.
+        const recovered = []
+        let current = null
+        let listWidth = null
+        for (const line of item.raw.split('\n')) {
+          if (listWidth === null) {
+            const listMatch = /^(\s*)-\s+/u.exec(line)
+            if (listMatch !== null && !/^\s*-\s+insert\s*:/u.test(line)) listWidth = listMatch[1].length
+          }
+          const idMatch = /^(\s*)-\s+id:\s*['"]?([^'"\s#]+)['"]?/u.exec(line)
+          if (idMatch !== null && (listWidth === null || idMatch[1].length === listWidth)) {
+            // Row keys sit two columns right of the `- ` indicator; `config:` children two more.
+            current = { id: idMatch[2], name: null, serverName: null, keyIndent: idMatch[1].length + 2 }
+            recovered.push(current)
+            continue
+          }
+          if (current === null) continue
+          const indent = line.length - line.trimStart().length
+          if (indent === current.keyIndent) {
+            const nameMatch = /^\s+name:\s*['"]?([^'"\s#]+)['"]?/u.exec(line)
+            if (nameMatch !== null) current.name = nameMatch[1]
+            continue
+          }
+          if (indent === current.keyIndent + 2) {
+            const serverMatch = /^\s+serverName:\s*['"]?([^'"\s#]+)['"]?/u.exec(line)
+            if (serverMatch !== null) current.serverName = serverMatch[1]
+          }
+        }
+        for (const entry of recovered) {
+          if (entry.name !== MCP_CLIENT_NAME) continue
+          rows.push({
+            id: entry.id,
+            serverName: entry.serverName,
+            name: MCP_CLIENT_NAME,
+            disabled: undefined,
+            config: null,
+            parseable: false,
+            reason: item.parseError,
+            rawValue: null,
+            item,
+          })
+        }
+      }
+      continue
+    }
     for (const row of item.rows) {
       if (row.id === null || row.name !== MCP_CLIENT_NAME) continue
       rows.push({ ...row, item })
@@ -395,13 +526,17 @@ export function findInsert(text, id) {
 
 /** Locate the line range of one `- id: <id>` row inside an item. */
 function locateRow(lines, item, id) {
-  const pattern = new RegExp(`^\\s*-\\s+id:\\s*['"]?${escapeRegExp(id)}['"]?\\s*$`, 'u')
+  // Only a row directly under `insert:` (the list's own indentation) can be the target: a nested
+  // `- id:` inside another plugin's config must never be matched.
+  const width = listIndent(lines, item)
+  const pattern = new RegExp(`^\\s{${width}}-\\s+id:\\s*['"]?${escapeRegExp(id)}['"]?\\s*(?:#.*)?$`, 'u')
   for (let i = item.start; i <= item.end; i += 1) {
-    if (!pattern.test(lines[i])) continue
+    if (indentOf(lines[i]) !== width || !pattern.test(lines[i])) continue
     const rowIndent = indentOf(lines[i])
     let end = i
     for (let j = i + 1; j <= item.end; j += 1) {
-      if (lines[j].trim() === '') continue
+      const body = lines[j].trim()
+      if (body === '' || body.startsWith('#')) continue
       if (indentOf(lines[j]) <= rowIndent) break
       end = j
     }

@@ -14,10 +14,8 @@ window.__ModuleLoader__.load({
     const Fragment = React.Fragment
     const useCallback = React.useCallback
     const useEffect = React.useEffect
-    const useMemo = React.useMemo
     const useRef = React.useRef
     const useState = React.useState
-    const useLayoutEffect = React.useLayoutEffect !== undefined ? React.useLayoutEffect : React.useEffect
 
     /** Locale namespace shared by the dictionaries, the page and the Settings entry. */
     const NS = 'mcp-manager'
@@ -25,8 +23,8 @@ window.__ModuleLoader__.load({
     const API_PATH = 'mcp-manager/api'
     /** The live phase changes when HMR applies a patch, so keep the poll cheap and frequent. */
     const POLL_MS = 4000
-    const SERVER_NAME_PATTERN = /^[A-Za-z0-9_-]{1,32}$/
-    const DASH = '\u2014'
+    const SERVER_NAME_PATTERN = /^[A-Za-z0-9_-]{1,32}$/u
+    const DASH = '—'
 
     /* ------------------------------------------------------------------ *
      * Locale dictionaries: flat key -> string, identical key sets.       *
@@ -35,63 +33,86 @@ window.__ModuleLoader__.load({
 
     const zh = {
       'section.title': 'MCP 服务',
-      'page.subtitle': '管理本机各作用域中的 MCP 服务器：新增、编辑、启停、探测，并在作用域之间复用。',
-      'action.refresh': '刷新列表',
-      'action.probeAll': '测试所有启用的服务器',
-      'action.add': '新增服务器',
+      'page.title': 'MCP 服务器管理',
+      'page.enabledPill': '{count} 个已启用',
+      'page.subtitle': '当前 profile：{name}。管理全局与当前 profile 的 MCP 扩展服务，支持多工作区按需勾选共享',
+      'page.profileFallback': '未命名 profile',
+      'action.addServer': '新增服务器',
       'action.cancel': '取消',
-      'action.save': '保存',
-      'action.close': '关闭',
-      'action.delete': '删除',
-      'action.edit': '编辑',
-      'action.json': 'JSON',
-      'action.test': '测试',
-      'action.import': '导入',
-      'action.export': '导出 JSON',
-      'action.copy': '复制',
+      'action.save': '保存并应用配置',
+      'action.testBeforeSave': '保存前测试连通性',
       'action.copied': '已复制',
+      'action.copyFailed': '无法写入剪贴板，请手动复制',
+      'action.copyShareJson': '复制单节点分享 JSON',
+      'action.applyCurrent': '应用到当前工作区 ({name})',
+      'action.applyAndEdit': '应用并编辑',
       'action.retry': '重试',
-      'action.addTo': '添加到…',
-      'action.confirmDelete': '确认删除',
       'action.remove': '移除',
-      'action.testDraft': '测试连接',
-      'action.generate': '从表单生成',
-      'action.parse': '解析到表单',
-      'updated.at': '更新于 {time}',
-      'updated.never': '尚未刷新',
-      'scope.all': '全部',
-      'scope.global': '全局',
-      'scope.workspace': '工作区',
-      'group.global': '全局（home 层）',
-      'group.workspace': '工作区（当前 profile）',
-      'search.placeholder': '搜索服务名称、目标或 id…',
-      'row.enabled': '已启用',
-      'row.disabled': '已禁用',
-      'row.readOnly': '只读',
-      'row.readOnlyHint': '该行无法安全改写，只能查看；请在本插件的作用域中新建一份。',
-      'row.tools': '{count} 工具',
-      'row.target': '目标',
-      'live.active': '已加载',
-      'live.inactive': '未加载',
-      'live.failed': '加载失败',
-      'live.unknown': '状态未知',
-      'probe.never': '未测试',
-      'probe.ok': '连通 · {tools} 工具 · {ms} ms',
-      'probe.fail': '失败 · {message}',
-      'aria.enable': '启用 {name}',
-      'aria.disable': '禁用 {name}',
-      'aria.edit': '编辑 {name}',
-      'aria.json': '查看 {name} 的 JSON',
-      'aria.test': '测试 {name}',
-      'aria.delete': '删除 {name}',
-      'aria.removeWorkspace': '移除工作目录 {name}',
-      'empty.none': '还没有 MCP 服务器',
-      'empty.noneHint': '点击「新增服务器」添加第一个 MCP 服务器。',
-      'empty.filtered': '没有匹配的服务器',
-      'empty.global': '全局层还没有服务器',
-      'empty.workspace': '工作区还没有服务器',
-      'empty.library': '服务器库还是空的；新增或导入服务器后会自动收录。',
-      'warnings.title': '注意',
+      'action.saveWorkspaces': '应用工作区范围',
+      'action.formatJson': '格式化 JSON',
+      'action.pasteSample': '粘贴社区分享 JSON 示例',
+      'action.copyConfig': '复制配置',
+      'action.addEnv': '+ 添加环境变量',
+      'action.addHeader': '+ 添加 Header',
+      'action.fillNpx': '填入常用 npx 模板',
+      'action.openConfig': '查看配置文件',
+      'action.closeDialog': '关闭配置弹窗',
+      'action.closeManage': '关闭生效范围窗口',
+      'action.closeConfig': '关闭配置文件窗口',
+      'action.testAll': '测试所有启用的 MCP 服务器',
+      'action.toggleEnable': '启用 MCP 服务器',
+      'action.toggleDisable': '停用 MCP 服务器',
+      'action.testOne': '测试连通性',
+      'action.manage': '管理生效工作区',
+      'action.edit': '更新 MCP 服务器配置',
+      'action.delete': '删除 MCP 服务器',
+      'filter.all': '当前生效全部',
+      'filter.global': '全局 (Global)',
+      'filter.workspace': '当前工作区',
+      'filter.other': '其他工作区已有',
+      'search.placeholder': '搜索服务、工作区或工具...',
+      'card.connected': '连通正常',
+      'card.connectedMs': '连通正常 · {ms}ms',
+      'card.testing': '正在测试连通性...',
+      'card.disabled': '已停用',
+      'card.notApplied': '未在当前工作区应用',
+      'card.testFailed': '测试失败',
+      'card.liveFailed': '加载失败',
+      'card.notLoaded': '未加载',
+      'card.unknown': '状态未知',
+      'card.noDescription': '未填写描述信息',
+      'card.details': '参数详情',
+      'card.toolsDetails': '{count} 个工具 / 参数详情',
+      'card.globalScope': '🌐 全局共享 (所有工作区)',
+      'card.workspaceScope': '📁 生效工作区: {names}',
+      'card.profileScope': '📁 当前 profile',
+      'card.otherScope': '📁 其他工作区',
+      'card.sseUnsupported': 'SSE 不支持',
+      'card.notConfigured': '尚未配置到任何层，应用后写入当前 profile 配置',
+      'card.writePath': '写入配置文件路径: {path}',
+      'card.timeout': '超时上限: {ms}ms',
+      'card.noTools': '尚未探测到工具列表',
+      'card.autoApprove': '免审',
+      'card.blocked': '禁用',
+      'card.toolsTitle': '已发现工具 (Tools):',
+      'card.scopeTitle': '点击直接勾选增减生效的工作区',
+      'card.globalScopeTitle': '点击修改生效范围',
+      'card.applied': '已将 "{name}" 应用到当前工作区',
+      'card.enabledToast': '{name} 已启用',
+      'card.disabledToast': '{name} 已停用',
+      'card.testOkToast': '服务器 {name} 连通性测试通过（{ms}ms · 发现 {tools} 个工具）',
+      'card.testFailToast': '服务器 {name} 测试失败：{message}',
+      'card.testAllNone': '当前没有处于启用状态的 MCP 服务器可测试',
+      'card.testAllRunning': '正在并发测试 {count} 个已启用的 MCP 服务器...',
+      'card.testAllDone': '全部 {count} 个已启用 MCP 服务器连通性测试通过！',
+      'card.testAllPartial': '已测试 {total} 个服务器，{ok} 个连通',
+      'card.libraryRemoved': '已从服务器库中移除 {name}',
+      'card.readOnly': '只读',
+      'card.readOnlyHint': '该行无法安全改写，只能查看；请在插件可写的作用域中新建一份。',
+      'empty.title': '当前筛选条件下暂无 MCP 服务器',
+      'empty.hint': '您可以新增服务器并直接勾选要应用的多个工作区，或切换到「其他工作区已有」一键挂载',
+      'empty.add': '+ 新增服务器 (支持多选工作区)',
+      'empty.other': '其他工作区还没有可复用的服务器',
       'state.loading': '正在加载 MCP 服务器…',
       'state.unauthorized': '当前页面未获授权，无法读取 MCP 服务器',
       'state.error': '加载失败',
@@ -99,218 +120,417 @@ window.__ModuleLoader__.load({
       'state.unknownError': '未知错误',
       'state.invalidResponse': '宿主返回了无效响应',
       'state.requestFailed': '请求失败，请检查网络或宿主状态',
-      'state.testing': '测试中…',
+      'state.testing': '正在握手并拉取工具列表...',
       'state.saving': '保存中…',
-      'io.title': '导入 / 导出',
-      'io.hint': '导出为 Claude Desktop 兼容的 mcpServers JSON；粘贴 JSON 可批量导入到指定作用域。',
-      'io.placeholder': '粘贴 mcpServers JSON、服务器数组或单个服务器对象…',
-      'io.level': '目标作用域',
-      'io.overwrite': '覆盖同名服务器',
-      'io.report': '导入完成：新增 {added}，更新 {updated}，跳过 {skipped}',
-      'io.reportSkipped': '跳过：{items}',
-      'io.invalidJson': 'JSON 解析失败：{message}',
-      'io.importEmpty': '请先粘贴要导入的 JSON',
-      'io.exported': '导出的 JSON',
-      'io.copyFailed': '无法写入剪贴板，请手动复制下方 JSON',
-      'library.title': '服务器库',
-      'library.hint': '本机范围共享的服务器目录，可一键添加到任意作用域。',
-      'library.origins': '来源',
-      'library.origin.global': '全局',
-      'library.origin.workspace': '工作区：{profile}',
-      'library.origin.none': '未配置',
-      'library.addTitle': '添加到作用域',
-      'library.addName': '服务器名称（可改名）',
-      'library.addHint': '名称在目标作用域中必须唯一；留空则沿用库中的名称。',
-      'dialog.addTitle': '新增 MCP 服务器',
-      'dialog.editTitle': '编辑 MCP 服务器',
-      'dialog.jsonTitle': '服务器 JSON',
-      'dialog.tab.form': '结构化',
-      'dialog.tab.json': 'JSON',
-      'dialog.advanced': '高级',
-      'dialog.scope': '作用域',
-      'dialog.scopeLocked': '作用域在创建后不可更改',
-      'dialog.workspaces': '工作目录',
-      'dialog.workspacesChoose': '选择工作目录',
-      'dialog.workspacesCount': '已选 {count} 个目录',
-      'dialog.workspacesAll': '全选',
-      'dialog.workspacesClear': '清空',
-      'dialog.workspacesEmpty': '暂无工作区',
-      'dialog.deleteTitle': '删除 MCP 服务器',
-      'dialog.deleteBody': '删除后该服务器的配置会从补丁文件中移除，相关工具立即下线。此操作不可撤销。',
-      'dialog.removeTitle': '从服务器库移除',
-      'dialog.removeBody': '只移除库条目；已经配置到各作用域的服务器不受影响。',
-      'dialog.invalid': '请检查表单：{message}',
-      'dialog.parseOk': '已解析到表单',
-      'dialog.generated': '已从表单生成',
-      'dialog.required': '必填',
-      'dialog.testHint': '用当前表单内容发起一次实时 MCP 握手，不会保存。',
-      'dialog.jsonHint': '这里是一个 mcpServers 条目的 JSON；可用「从表单生成」或「解析到表单」双向同步。',
-      'dialog.jsonShape': 'JSON 中找不到服务器对象',
-      'field.serverName': '服务名称 serverName',
-      'field.serverNameHint': '1–32 位字母、数字、下划线或短横线',
-      'field.transport': '传输方式',
-      'field.command': '命令',
-      'field.args': '参数（每行一个）',
-      'field.env': '环境变量（每行 key=value）',
-      'field.cwd': '工作目录（可选）',
-      'field.url': '服务 URL',
-      'field.headers': '请求头（每行 key=value）',
-      'field.toolCallTimeout': '工具调用超时（毫秒，默认 60000）',
-      'field.maxInstructionBytes': '服务说明最大字节数（默认 32768）',
-      'field.failOnStartup': '首次连接失败时拒绝加载',
-      'field.reconnectEnabled': '启用自动重连',
-      'field.reconnectInitial': '首次重连延迟（毫秒，默认 500）',
-      'field.reconnectMaxDelay': '重连延迟上限（毫秒，默认 30000）',
-      'field.reconnectMaxAttempts': '连续失败次数上限（默认 10）',
-      'field.kvHint': '每行一个 key=value，值可以包含等号',
-      'notice.created': '已新增 {name}',
-      'notice.updated': '已更新 {name}',
-      'notice.removed': '已删除 {name}',
-      'notice.enabled': '已启用 {name}',
-      'notice.disabled': '已禁用 {name}',
-      'notice.probeAll': '已测试 {total} 个服务器，{ok} 个连通',
-      'notice.libraryAdded': '已添加 {name}',
-      'notice.libraryRemoved': '已从库中移除 {name}',
+      'warnings.title': '注意',
+      'editor.addTitle': '新增 MCP 服务器',
+      'editor.editTitle': '更新 MCP 服务器 · {name}',
+      'editor.subtitle': '支持一次配置并勾选多个工作区标记；写入当前 profile 的 cordis.patch.yml 中的 MCP 客户端行',
+      'editor.tabStructured': '结构化配置',
+      'editor.tabJson': 'JSON 配置 (支持粘贴分享)',
+      'editor.scopeTitle': '生效范围（应用目标）',
+      'editor.scopeBadge': '非破坏性局部合并写入',
+      'editor.scopeHint': '勾选计划使用该服务器的工作区作为组织标记；Loader 行写入当前 profile，对所有会话生效',
+      'editor.scopeWorkspace': '指定工作区 (支持多选)',
+      'editor.scopeGlobal': '全局共享 (所有工作区通用)',
+      'editor.scopeLocked': '作用域在创建后不可更改',
+      'editor.mergePreview': '🎯 工作区标记：{names}；将合并写入 profile 的 cordis.patch.yml（{path}）中 dsh-mcp-client 行的 config，不会覆盖其他配置项及已有的其他 MCP 服务。',
+      'editor.mergePreviewGlobal': '🌐 将写入全局的 cordis.patch.yml（{path}）中 dsh-mcp-client 行，对所有 profile 生效。',
+      'editor.mergeEmpty': '⚠️ 请至少勾选 1 个要应用的工作区，或切换为「全局共享」',
+      'editor.wsExisting': '已有 {count} 个 MCP · 保留其他配置项',
+      'editor.wsEmpty': '暂无工作区',
+      'editor.section1': '1. 基础标识与传输协议',
+      'editor.section2stdio': '2. 本地进程启动参数 (STDIO)',
+      'editor.section2remote': '2. 远程服务端点与请求头配置',
+      'editor.section3': '3. 运行策略、超时重连与工具调用权限',
+      'editor.serverId': '服务器标识键名 (Server ID / Key)',
+      'editor.serverIdPlaceholder': '例如: redis-cluster-mcp 或 postgres-prod',
+      'editor.description': '显示名称 / 备注说明',
+      'editor.descriptionPlaceholder': '例如: 跨业务共享缓存查询与会话状态分析',
+      'editor.transport': '传输协议类型 (Transport)',
+      'editor.transportStdioBadge': '本地进程',
+      'editor.transportHttpBadge': '推荐远程',
+      'editor.transportSseBadge': '远程事件流',
+      'editor.transportStdioDesc': '通过 npx / uvx / python / docker 启动子进程通信',
+      'editor.transportHttpDesc': 'MCP 新版标准流式 HTTP 端点，支持断线重连与认证',
+      'editor.transportSseDesc': '基于 HTTP Server-Sent Events 的长连接远程服务',
+      'editor.sseUnsupported': 'DSH 当前版本不支持 SSE，请使用 streamable-http',
+      'editor.command': '可执行命令 (command)',
+      'editor.commandPlaceholder': 'npx / uvx / node / docker',
+      'editor.cwd': '工作目录 (cwd，留空默认当前工作区根目录)',
+      'editor.cwdPlaceholder': 'workspaceFolder 变量 或 /abs/path/to/server',
+      'editor.args': '启动参数列表 (args，每行一个参数，行内空格保留)',
+      'editor.env': '环境变量 (env) · 支持敏感密钥掩码与系统变量引用',
+      'editor.url': '远程服务 URL (url)',
+      'editor.urlPlaceholder': 'https://mcp.internal.company.com/v1/mcp',
+      'editor.headers': '自定义请求头 (headers · 如 Authorization / X-Workspace-Key)',
+      'editor.oauth': 'OAuth 2.1 / Bearer 鉴权扩展',
+      'editor.oauthHint': '当远程 MCP 服务需要用户授权或自动刷新 Token 时启用',
+      'editor.oauthClientId': 'Client ID',
+      'editor.oauthClientIdPlaceholder': 'ds_harness_mcp_client',
+      'editor.oauthScopes': 'Scopes (空格分隔)',
+      'editor.oauthScopesPlaceholder': 'read:tools execute:query',
+      'editor.timeout': '单次请求超时 (timeout ms)',
+      'editor.retries': '断线自动重连次数 (maxRetries)',
+      'editor.maxInstructionBytes': '服务器指令字节上限 (maxInstructionBytes)',
+      'editor.failOnStartupError': '首次连接失败时拒绝加载 (failOnStartupError)',
+      'editor.reconnect': '断线自动重连策略 (reconnect)',
+      'editor.reconnectEnabled': '启用自动重连',
+      'editor.reconnectInitialDelayMs': '初始重连延迟 (ms)',
+      'editor.reconnectMaxDelayMs': '最大重连延迟 (ms)',
+      'editor.reconnectMaxAttempts': '最大重连尝试次数',
+      'editor.capabilities': '暴露能力范围 (Capabilities)',
+      'editor.capTools': 'Tools',
+      'editor.capResources': 'Resources',
+      'editor.capPrompts': 'Prompts',
+      'editor.autoApprove': '免弹窗自动允许调用的工具列表 (autoApprove / 逗号分隔)',
+      'editor.autoApprovePlaceholder': '例如: query_database, list_tables, describe_table',
+      'editor.disabledTools': '显式禁用屏蔽的工具列表 (disabledTools / 逗号分隔)',
+      'editor.disabledToolsPlaceholder': '例如: drop_table, delete_repository',
+      'editor.jsonHint': '支持直接粘贴社区或其他用户分享的 mcpServers JSON 或单节点 JSON，自动解析并同步至结构化表单：',
+      'editor.jsonPlaceholder': '在此粘贴 mcpServers JSON 或单个服务器节点…',
+      'editor.jsonValid': '✓ JSON 语法有效，与结构化参数实时双向同步',
+      'editor.jsonInvalid': 'JSON 语法错误: {message}',
+      'editor.jsonFormatted': '✓ JSON 已格式化',
+      'editor.jsonParsed': '✓ 已解析服务 "{name}" 并同步至结构化参数',
+      'editor.jsonShape': 'JSON 中找不到服务器对象',
+      'editor.jsonCopied': '已复制当前 MCP 节点的 JSON 配置',
+      'editor.jsonSample': '已模拟粘贴其他用户分享的 JSON，并自动拆解同步至结构化配置！',
+      'editor.testOk': '✓ 握手成功 ({ms}ms · 协议版本 {version} · {tools} 个工具)',
+      'editor.testFail': '✗ {message}',
+      'editor.validationName': '请填写合法的服务器标识键名 (1–32 位字母、数字、下划线或短横线)',
+      'editor.validationCommand': '请填写可执行命令',
+      'editor.validationUrl': '请填写合法的 http(s) 远程 URL',
+      'editor.validationWorkspaces': '请至少勾选一个要应用的工作区，或切换为全局共享',
+      'editor.validationSse': 'DSH 当前版本不支持 SSE，请改用 streamable-http',
+      'editor.validationTimeout': '超时必须是大于 0 的整数',
+      'editor.validationRetries': '重连次数必须是 0–100 的整数',
+      'editor.validationNumber': '请填写大于 0 的整数',
+      'editor.jsonBlocked': 'JSON 语法有误，请先修正后再保存或测试',
+      'editor.jsonReset': '放弃 JSON 编辑并恢复表单',
+      'editor.jsonDiscardConfirm': 'JSON 语法有误。放弃这些修改并切回结构化配置？',
+      'editor.jsonDiscardYes': '放弃并切回结构化',
+      'editor.jsonDiscardNo': '继续编辑 JSON',
+      'editor.syncHint': 'DSH 单 profile 下更新即作用于该行',
+      'editor.npxFilled': '已填入 Brave Search MCP 模板参数',
+      'editor.created': '已新增 "{name}" 并合并写入 {target}',
+      'editor.updated': '已保存并局部同步更新至 {target}',
+      'editor.targetGlobal': '全局配置',
+      'editor.targetWorkspace': '当前工作区配置',
+      'editor.required': '必填',
+      'editor.kvKeyEnv': 'ENV_KEY (如 API_KEY)',
+      'editor.kvValEnv': '环境变量值',
+      'editor.kvKeyHeader': 'Header 名称 (如 Authorization)',
+      'editor.kvValHeader': 'Bearer token...',
+      'editor.removeRow': '删除该项',
+      'manage.title': '管理 MCP 生效工作区范围',
+      'manage.subtitle': '勾选或取消工作区，更新该服务器的组织标记；Loader 行本身不受影响',
+      'manage.target': '目标 MCP 服务器：',
+      'manage.global': '🌐 设为全局共享 (Global)',
+      'manage.toWorkspace': '改为当前工作区',
+      'manage.globalBadge': '所有工作区生效',
+      'manage.globalHint': '写入全局配置文件，所有工作区免单独挂载',
+      'manage.workspaceHint': '从全局层移出，仅写入当前 profile 配置',
+      'manage.specific': '或按需勾选需要应用该 MCP 的指定工作区：',
+      'manage.existing': '已有 {count} 个 MCP',
+      'manage.note': '✓ 非破坏性保障：仅更新服务器库中的工作区标记，保留所有配置项与其他 MCP 服务器。',
+      'manage.empty': '暂无工作区',
+      'manage.saved': '已更新 {name} 的工作区范围',
+      'manage.moved': '已将 {name} 移至{target}',
+      'delete.title': '移除 / 删除 MCP 服务器',
+      'delete.descMulti': '服务器 {name} 标记关联了 {names}；该行由当前 profile 统一生效，请选择操作范围：',
+      'delete.descSingle': '即将从 {scope} 中移除 {name}（不影响其他设置项与其余 MCP 服务）。',
+      'delete.descGlobalScope': '全局配置文件',
+      'delete.descWorkspaceScope': '当前 profile 配置',
+      'delete.optCurrent': '仅从当前 profile 移除（服务器库条目保留）',
+      'delete.optCurrentSub': '仅移除当前 profile 层中的这一行；服务器库条目保留，可稍后重新应用',
+      'delete.optCurrentGlobal': '仅从全局配置中移除（服务器库条目保留）',
+      'delete.optCurrentGlobalSub': '仅移除全局层中的这一行；服务器库条目保留，可稍后重新应用',
+      'delete.optAll': '同时从服务器库彻底删除',
+      'delete.optAllSub': '删除当前 profile 层中的行，并从服务器库中删除该条目',
+      'delete.optAllGlobal': '同时从服务器库彻底删除',
+      'delete.optAllGlobalSub': '删除全局层中的行，并从服务器库中删除该条目',
+      'delete.tagsNote': '工作区标记仅用于组织与展示；该 MCP 行由当前 profile 统一生效。',
+      'delete.confirm': '确认执行',
+      'delete.libraryTitle': '从服务器库移除',
+      'delete.libraryDesc': '只移除库条目；已经配置到各层的服务器不受影响。',
+      'delete.done': '已移除 MCP 服务器 {name}',
+      'delete.purged': '已彻底删除 {name}',
+      'config.title': '配置文件查看',
+      'config.titlePath': '配置文件 · {path}',
+      'config.subtitle': '当前层 cordis.patch.yml 的原始内容，只读；包含注释与其他插件行',
+      'config.tabWorkspace': '📁 当前 profile 配置',
+      'config.tabGlobal': '🌐 全局配置',
+      'config.path': '文件路径：{path}',
+      'config.copy': '复制全文',
+      'config.copied': '已复制整份配置文件',
+      'config.readonly': '只读视图，保留全部非 MCP 配置项；修改请使用上方服务器卡片。',
+      'config.close': '关闭',
+      'config.empty': '当前层没有可显示的内容',
+      'config.unknownPath': '路径未知',
+      'tooltip.closeDialog': '关闭配置弹窗',
+      'tooltip.closeManage': '关闭生效范围窗口',
+      'tooltip.closeConfig': '关闭配置文件窗口',
+      'tooltip.openConfig': '查看配置文件',
+      'tooltip.testAll': '测试所有启用的 MCP 服务器',
+      'tooltip.enable': '启用 MCP 服务器',
+      'tooltip.disable': '停用 MCP 服务器',
+      'tooltip.test': '测试连通性',
+      'tooltip.manage': '管理生效工作区',
+      'tooltip.edit': '更新 MCP 服务器配置',
+      'tooltip.delete': '删除 MCP 服务器',
+      'tooltip.removeRow': '删除该项',
     }
 
     const en = {
       'section.title': 'MCP servers',
-      'page.subtitle': 'Manage MCP servers in every scope on this machine: add, edit, enable, probe, and reuse them across scopes.',
-      'action.refresh': 'Refresh list',
-      'action.probeAll': 'Test all enabled servers',
-      'action.add': 'Add server',
+      'page.title': 'MCP server management',
+      'page.enabledPill': '{count} enabled',
+      'page.subtitle': 'Current profile: {name}. Manage MCP services for the global layer and this profile; attach them to several workspaces as needed',
+      'page.profileFallback': 'Unnamed profile',
+      'action.addServer': 'Add server',
       'action.cancel': 'Cancel',
-      'action.save': 'Save',
-      'action.close': 'Close',
-      'action.delete': 'Delete',
-      'action.edit': 'Edit',
-      'action.json': 'JSON',
-      'action.test': 'Test',
-      'action.import': 'Import',
-      'action.export': 'Export JSON',
-      'action.copy': 'Copy',
+      'action.save': 'Save and apply',
+      'action.testBeforeSave': 'Test before saving',
       'action.copied': 'Copied',
+      'action.copyFailed': 'Could not write to the clipboard; copy manually',
+      'action.copyShareJson': 'Copy share JSON',
+      'action.applyCurrent': 'Apply to current workspace ({name})',
+      'action.applyAndEdit': 'Apply and edit',
       'action.retry': 'Retry',
-      'action.addTo': 'Add to…',
-      'action.confirmDelete': 'Delete',
       'action.remove': 'Remove',
-      'action.testDraft': 'Test connection',
-      'action.generate': 'Generate from form',
-      'action.parse': 'Parse into form',
-      'updated.at': 'Updated {time}',
-      'updated.never': 'Not refreshed yet',
-      'scope.all': 'All',
-      'scope.global': 'Global',
-      'scope.workspace': 'Workspace',
-      'group.global': 'Global (home layer)',
-      'group.workspace': 'Workspace (current profile)',
-      'search.placeholder': 'Search server name, target, or id…',
-      'row.enabled': 'Enabled',
-      'row.disabled': 'Disabled',
-      'row.readOnly': 'Read-only',
-      'row.readOnlyHint': 'This row cannot be rewritten safely and is view-only; create a copy in a scope this plugin owns.',
-      'row.tools': '{count} tools',
-      'row.target': 'Target',
-      'live.active': 'Loaded',
-      'live.inactive': 'Not loaded',
-      'live.failed': 'Load failed',
-      'live.unknown': 'Unknown state',
-      'probe.never': 'Not tested',
-      'probe.ok': 'Connected · {tools} tools · {ms} ms',
-      'probe.fail': 'Failed · {message}',
-      'aria.enable': 'Enable {name}',
-      'aria.disable': 'Disable {name}',
-      'aria.edit': 'Edit {name}',
-      'aria.json': 'View the JSON of {name}',
-      'aria.test': 'Test {name}',
-      'aria.delete': 'Delete {name}',
-      'aria.removeWorkspace': 'Remove workspace {name}',
-      'empty.none': 'No MCP servers yet',
-      'empty.noneHint': 'Click "Add server" to create the first MCP server.',
-      'empty.filtered': 'No matching servers',
-      'empty.global': 'The global layer has no servers',
-      'empty.workspace': 'The workspace has no servers',
-      'empty.library': 'The server library is empty; adding or importing servers fills it automatically.',
-      'warnings.title': 'Warnings',
+      'action.saveWorkspaces': 'Apply workspaces',
+      'action.formatJson': 'Format JSON',
+      'action.pasteSample': 'Paste shared JSON sample',
+      'action.copyConfig': 'Copy config',
+      'action.addEnv': '+ Add environment variable',
+      'action.addHeader': '+ Add header',
+      'action.fillNpx': 'Fill npx template',
+      'action.openConfig': 'View config file',
+      'action.closeDialog': 'Close dialog',
+      'action.closeManage': 'Close workspace dialog',
+      'action.closeConfig': 'Close config file dialog',
+      'action.testAll': 'Test all enabled MCP servers',
+      'action.toggleEnable': 'Enable MCP server',
+      'action.toggleDisable': 'Disable MCP server',
+      'action.testOne': 'Test connectivity',
+      'action.manage': 'Manage workspaces',
+      'action.edit': 'Update MCP server config',
+      'action.delete': 'Delete MCP server',
+      'filter.all': 'All active',
+      'filter.global': 'Global',
+      'filter.workspace': 'Current workspace',
+      'filter.other': 'Available elsewhere',
+      'search.placeholder': 'Search services, workspaces, or tools...',
+      'card.connected': 'Connected',
+      'card.connectedMs': 'Connected · {ms}ms',
+      'card.testing': 'Testing connectivity...',
+      'card.disabled': 'Disabled',
+      'card.notApplied': 'Not applied to this workspace',
+      'card.testFailed': 'Test failed',
+      'card.liveFailed': 'Load failed',
+      'card.notLoaded': 'Not loaded',
+      'card.unknown': 'Unknown state',
+      'card.noDescription': 'No description',
+      'card.details': 'Details',
+      'card.toolsDetails': '{count} tools / Details',
+      'card.globalScope': '🌐 Global (all workspaces)',
+      'card.workspaceScope': '📁 Workspaces: {names}',
+      'card.profileScope': '📁 Current profile',
+      'card.otherScope': '📁 Other workspaces',
+      'card.sseUnsupported': 'SSE unsupported',
+      'card.notConfigured': 'Not configured in any layer yet; applying writes the current profile config',
+      'card.writePath': 'Config path: {path}',
+      'card.timeout': 'Timeout: {ms}ms',
+      'card.noTools': 'No tools discovered yet',
+      'card.autoApprove': 'auto',
+      'card.blocked': 'blocked',
+      'card.toolsTitle': 'Discovered tools:',
+      'card.scopeTitle': 'Click to add or remove workspaces',
+      'card.globalScopeTitle': 'Click to edit the scope',
+      'card.applied': 'Applied "{name}" to the current workspace',
+      'card.enabledToast': '{name} enabled',
+      'card.disabledToast': '{name} disabled',
+      'card.testOkToast': 'Server {name} is reachable ({ms}ms · {tools} tools)',
+      'card.testFailToast': 'Server {name} test failed: {message}',
+      'card.testAllNone': 'No enabled MCP servers to test',
+      'card.testAllRunning': 'Testing {count} enabled MCP servers...',
+      'card.testAllDone': 'All {count} enabled MCP servers are reachable',
+      'card.testAllPartial': 'Tested {total} servers, {ok} reachable',
+      'card.libraryRemoved': 'Removed {name} from the library',
+      'card.readOnly': 'Read-only',
+      'card.readOnlyHint': 'This row cannot be rewritten safely and is view-only; create a copy in a writable scope.',
+      'empty.title': 'No MCP servers match this filter',
+      'empty.hint': 'Add a server and pick its workspaces, or switch to Available elsewhere to mount one in a click',
+      'empty.add': '+ Add server (multi-workspace)',
+      'empty.other': 'Other workspaces have no reusable servers yet',
       'state.loading': 'Loading MCP servers…',
       'state.unauthorized': 'This page is not authorized to read MCP servers',
       'state.error': 'Failed to load',
       'state.operationFailed': 'Operation failed',
       'state.unknownError': 'Unknown error',
       'state.invalidResponse': 'The host returned an invalid response',
-      'state.requestFailed': 'Request failed; check the network and the host',
-      'state.testing': 'Testing…',
+      'state.requestFailed': 'Request failed; check the network or host',
+      'state.testing': 'Handshaking and fetching tools...',
       'state.saving': 'Saving…',
-      'io.title': 'Import / export',
-      'io.hint': 'Export a Claude Desktop compatible mcpServers JSON; paste JSON to import a batch into one scope.',
-      'io.placeholder': 'Paste mcpServers JSON, a server array, or a single server object…',
-      'io.level': 'Target scope',
-      'io.overwrite': 'Overwrite servers with the same name',
-      'io.report': 'Import finished: added {added}, updated {updated}, skipped {skipped}',
-      'io.reportSkipped': 'Skipped: {items}',
-      'io.invalidJson': 'Invalid JSON: {message}',
-      'io.importEmpty': 'Paste the JSON to import first',
-      'io.exported': 'Exported JSON',
-      'io.copyFailed': 'Could not write to the clipboard; copy the JSON below manually',
-      'library.title': 'Server library',
-      'library.hint': 'A machine-wide server catalog that can be added to any scope in one click.',
-      'library.origins': 'Origins',
-      'library.origin.global': 'Global',
-      'library.origin.workspace': 'Workspace: {profile}',
-      'library.origin.none': 'Not configured',
-      'library.addTitle': 'Add to a scope',
-      'library.addName': 'Server name (optional rename)',
-      'library.addHint': 'The name must be unique in the target scope; leave it empty to keep the library name.',
-      'dialog.addTitle': 'Add MCP server',
-      'dialog.editTitle': 'Edit MCP server',
-      'dialog.jsonTitle': 'Server JSON',
-      'dialog.tab.form': 'Form',
-      'dialog.tab.json': 'JSON',
-      'dialog.advanced': 'Advanced',
-      'dialog.scope': 'Scope',
-      'dialog.scopeLocked': 'The scope cannot change after creation',
-      'dialog.workspaces': 'Workspace directories',
-      'dialog.workspacesChoose': 'Choose directories',
-      'dialog.workspacesCount': '{count} selected',
-      'dialog.workspacesAll': 'Select all',
-      'dialog.workspacesClear': 'Clear',
-      'dialog.workspacesEmpty': 'No workspaces yet',
-      'dialog.deleteTitle': 'Delete MCP server',
-      'dialog.deleteBody': 'Deleting removes this server from its patch file and takes its tools offline immediately. This cannot be undone.',
-      'dialog.removeTitle': 'Remove from the server library',
-      'dialog.removeBody': 'Only the catalog entry is removed; servers already configured in a scope stay untouched.',
-      'dialog.invalid': 'Check the form: {message}',
-      'dialog.parseOk': 'Parsed into the form',
-      'dialog.generated': 'Generated from the form',
-      'dialog.required': 'Required',
-      'dialog.testHint': 'Runs one live MCP handshake with the current form values; nothing is saved.',
-      'dialog.jsonHint': 'This is the JSON of one mcpServers entry; use "Generate from form" or "Parse into form" to sync both ways.',
-      'dialog.jsonShape': 'No server object found in the JSON',
-      'field.serverName': 'Server name (serverName)',
-      'field.serverNameHint': '1–32 letters, digits, underscores, or hyphens',
-      'field.transport': 'Transport',
-      'field.command': 'Command',
-      'field.args': 'Arguments (one per line)',
-      'field.env': 'Environment variables (one key=value per line)',
-      'field.cwd': 'Working directory (optional)',
-      'field.url': 'Server URL',
-      'field.headers': 'Headers (one key=value per line)',
-      'field.toolCallTimeout': 'Tool call timeout (ms, default 60000)',
-      'field.maxInstructionBytes': 'Max instruction bytes (default 32768)',
-      'field.failOnStartup': 'Reject activation when the first connection fails',
-      'field.reconnectEnabled': 'Enable auto reconnect',
-      'field.reconnectInitial': 'First reconnect delay (ms, default 500)',
-      'field.reconnectMaxDelay': 'Reconnect delay ceiling (ms, default 30000)',
-      'field.reconnectMaxAttempts': 'Max consecutive attempts (default 10)',
-      'field.kvHint': 'One key=value per line; values may contain equals signs',
-      'notice.created': 'Added {name}',
-      'notice.updated': 'Updated {name}',
-      'notice.removed': 'Deleted {name}',
-      'notice.enabled': 'Enabled {name}',
-      'notice.disabled': 'Disabled {name}',
-      'notice.probeAll': 'Tested {total} servers, {ok} connected',
-      'notice.libraryAdded': 'Added {name}',
-      'notice.libraryRemoved': 'Removed {name} from the library',
+      'warnings.title': 'Warnings',
+      'editor.addTitle': 'Add MCP server',
+      'editor.editTitle': 'Update MCP server · {name}',
+      'editor.subtitle': 'Configure once and tag several workspaces; writes the MCP client row in the current profile cordis.patch.yml',
+      'editor.tabStructured': 'Structured',
+      'editor.tabJson': 'JSON (paste to share)',
+      'editor.scopeTitle': 'Scope (target)',
+      'editor.scopeBadge': 'Non-destructive merge',
+      'editor.scopeHint': 'Tag the workspaces that plan to use this server; the Loader row is written to the current profile and applies to every session',
+      'editor.scopeWorkspace': 'Specific workspaces (multi-select)',
+      'editor.scopeGlobal': 'Global (all workspaces)',
+      'editor.scopeLocked': 'The scope cannot change after creation',
+      'editor.mergePreview': '🎯 Workspace tags: {names}; merges the dsh-mcp-client row config in the profile cordis.patch.yml ({path}) without touching other settings or MCP servers.',
+      'editor.mergePreviewGlobal': '🌐 Writes the dsh-mcp-client row in the global cordis.patch.yml ({path}); effective for every profile.',
+      'editor.mergeEmpty': '⚠️ Select at least one workspace, or switch to Global',
+      'editor.wsExisting': '{count} MCP servers · other settings preserved',
+      'editor.wsEmpty': 'No workspaces yet',
+      'editor.section1': '1. Identity and transport',
+      'editor.section2stdio': '2. Local process (STDIO)',
+      'editor.section2remote': '2. Remote endpoint and headers',
+      'editor.section3': '3. Runtime, timeout, and tool permissions',
+      'editor.serverId': 'Server ID (key)',
+      'editor.serverIdPlaceholder': 'e.g. redis-cluster-mcp or postgres-prod',
+      'editor.description': 'Display name / note',
+      'editor.descriptionPlaceholder': 'e.g. shared cache and session analytics',
+      'editor.transport': 'Transport',
+      'editor.transportStdioBadge': 'Local process',
+      'editor.transportHttpBadge': 'Recommended',
+      'editor.transportSseBadge': 'Remote events',
+      'editor.transportStdioDesc': 'Spawn a local process with npx, uvx, python, or docker',
+      'editor.transportHttpDesc': 'The standard streaming HTTP endpoint with reconnect and auth',
+      'editor.transportSseDesc': 'Long-lived HTTP Server-Sent Events transport',
+      'editor.sseUnsupported': 'SSE is not supported by this DSH version; use streamable-http',
+      'editor.command': 'Command',
+      'editor.commandPlaceholder': 'npx / uvx / node / docker',
+      'editor.cwd': 'Working directory (cwd, optional)',
+      'editor.cwdPlaceholder': 'workspaceFolder variable or /abs/path/to/server',
+      'editor.args': 'Arguments (one per line; spaces inside a line are preserved)',
+      'editor.env': 'Environment variables (env)',
+      'editor.url': 'Remote URL (url)',
+      'editor.urlPlaceholder': 'https://mcp.internal.company.com/v1/mcp',
+      'editor.headers': 'Custom headers (headers)',
+      'editor.oauth': 'OAuth 2.1 / Bearer auth',
+      'editor.oauthHint': 'Enable when the remote server needs user authorization or token refresh',
+      'editor.oauthClientId': 'Client ID',
+      'editor.oauthClientIdPlaceholder': 'ds_harness_mcp_client',
+      'editor.oauthScopes': 'Scopes (space separated)',
+      'editor.oauthScopesPlaceholder': 'read:tools execute:query',
+      'editor.timeout': 'Request timeout (ms)',
+      'editor.retries': 'Retry count (maxRetries)',
+      'editor.maxInstructionBytes': 'Instruction byte cap (maxInstructionBytes)',
+      'editor.failOnStartupError': 'Fail activation when the first connection fails (failOnStartupError)',
+      'editor.reconnect': 'Reconnect policy (reconnect)',
+      'editor.reconnectEnabled': 'Auto reconnect',
+      'editor.reconnectInitialDelayMs': 'Initial delay (ms)',
+      'editor.reconnectMaxDelayMs': 'Max delay (ms)',
+      'editor.reconnectMaxAttempts': 'Max attempts',
+      'editor.capabilities': 'Capabilities',
+      'editor.capTools': 'Tools',
+      'editor.capResources': 'Resources',
+      'editor.capPrompts': 'Prompts',
+      'editor.autoApprove': 'Auto-approved tools (autoApprove, comma separated)',
+      'editor.autoApprovePlaceholder': 'e.g. query_database, list_tables, describe_table',
+      'editor.disabledTools': 'Blocked tools (disabledTools, comma separated)',
+      'editor.disabledToolsPlaceholder': 'e.g. drop_table, delete_repository',
+      'editor.jsonHint': 'Paste a shared mcpServers JSON or a single node; it is parsed into the structured form:',
+      'editor.jsonPlaceholder': 'Paste mcpServers JSON or a single server node here…',
+      'editor.jsonValid': '✓ Valid JSON; synced with the structured form',
+      'editor.jsonInvalid': 'Invalid JSON: {message}',
+      'editor.jsonFormatted': '✓ JSON formatted',
+      'editor.jsonParsed': '✓ Parsed server "{name}" into the structured form',
+      'editor.jsonShape': 'No server object found in the JSON',
+      'editor.jsonCopied': 'Copied the JSON of this MCP node',
+      'editor.jsonSample': 'Pasted a shared JSON sample and synced it into the structured form',
+      'editor.testOk': '✓ Handshake succeeded ({ms}ms · protocol {version} · {tools} tools)',
+      'editor.testFail': '✗ {message}',
+      'editor.validationName': 'Enter a valid server ID (1–32 letters, digits, underscores, or hyphens)',
+      'editor.validationCommand': 'Enter a command',
+      'editor.validationUrl': 'Enter a valid http(s) URL',
+      'editor.validationWorkspaces': 'Select at least one workspace, or switch to Global',
+      'editor.validationSse': 'SSE is not supported by this DSH version; use streamable-http',
+      'editor.validationTimeout': 'Timeout must be a positive integer',
+      'editor.validationRetries': 'Retry count must be an integer from 0 to 100',
+      'editor.validationNumber': 'Enter a positive integer',
+      'editor.jsonBlocked': 'Fix the JSON syntax before saving or testing',
+      'editor.jsonReset': 'Discard JSON edits and restore the form',
+      'editor.jsonDiscardConfirm': 'The JSON is invalid. Discard these edits and switch back to the structured form?',
+      'editor.jsonDiscardYes': 'Discard and switch',
+      'editor.jsonDiscardNo': 'Keep editing JSON',
+      'editor.syncHint': 'Under a single DSH profile, an update applies to that row',
+      'editor.npxFilled': 'Filled the Brave Search MCP template',
+      'editor.created': 'Added "{name}" and merged it into {target}',
+      'editor.updated': 'Saved and merged into {target}',
+      'editor.targetGlobal': 'the global config',
+      'editor.targetWorkspace': 'the current workspace config',
+      'editor.required': 'Required',
+      'editor.kvKeyEnv': 'ENV_KEY (e.g. API_KEY)',
+      'editor.kvValEnv': 'value',
+      'editor.kvKeyHeader': 'Header name (e.g. Authorization)',
+      'editor.kvValHeader': 'Bearer token...',
+      'editor.removeRow': 'Remove this row',
+      'manage.title': 'Manage MCP workspaces',
+      'manage.subtitle': 'Check or uncheck workspaces to update the organizational tags; the Loader row itself is unchanged',
+      'manage.target': 'Target MCP server:',
+      'manage.global': '🌐 Global (all workspaces)',
+      'manage.toWorkspace': 'Move to current workspace',
+      'manage.globalBadge': 'effective everywhere',
+      'manage.globalHint': 'Written to the global config; no per-workspace mounting',
+      'manage.workspaceHint': 'Removed from the global layer; written only to the current profile config',
+      'manage.specific': 'Or pick the workspaces that should carry this MCP:',
+      'manage.existing': '{count} MCP servers',
+      'manage.note': '✓ Non-destructive: only the library workspace tags change; all settings and other MCP servers stay.',
+      'manage.empty': 'No workspaces yet',
+      'manage.saved': 'Updated the workspace tags of {name}',
+      'manage.moved': 'Moved {name} to {target}',
+      'delete.title': 'Remove / delete MCP server',
+      'delete.descMulti': '{name} is tagged for {names}; this row applies to the whole current profile. Choose the operation scope:',
+      'delete.descSingle': 'Removes {name} from {scope} without touching other settings or MCP servers.',
+      'delete.descGlobalScope': 'the global config file',
+      'delete.descWorkspaceScope': 'the current profile config',
+      'delete.optCurrent': 'Remove from the current profile only (keep the library entry)',
+      'delete.optCurrentSub': 'Removes only this row from the current profile layer; the library entry stays for later reuse',
+      'delete.optCurrentGlobal': 'Remove from the global config only (keep the library entry)',
+      'delete.optCurrentGlobalSub': 'Removes only this row from the global layer; the library entry stays for later reuse',
+      'delete.optAll': 'Also delete from the server library',
+      'delete.optAllSub': 'Removes the row from the current profile layer and drops the library entry',
+      'delete.optAllGlobal': 'Also delete from the server library',
+      'delete.optAllGlobalSub': 'Removes the row from the global layer and drops the library entry',
+      'delete.tagsNote': 'Workspace tags are organizational only; this MCP row applies to the whole current profile.',
+      'delete.confirm': 'Confirm',
+      'delete.libraryTitle': 'Remove from the server library',
+      'delete.libraryDesc': 'Only the catalog entry is removed; servers already configured in a layer stay untouched.',
+      'delete.done': 'Removed MCP server {name}',
+      'delete.purged': 'Permanently deleted {name}',
+      'config.title': 'Config file viewer',
+      'config.titlePath': 'Config file · {path}',
+      'config.subtitle': 'Raw cordis.patch.yml of the current layer, read-only; comments and other plugin rows included',
+      'config.tabWorkspace': '📁 Current profile',
+      'config.tabGlobal': '🌐 Global',
+      'config.path': 'File: {path}',
+      'config.copy': 'Copy all',
+      'config.copied': 'Copied the config file',
+      'config.readonly': 'Read-only; use the server cards above to make changes.',
+      'config.close': 'Close',
+      'config.empty': 'Nothing to display in this layer',
+      'config.unknownPath': 'Unknown path',
+      'tooltip.closeDialog': 'Close dialog',
+      'tooltip.closeManage': 'Close workspace dialog',
+      'tooltip.closeConfig': 'Close config file dialog',
+      'tooltip.openConfig': 'View config file',
+      'tooltip.testAll': 'Test all enabled MCP servers',
+      'tooltip.enable': 'Enable MCP server',
+      'tooltip.disable': 'Disable MCP server',
+      'tooltip.test': 'Test connectivity',
+      'tooltip.manage': 'Manage workspaces',
+      'tooltip.edit': 'Update MCP server config',
+      'tooltip.delete': 'Delete MCP server',
+      'tooltip.removeRow': 'Remove this row',
     }
 
     /* ------------------------------------------------------------------ *
@@ -328,246 +548,117 @@ window.__ModuleLoader__.load({
       return String(error)
     }
 
-    function formatTime(timestamp) {
-      try {
-        return new Date(timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' })
-      } catch (error) {
-        return DASH
-      }
+    function isObject(value) {
+      return value !== null && typeof value === 'object' && !Array.isArray(value)
     }
 
-    function linesOf(text) {
-      const result = []
-      const parts = textOf(text).split(/\r?\n/u)
-      for (const part of parts) {
-        const line = part.trim()
-        if (line !== '') result.push(line)
-      }
-      return result
+    function splitComma(text) {
+      return textOf(text).split(',').map((part) => part.trim()).filter((part) => part !== '')
     }
 
-    function mapToLines(map) {
-      if (map === null || typeof map !== 'object') return ''
-      const lines = []
-      for (const key of Object.keys(map)) lines.push(key + '=' + textOf(map[key]))
-      return lines.join('\n')
+    /** A `!!js` tagged config value (`{ $js: 'process.env.TOKEN' }`), kept opaque. */
+    function isJsMarker(value) {
+      return isObject(value) && typeof value.$js === 'string'
     }
 
-    function parseKeyValueLines(text, errors, field) {
+    /**
+     * Display syntax for an opaque `!!js` marker: `@@js:<expression>@@`. A plain string
+     * that starts with either reserved prefix is escaped as `@@str:<original>` so the
+     * round-trip stays type-preserving: opening and saving a literal never turns it
+     * into an executable expression, and `@@str:y` never loses its literal prefix.
+     */
+    const JS_MARKER_PREFIX = '@@js:'
+    const STR_ESCAPE_PREFIX = '@@str:'
+    const JS_MARKER_PATTERN = /^@@js:([\s\S]*)@@$/u
+
+    /** Render one env/header/args value for a structured control, keeping `!!js` expressions. */
+    function displayValueOf(value) {
+      if (isJsMarker(value)) return JS_MARKER_PREFIX + value.$js + '@@'
+      const raw = textOf(value)
+      // A plain string that looks like a marker (or is already escaped) gets the escape
+      // prefix; without it, the parser below would promote it to an expression.
+      if (raw.startsWith(JS_MARKER_PREFIX) || raw.startsWith(STR_ESCAPE_PREFIX)) return STR_ESCAPE_PREFIX + raw
+      return raw
+    }
+
+    /** Restore a control value: `@@str:` is a literal, `@@js:...@@` the opaque Host marker. */
+    function valueFromText(text) {
+      const raw = textOf(text)
+      if (raw.startsWith(STR_ESCAPE_PREFIX)) return raw.slice(STR_ESCAPE_PREFIX.length)
+      const match = JS_MARKER_PATTERN.exec(raw)
+      return match !== null ? { $js: match[1] } : raw
+    }
+
+    /** One argument per line; line content is preserved verbatim, only empty lines are dropped. */
+    function argsFromText(text) {
+      return textOf(text).split(/\r?\n/u).filter((line) => line !== '').map((line) => valueFromText(line))
+    }
+
+    /** Structured textarea rendering of the raw args array; the JSON tab never uses this. */
+    function argsTextOf(args) {
+      if (!Array.isArray(args)) return ''
+      return args.map((entry) => displayValueOf(entry)).join('\n')
+    }
+
+    /** Whitespace-separated list (OAuth scopes), never used for command arguments. */
+    function splitWhitespace(text) {
+      return textOf(text).split(/\s+/u).map((part) => part.trim()).filter((part) => part !== '')
+    }
+
+    function numberTextOf(value, fallback) {
+      return typeof value === 'number' && Number.isFinite(value) ? String(value) : String(fallback)
+    }
+
+    function entriesOf(object) {
+      if (!isObject(object)) return []
+      return Object.keys(object).map((key) => ({ key: key, value: displayValueOf(object[key]) }))
+    }
+
+    function objectFromRows(rows) {
       const result = {}
-      const parts = textOf(text).split(/\r?\n/u)
-      for (const part of parts) {
-        const line = part.trim()
-        if (line === '' || line.startsWith('#')) continue
-        const separator = line.indexOf('=')
-        if (separator <= 0) {
-          errors.push(field)
-          continue
-        }
-        const key = line.slice(0, separator).trim()
-        const value = line.slice(separator + 1).trim()
-        if (key === '') {
-          errors.push(field)
-          continue
-        }
-        result[key] = value
+      if (!Array.isArray(rows)) return result
+      for (const row of rows) {
+        if (!isObject(row)) continue
+        const key = textOf(row.key).trim()
+        if (key === '') continue
+        result[key] = valueFromText(row.value)
       }
       return result
     }
 
-    function numberText(value) {
-      if (typeof value === 'number' && Number.isFinite(value)) return String(value)
-      return ''
-    }
-
-    function parsePositiveInt(text, errors, field) {
+    function integerText(text) {
       const raw = textOf(text).trim()
       if (raw === '') return null
       const value = Number(raw)
-      if (!Number.isFinite(value) || value < 0 || !Number.isInteger(value)) {
-        errors.push(field)
-        return null
-      }
+      if (!Number.isFinite(value) || !Number.isInteger(value)) return null
       return value
     }
 
     function transportOf(config) {
-      if (config === null || typeof config !== 'object') return 'stdio'
-      if (config.transport === 'streamable-http') return 'streamable-http'
-      if (config.transport === 'stdio') return 'stdio'
-      if (textOf(config.url) !== '') return 'streamable-http'
-      return 'stdio'
+      if (!isObject(config)) return 'stdio'
+      const declared = textOf(config.transport !== undefined ? config.transport : config.type).toLowerCase()
+      if (declared === 'streamable-http' || declared === 'http') return 'streamable-http'
+      if (declared === 'sse') return 'sse'
+      if (declared === 'stdio') return 'stdio'
+      return textOf(config.url) !== '' ? 'streamable-http' : 'stdio'
     }
 
     /** One-line display target for a stored config (same idea as the host's `target`). */
     function targetOfConfig(config) {
-      if (config === null || typeof config !== 'object') return DASH
-      const command = textOf(config.command)
-      const url = textOf(config.url)
-      if (command === '') return url !== '' ? url : DASH
-      const args = Array.isArray(config.args) ? config.args.map((entry) => textOf(entry)).filter((entry) => entry !== '') : []
-      return [command].concat(args).join(' ')
-    }
-
-    /** One editable draft row; every value is a string or a boolean. */
-    function blankDraft(level) {
-      return {
-        level: level,
-        serverName: '',
-        transport: 'stdio',
-        command: '',
-        argsText: '',
-        envText: '',
-        cwd: '',
-        url: '',
-        headersText: '',
-        toolCallTimeoutMs: '',
-        maxInstructionBytes: '',
-        failOnStartupError: false,
-        reconnectEnabled: true,
-        reconnectInitialDelayMs: '',
-        reconnectMaxDelayMs: '',
-        reconnectMaxAttempts: '',
-        workspaces: [],
-      }
-    }
-
-    /** `config` (wire shape) or one `mcpServers` entry -> draft fields. */
-    function configToDraft(config, level, workspaces) {
-      const source = config !== null && typeof config === 'object' ? config : {}
-      const reconnect = source.reconnect !== null && typeof source.reconnect === 'object' ? source.reconnect : {}
-      const declared = textOf(source.transport !== undefined ? source.transport : source.type).toLowerCase()
-      let transport = 'stdio'
-      if (declared === 'streamable-http' || declared === 'http') transport = 'streamable-http'
-      else if (declared === 'stdio') transport = 'stdio'
-      else if (textOf(source.url) !== '') transport = 'streamable-http'
-      const draft = blankDraft(level)
-      draft.serverName = textOf(source.serverName !== undefined ? source.serverName : source.name)
-      draft.transport = transport
-      draft.command = textOf(source.command)
-      draft.argsText = Array.isArray(source.args) ? source.args.map((entry) => textOf(entry)).join('\n') : ''
-      draft.envText = mapToLines(source.env)
-      draft.cwd = textOf(source.cwd)
-      draft.url = textOf(source.url)
-      draft.headersText = mapToLines(source.headers)
-      draft.toolCallTimeoutMs = numberText(source.toolCallTimeoutMs)
-      draft.maxInstructionBytes = numberText(source.maxInstructionBytes)
-      draft.failOnStartupError = source.failOnStartupError === true
-      draft.reconnectEnabled = reconnect.enabled !== false
-      draft.reconnectInitialDelayMs = numberText(reconnect.initialDelayMs)
-      draft.reconnectMaxDelayMs = numberText(reconnect.maxDelayMs)
-      draft.reconnectMaxAttempts = numberText(reconnect.maxAttempts)
-      draft.workspaces = Array.isArray(workspaces)
-        ? workspaces.map((entry) => textOf(entry)).filter((entry) => entry !== '')
-        : []
-      return draft
-    }
-
-    /** Draft fields -> wire `config`; `errors` lists the offending field keys. */
-    function draftToConfig(draft) {
-      const errors = []
-      const config = {}
-      const serverName = textOf(draft.serverName).trim()
-      if (serverName === '' || !SERVER_NAME_PATTERN.test(serverName)) errors.push('serverName')
-      else config.serverName = serverName
-      config.transport = draft.transport === 'streamable-http' ? 'streamable-http' : 'stdio'
-      if (config.transport === 'stdio') {
-        const command = textOf(draft.command).trim()
-        if (command === '') errors.push('command')
-        else config.command = command
-        const args = linesOf(draft.argsText)
-        if (args.length > 0) config.args = args
-        const env = parseKeyValueLines(draft.envText, errors, 'env')
-        if (Object.keys(env).length > 0) config.env = env
-        const cwd = textOf(draft.cwd).trim()
-        if (cwd !== '') config.cwd = cwd
-      } else {
-        const url = textOf(draft.url).trim()
-        if (url === '' || !/^https?:\/\//iu.test(url)) errors.push('url')
-        else config.url = url
-        const headers = parseKeyValueLines(draft.headersText, errors, 'headers')
-        if (Object.keys(headers).length > 0) config.headers = headers
-      }
-      const timeout = parsePositiveInt(draft.toolCallTimeoutMs, errors, 'toolCallTimeoutMs')
-      if (timeout !== null) config.toolCallTimeoutMs = timeout
-      const instructionBytes = parsePositiveInt(draft.maxInstructionBytes, errors, 'maxInstructionBytes')
-      if (instructionBytes !== null) config.maxInstructionBytes = instructionBytes
-      if (draft.failOnStartupError === true) config.failOnStartupError = true
-      const reconnect = { enabled: draft.reconnectEnabled !== false }
-      const initial = parsePositiveInt(draft.reconnectInitialDelayMs, errors, 'reconnectInitialDelayMs')
-      if (initial !== null) reconnect.initialDelayMs = initial
-      const maxDelay = parsePositiveInt(draft.reconnectMaxDelayMs, errors, 'reconnectMaxDelayMs')
-      if (maxDelay !== null) reconnect.maxDelayMs = maxDelay
-      const maxAttempts = parsePositiveInt(draft.reconnectMaxAttempts, errors, 'reconnectMaxAttempts')
-      if (maxAttempts !== null) reconnect.maxAttempts = maxAttempts
-      config.reconnect = reconnect
-      return { config: config, errors: errors }
-    }
-
-    /** Pick the first server object out of any accepted import shape (§7). */
-    function pickServerObject(value) {
-      if (Array.isArray(value)) {
-        for (const entry of value) {
-          const picked = pickServerObject(entry)
-          if (picked !== null) return picked
-        }
-        return null
-      }
-      if (value === null || typeof value !== 'object') return null
-      if (value.mcpServers !== undefined && value.mcpServers !== null) {
-        const servers = value.mcpServers
-        if (Array.isArray(servers)) return servers.length > 0 ? pickServerObject(servers[0]) : null
-        if (typeof servers === 'object') {
-          const names = Object.keys(servers)
-          for (const name of names) {
-            const entry = servers[name]
-            if (entry === null || typeof entry !== 'object') continue
-            const copy = Object.assign({}, entry)
-            if (textOf(copy.serverName) === '' && textOf(copy.name) === '') copy.serverName = name
-            return copy
+      if (!isObject(config)) return DASH
+      if (transportOf(config) === 'stdio') {
+        const parts = [textOf(config.command)]
+        if (Array.isArray(config.args)) {
+          for (const entry of config.args) {
+            const value = displayValueOf(entry)
+            if (value !== '') parts.push(value)
           }
         }
-        return null
+        const line = parts.filter((part) => part !== '').join(' ')
+        return line !== '' ? line : DASH
       }
-      if (Array.isArray(value.servers)) return value.servers.length > 0 ? pickServerObject(value.servers[0]) : null
-      if (typeof value.serverName === 'string' || typeof value.name === 'string') return value
-      if (typeof value.command === 'string' || typeof value.url === 'string') return value
-      return null
-    }
-
-    function probeSummary(t, result) {
-      if (result === null || result === undefined) return t('probe.never')
-      if (result.ok === true) {
-        const count = typeof result.toolCount === 'number' && Number.isFinite(result.toolCount) ? result.toolCount : 0
-        const duration = typeof result.durationMs === 'number' && Number.isFinite(result.durationMs) ? Math.round(result.durationMs) : 0
-        return t('probe.ok', { tools: count, ms: duration })
-      }
-      let message = t('state.unknownError')
-      if (result.error !== null && result.error !== undefined && typeof result.error.message === 'string' && result.error.message !== '') message = result.error.message
-      return t('probe.fail', { message: message })
-    }
-
-    function liveLabel(t, live) {
-      if (live === null || live === undefined) return t('live.unknown')
-      if (live.phase === 'active') return t('live.active')
-      if (live.phase === 'failed') return t('live.failed')
-      return t('live.inactive')
-    }
-
-    function liveTone(live) {
-      if (live === null || live === undefined) return ''
-      if (live.phase === 'active') return 'ok'
-      if (live.phase === 'failed') return 'err'
-      return ''
-    }
-
-    function originLabel(t, origin, profile) {
-      if (origin === 'global') return t('library.origin.global')
-      const prefix = 'workspace:'
-      if (typeof origin === 'string' && origin.startsWith(prefix)) {
-        return t('library.origin.workspace', { profile: origin.slice(prefix.length) })
-      }
-      return textOf(origin)
+      const url = textOf(config.url)
+      return url !== '' ? url : DASH
     }
 
     /** Last path segment, used when a workspace has no title. */
@@ -582,7 +673,7 @@ window.__ModuleLoader__.load({
       const target = textOf(path)
       const list = Array.isArray(workspaces) ? workspaces : []
       for (const entry of list) {
-        if (entry === null || typeof entry !== 'object') continue
+        if (!isObject(entry)) continue
         if (textOf(entry.path) !== target) continue
         const title = textOf(entry.title)
         return title !== '' ? title : lastPathSegment(target)
@@ -597,12 +688,12 @@ window.__ModuleLoader__.load({
           return true
         }
       } catch (error) {
-        /* fall through: the caller shows the JSON for manual copying */
+        /* fall through: the caller shows a manual-copy hint */
       }
       return false
     }
 
-    /** Focus without scrolling the page; opening/closing a modal must not move the view. */
+    /** Focus without scrolling the page; opening/closing a dialog must not move the view. */
     function focusQuietly(node) {
       if (node === null || node === undefined || typeof node.focus !== 'function') return
       try {
@@ -663,20 +754,119 @@ window.__ModuleLoader__.load({
     /** Open dialogs stack in mount order; only the topmost reacts to Escape / backdrop clicks. */
     const dialogStack = []
 
-    /**
-     * In-dialog popovers (currently the workspace picker) stack above the dialog for Escape:
-     * the first Escape closes the topmost popover and the dialog stays open.
-     */
-    const escapeOverlays = []
+    /* ------------------------------------------------------------------ *
+     * 1000ms delayed self-drawn tooltip engine (icon buttons only).      *
+     * ------------------------------------------------------------------ */
+
+    const tooltip = {
+      timer: null,
+      target: null,
+      label: '',
+      node: null,
+    }
+
+    function ensureTooltipNode() {
+      if (typeof document === 'undefined' || document === null) return null
+      if (tooltip.node !== null && document.body.contains(tooltip.node)) return tooltip.node
+      const node = document.createElement('div')
+      node.className = 'mm-tooltip'
+      node.setAttribute('role', 'tooltip')
+      node.style.left = '0px'
+      node.style.top = '0px'
+      node.style.visibility = 'hidden'
+      document.body.appendChild(node)
+      tooltip.node = node
+      return node
+    }
+
+    function hideTooltip() {
+      if (tooltip.timer !== null) {
+        clearTimeout(tooltip.timer)
+        tooltip.timer = null
+      }
+      tooltip.target = null
+      tooltip.label = ''
+      if (tooltip.node !== null) {
+        tooltip.node.classList.remove('mm-tooltip-show')
+        tooltip.node.style.visibility = 'hidden'
+      }
+    }
+
+    /** True while the self-drawn tooltip is actually painted (not merely scheduled). */
+    function tooltipVisible() {
+      return tooltip.target !== null
+        && tooltip.target !== undefined
+        && tooltip.node !== null
+        && tooltip.node.classList.contains('mm-tooltip-show')
+    }
+
+    function placeTooltip() {
+      const target = tooltip.target
+      if (target === null || target === undefined || typeof target.getBoundingClientRect !== 'function') {
+        hideTooltip()
+        return
+      }
+      if (typeof document === 'undefined' || document === null || !document.body.contains(target)) {
+        hideTooltip()
+        return
+      }
+      const node = ensureTooltipNode()
+      if (node === null) return
+      node.textContent = tooltip.label
+      node.style.visibility = 'hidden'
+      node.classList.add('mm-tooltip-show')
+      const rect = target.getBoundingClientRect()
+      const tipRect = node.getBoundingClientRect()
+      const viewWidth = typeof window !== 'undefined' && window !== null ? window.innerWidth : 0
+      let left = rect.left + rect.width / 2 - tipRect.width / 2
+      let top = rect.top - tipRect.height - 8
+      if (left < 8) left = 8
+      if (viewWidth > 0 && left + tipRect.width > viewWidth - 8) left = viewWidth - tipRect.width - 8
+      if (top < 8) top = rect.bottom + 8
+      node.style.left = Math.round(left) + 'px'
+      node.style.top = Math.round(top) + 'px'
+      node.style.visibility = 'visible'
+    }
+
+    function scheduleTooltip(label, target) {
+      hideTooltip()
+      const text = textOf(label)
+      if (text === '' || target === null || target === undefined) return
+      tooltip.target = target
+      tooltip.label = text
+      tooltip.timer = setTimeout(() => {
+        tooltip.timer = null
+        placeTooltip()
+      }, 1000)
+    }
+
+    function tooltipHandlers(label) {
+      const text = textOf(label)
+      if (text === '') return {}
+      return {
+        onMouseEnter: (event) => {
+          scheduleTooltip(text, event.currentTarget)
+        },
+        onMouseLeave: () => {
+          hideTooltip()
+        },
+        onMouseDown: () => {
+          hideTooltip()
+        },
+      }
+    }
 
     /* ------------------------------------------------------------------ *
      * HTTP API.                                                          *
      * ------------------------------------------------------------------ */
 
-    /** Render a failure for the UI: transport/protocol failures get a localized message. */
+    /**
+     * Render a failure for the UI. Only HTTP/parse failures get a generic localized
+     * message; Host business errors (`ok:false` + `error`) surface their own text.
+     */
     function describeError(t, error) {
       if (error !== null && error !== undefined) {
-        if (error.code === 'invalid') return t('state.invalidResponse')
+        if (error.code === 'protocol') return t('state.invalidResponse')
         if (error.code === 'transport') return t('state.requestFailed')
       }
       return messageOf(error)
@@ -706,12 +896,12 @@ window.__ModuleLoader__.load({
         payload = await response.json()
       } catch (error) {
         const invalid = new Error('invalid response from the host')
-        invalid.code = 'invalid'
+        invalid.code = 'protocol'
         throw invalid
       }
       if (payload === null || typeof payload !== 'object') {
         const invalid = new Error('invalid response from the host')
-        invalid.code = 'invalid'
+        invalid.code = 'protocol'
         throw invalid
       }
       if (payload.ok !== true) {
@@ -729,7 +919,9 @@ window.__ModuleLoader__.load({
     function Button(props) {
       const className = 'mm-btn'
         + (props.variant !== undefined && props.variant !== '' ? ' mm-btn-' + props.variant : '')
-        + (props.fixed === true ? ' mm-btn-fixed' : '')
+        + (props.size === 'sm' ? ' mm-btn-sm' : '')
+        + (props.block === true ? ' mm-btn-block' : '')
+        + (props.className !== undefined && props.className !== '' ? ' ' + props.className : '')
       return h(
         'button',
         {
@@ -738,7 +930,7 @@ window.__ModuleLoader__.load({
           disabled: props.disabled === true,
           onClick: props.onClick,
           'aria-label': props.ariaLabel,
-          title: props.title,
+          title: props.nativeTitle,
         },
         props.children,
       )
@@ -746,29 +938,36 @@ window.__ModuleLoader__.load({
 
     /**
      * Square icon button: the glyph is an inline SVG painted with `currentColor`, the
-     * accessible name stays on the button, and the native `title` gives the ~1s tooltip.
+     * accessible name stays on the button, and the self-drawn tooltip shows after 1s.
+     * Native `title` is intentionally not set.
      */
     function IconButton(props) {
+      const className = 'mm-icon-btn'
+        + (props.tone !== undefined && props.tone !== '' ? ' mm-icon-btn-' + props.tone : '')
+        + (props.spin === true ? ' mm-icon-btn-spin' : '')
+        + (props.className !== undefined && props.className !== '' ? ' ' + props.className : '')
       return h(
         'button',
-        {
-          type: 'button',
-          className: 'mm-icon-btn' + (props.className !== undefined && props.className !== '' ? ' ' + props.className : ''),
-          disabled: props.disabled === true,
-          onClick: props.onClick,
-          'aria-label': props.label,
-          title: props.title !== undefined ? props.title : props.label,
-        },
+        Object.assign(
+          {
+            type: 'button',
+            className: className,
+            disabled: props.disabled === true,
+            onClick: props.onClick,
+            'aria-label': props.label,
+          },
+          tooltipHandlers(props.tooltip),
+        ),
         h(
           'svg',
           {
             className: 'mm-icon',
             viewBox: '0 0 24 24',
-            width: 18,
-            height: 18,
+            width: 16,
+            height: 16,
             fill: 'none',
             stroke: 'currentColor',
-            strokeWidth: 2,
+            strokeWidth: props.strokeWidth !== undefined ? props.strokeWidth : 1.9,
             strokeLinecap: 'round',
             strokeLinejoin: 'round',
             'aria-hidden': 'true',
@@ -780,23 +979,29 @@ window.__ModuleLoader__.load({
     }
 
     function Chip(props) {
-      const className = 'mm-chip' + (props.tone !== undefined && props.tone !== '' ? ' mm-chip-' + props.tone : '')
-      return h('span', { className: className, title: props.title }, props.children)
+      const className = 'mm-chip'
+        + (props.tone !== undefined && props.tone !== '' ? ' mm-chip-' + props.tone : '')
+        + (props.className !== undefined && props.className !== '' ? ' ' + props.className : '')
+      return h('span', { className: className, title: props.nativeTitle }, props.children)
     }
 
-    function Switch(props) {
+    function Dot(props) {
+      return h('span', { className: 'mm-dot' + (props.tone !== undefined && props.tone !== '' ? ' mm-dot-' + props.tone : '') + (props.pulse === true ? ' mm-dot-pulse' : ''), 'aria-hidden': 'true' })
+    }
+
+    function Checkbox(props) {
       return h(
-        'button',
-        {
-          type: 'button',
-          role: 'switch',
-          'aria-checked': props.checked === true ? 'true' : 'false',
-          'aria-label': props.label,
-          className: 'mm-switch' + (props.checked === true ? ' mm-switch-on' : ''),
+        'label',
+        { className: 'mm-check' + (props.className !== undefined && props.className !== '' ? ' ' + props.className : ''), title: props.nativeTitle },
+        h('input', {
+          type: 'checkbox',
+          checked: props.checked === true,
           disabled: props.disabled === true,
-          onClick: props.onClick,
-        },
-        h('span', { className: 'mm-switch-thumb' }),
+          onChange: (event) => {
+            if (typeof props.onChange === 'function') props.onChange(event.target.checked)
+          },
+        }),
+        h('span', { className: 'mm-check-label' }, props.label),
       )
     }
 
@@ -812,12 +1017,18 @@ window.__ModuleLoader__.load({
 
     function TextInput(props) {
       return h('input', {
-        type: 'text',
-        className: 'mm-input',
+        type: props.type !== undefined ? props.type : 'text',
+        className: 'mm-input'
+          + (props.mono === true ? ' mm-mono' : '')
+          + (props.className !== undefined && props.className !== '' ? ' ' + props.className : ''),
         value: props.value,
         placeholder: props.placeholder,
+        'aria-label': props.ariaLabel,
         disabled: props.disabled === true,
         spellCheck: false,
+        min: props.min,
+        max: props.max,
+        step: props.step,
         onChange: (event) => {
           if (typeof props.onChange === 'function') props.onChange(event.target.value)
         },
@@ -835,183 +1046,44 @@ window.__ModuleLoader__.load({
         onChange: (event) => {
           if (typeof props.onChange === 'function') props.onChange(event.target.value)
         },
+        onBlur: () => {
+          if (typeof props.onBlur === 'function') props.onBlur()
+        },
       })
     }
 
-    function Select(props) {
-      return h(
-        'select',
-        {
-          className: 'mm-input',
-          value: props.value,
-          disabled: props.disabled === true,
-          onChange: (event) => {
-            if (typeof props.onChange === 'function') props.onChange(event.target.value)
-          },
-        },
-        props.options.map((option) => h('option', { key: option.value, value: option.value }, option.label)),
-      )
-    }
-
-    function Checkbox(props) {
-      return h(
-        'label',
-        { className: 'mm-check' },
-        h('input', {
-          type: 'checkbox',
-          checked: props.checked === true,
-          disabled: props.disabled === true,
-          onChange: (event) => {
-            if (typeof props.onChange === 'function') props.onChange(event.target.checked)
-          },
-        }),
-        h('span', { title: props.title }, props.label),
-      )
-    }
-
-    /**
-     * Multi-select for the workspace-directory attachment. The list comes from `state.workspaces`
-     * (`[{ id, path, title }]`); the value is an array of absolute paths kept in the draft.
-     */
-    function WorkspacePicker(props) {
-      const t = props.t
-      const workspaces = Array.isArray(props.workspaces) ? props.workspaces : []
-      const selected = Array.isArray(props.value) ? props.value : []
-      const [openState, setOpenState] = useState(false)
-      /* The parent hides this control when the scope is "global". Collapse the popover
-       * in that same commit (`open` derives from `visible`) so the hidden overlay also
-       * leaves `escapeOverlays` synchronously — a hidden popover must never sit above
-       * the dialog in the Escape stack. The effect below also clears the stored state
-       * so switching back to "workspace" does not silently reopen it. */
-      const visible = props.visible !== false
-      const open = openState === true && visible === true
-      useEffect(() => {
-        if (visible !== true && openState === true) setOpenState(false)
-      }, [visible, openState])
-      const rootRef = useRef(null)
-      useEffect(() => {
-        if (open !== true) return undefined
-        /* The token carries its own close so the dialog backdrop can dismiss the popover
-         * first, exactly like the Escape handler does. */
-        const token = { close: () => setOpenState(false) }
-        escapeOverlays.push(token)
-        const onMouseDown = (event) => {
-          const node = rootRef.current
-          if (node !== null && typeof node.contains === 'function' && !node.contains(event.target)) setOpenState(false)
-        }
-        /* Capture phase, registered after the dialog's own handler: the dialog sees the
-         * overlay and yields Escape, then this handler closes the popover only. */
-        const onKeyDown = (event) => {
-          if (event.key !== 'Escape') return
-          if (escapeOverlays.length === 0 || escapeOverlays[escapeOverlays.length - 1] !== token) return
-          event.preventDefault()
-          event.stopImmediatePropagation()
-          event.stopPropagation()
-          setOpenState(false)
-        }
-        document.addEventListener('mousedown', onMouseDown)
-        document.addEventListener('keydown', onKeyDown, true)
-        return () => {
-          document.removeEventListener('mousedown', onMouseDown)
-          document.removeEventListener('keydown', onKeyDown, true)
-          const index = escapeOverlays.indexOf(token)
-          if (index !== -1) escapeOverlays.splice(index, 1)
-        }
-      }, [open])
-      const change = (next) => {
-        if (typeof props.onChange === 'function') props.onChange(next)
-      }
-      const toggle = (path, checked) => {
-        if (path === '') return
-        if (checked === true) change(selected.includes(path) ? selected : selected.concat([path]))
-        else change(selected.filter((entry) => entry !== path))
-      }
-      const buttonText = selected.length === 0 ? t('dialog.workspacesChoose') : t('dialog.workspacesCount', { count: selected.length })
+    function Segmented(props) {
       return h(
         'div',
-        { className: 'mm-ws', ref: rootRef },
-        h('span', { className: 'mm-ws-label' }, t('dialog.workspaces')),
-        h(
-          'div',
-          { className: 'mm-ws-picker' },
-          h(
-            Button,
-            {
-              onClick: () => setOpenState((previous) => !previous),
-              ariaLabel: t('dialog.workspaces'),
-              title: buttonText,
+        { className: 'mm-seg' + (props.className !== undefined && props.className !== '' ? ' ' + props.className : ''), role: 'group', 'aria-label': props.ariaLabel },
+        props.options.map((option) => h(
+          'button',
+          {
+            key: option.value,
+            type: 'button',
+            className: 'mm-seg-btn' + (props.value === option.value ? ' mm-seg-btn-active' : ''),
+            'aria-pressed': props.value === option.value ? 'true' : 'false',
+            disabled: props.disabled === true || option.disabled === true,
+            title: option.nativeTitle,
+            onClick: () => {
+              if (typeof props.onChange === 'function') props.onChange(option.value)
             },
-            /* The button is inline-flex, so bare text becomes an anonymous flex item and
-             * `text-overflow` on the button never applies. A shrinkable span owns the
-             * ellipsis instead of letting the label be hard-clipped. */
-            h('span', { className: 'mm-ws-btn-text' }, buttonText),
-          ),
-          open === true
-            ? h(
-              'div',
-              { className: 'mm-ws-pop', role: 'group', 'aria-label': t('dialog.workspaces') },
-              workspaces.length === 0
-                ? h('p', { className: 'mm-ws-empty' }, t('dialog.workspacesEmpty'))
-                : h(
-                  Fragment,
-                  null,
-                  h(
-                    'div',
-                    { className: 'mm-ws-actions' },
-                    h(Button, {
-                      onClick: () => change(workspaces.map((entry) => textOf(entry !== null && entry !== undefined ? entry.path : '')).filter((entry) => entry !== '')),
-                    }, t('dialog.workspacesAll')),
-                    h(Button, { onClick: () => change([]) }, t('dialog.workspacesClear')),
-                  ),
-                  h(
-                    'div',
-                    { className: 'mm-ws-list' },
-                    workspaces.map((entry, index) => {
-                      const path = textOf(entry !== null && entry !== undefined ? entry.path : '')
-                      return h(Checkbox, {
-                        key: path !== '' ? path : 'workspace-' + index,
-                        checked: selected.includes(path),
-                        label: workspaceLabel(workspaces, path),
-                        title: path,
-                        onChange: (checked) => toggle(path, checked),
-                      })
-                    }),
-                  ),
-                ),
-            )
-            : null,
-        ),
-        h(
-          'div',
-          { className: 'mm-ws-chips' },
-          selected.map((path) => h(
-            'span',
-            { key: path, className: 'mm-chip mm-ws-chip', title: path },
-            workspaceLabel(workspaces, path),
-            h('button', {
-              type: 'button',
-              className: 'mm-ws-chip-x',
-              'aria-label': t('aria.removeWorkspace', { name: workspaceLabel(workspaces, path) }),
-              onClick: () => toggle(path, false),
-            }, '×'),
-          )),
-        ),
+          },
+          option.dot !== undefined ? h(Dot, { tone: option.dot }) : null,
+          h('span', { className: 'mm-seg-text' }, option.label),
+          option.count !== undefined ? h('span', { className: 'mm-seg-count' }, String(option.count)) : null,
+        )),
       )
     }
 
-    function Notice(props) {
-      const notice = props.notice
-      if (notice === null || notice === undefined) return null
+    function EmptyState(props) {
       return h(
         'div',
-        {
-          className: 'mm-notice mm-notice-' + (notice.kind !== undefined ? notice.kind : 'info'),
-          role: notice.kind === 'err' ? 'alert' : 'status',
-          'aria-live': 'polite',
-        },
-        h('span', { className: 'mm-notice-text' }, notice.text),
-        typeof props.onDismiss === 'function'
-          ? h('button', { type: 'button', className: 'mm-icon-btn', 'aria-label': props.dismissLabel, onClick: props.onDismiss }, '\u00d7')
+        { className: 'mm-empty' },
+        h('strong', null, props.title),
+        props.hint !== undefined && props.hint !== null ? h('span', null, props.hint) : null,
+        props.actionLabel !== undefined && props.actionLabel !== null
+          ? h(Button, { variant: 'primary', size: 'sm', onClick: props.onAction }, props.actionLabel)
           : null,
       )
     }
@@ -1028,100 +1100,73 @@ window.__ModuleLoader__.load({
       )
     }
 
-    function EmptyState(props) {
+    function ToastHost(props) {
+      const toasts = Array.isArray(props.toasts) ? props.toasts : []
+      if (toasts.length === 0) return null
       return h(
         'div',
-        { className: 'mm-empty' },
-        h('strong', null, props.title),
-        props.hint !== undefined && props.hint !== null ? h('span', null, props.hint) : null,
+        { className: 'mm-toasts', 'aria-live': 'polite' },
+        toasts.map((toast) => h(
+          'div',
+          {
+            key: toast.id,
+            className: 'mm-toast mm-toast-' + (toast.kind !== undefined ? toast.kind : 'info') + (toast.leaving === true ? ' mm-toast-leaving' : ''),
+          },
+          h('span', { className: 'mm-toast-dot' }),
+          h('span', { className: 'mm-toast-text' }, toast.text),
+        )),
       )
     }
 
+    /**
+     * Fixed-size modal with a transparent backdrop. Only the topmost dialog reacts to
+     * Escape and backdrop clicks. The body scrolls; the frame never changes size.
+     */
     function Dialog(props) {
       const boxRef = useRef(null)
       const backdropRef = useRef(null)
       const onCloseRef = useRef(props.onClose)
       onCloseRef.current = props.onClose
       const stackToken = useRef({})
-      /* Non-confirm dialogs are sized to the nearest Settings panel (the closest
-       * `[role="dialog"]` ancestor) so the panel — title bar and close button included —
-       * is fully covered. Measured when the dialog opens and re-measured on window
-       * resize (the panel is re-centered then, so the saved viewport coordinates go
-       * stale). Later tab/content changes never move or resize the box. Confirm
-       * dialogs stay small and centered: they are neither measured nor observed. */
-      const [panelBox, setPanelBox] = useState(null)
-      useLayoutEffect(() => {
-        if (props.size === 'confirm') return undefined
-        const measure = () => {
-          const node = boxRef.current
-          if (node === null || node === undefined) return
-          const parent = node.parentElement
-          if (parent === null || parent === undefined || typeof parent.closest !== 'function') return
-          const panel = parent.closest('[role="dialog"]')
-          if (panel === null || panel === undefined || typeof panel.getBoundingClientRect !== 'function') return
-          const rect = panel.getBoundingClientRect()
-          if (!(rect.width > 0) || !(rect.height > 0)) return
-          setPanelBox({
-            position: 'fixed',
-            left: rect.left + 'px',
-            top: rect.top + 'px',
-            width: rect.width + 'px',
-            height: rect.height + 'px',
-          })
-        }
-        measure()
-        const view = typeof window !== 'undefined' && window !== null ? window : null
-        if (view !== null) view.addEventListener('resize', measure)
-        return () => {
-          if (view !== null) view.removeEventListener('resize', measure)
-        }
-      }, [])
+
       useEffect(() => {
         const token = stackToken.current
         dialogStack.push(token)
         const onKeyDown = (event) => {
           if (event.key !== 'Escape') return
-          /* An open popover (workspace picker) consumes Escape first; it closes itself. */
-          if (escapeOverlays.length > 0) return
           if (dialogStack.length === 0 || dialogStack[dialogStack.length - 1] !== token) return
           event.preventDefault()
           event.stopImmediatePropagation()
           event.stopPropagation()
+          // Layered dismissal: a visible tooltip consumes the first Escape; the dialog
+          // only closes on the next one.
+          if (tooltipVisible()) {
+            hideTooltip()
+            return
+          }
+          hideTooltip()
           const close = onCloseRef.current
           if (typeof close === 'function') close()
         }
-        /* Capture phase so the Settings shell (React handlers on the root) never sees Escape. */
         document.addEventListener('keydown', onKeyDown, true)
         return () => {
           document.removeEventListener('keydown', onKeyDown, true)
+          hideTooltip()
           const index = dialogStack.indexOf(token)
           if (index !== -1) dialogStack.splice(index, 1)
         }
       }, [])
+
       useEffect(() => {
         lockPageScroll()
         return () => {
           unlockPageScroll()
         }
       }, [])
-      /*
-       * The host renders the Settings panel inside its own scroll container, so locking
-       * `html`/`body` is not enough. Swallow non-passive wheel / touch scrolling on the
-       * backdrop; scrollable regions inside the dialog keep their native scrolling.
-       */
+
       useEffect(() => {
         const node = backdropRef.current
         if (node === null || node === undefined || typeof node.addEventListener !== 'function') return undefined
-        /* Walk ancestors of the gesture target and report whether one of them can still
-         * scroll along the requested axis, in the requested direction. Both axes are
-         * checked independently so a horizontally scrolling chips row works while the
-         * dialog itself stays put.
-         *
-         * The deltas here speak *content* direction, i.e. wheel semantics: deltaY > 0
-         * moves the content down (scrollTop grows) and needs room below
-         * (`scrollTop + clientHeight < scrollHeight`); deltaY < 0 moves it up
-         * (scrollTop shrinks) and needs `scrollTop > 0`. Same mapping on the X axis.
-         * Touch handlers must negate the finger displacement before calling this. */
         const canScroll = (target, deltaX, deltaY) => {
           let current = target
           while (current !== null && current !== undefined && current !== node) {
@@ -1165,23 +1210,8 @@ window.__ModuleLoader__.load({
           const deltaX = touch.clientX - touchOrigin.x
           const deltaY = touch.clientY - touchOrigin.y
           if (deltaX === 0 && deltaY === 0) return
-          /* Finger displacement and scroll direction are opposite:
-           *   finger up   (deltaY < 0) -> content moves down -> scrollTop grows
-           *                             -> needs scrollTop < scrollHeight - clientHeight
-           *   finger down (deltaY > 0) -> content moves up   -> scrollTop shrinks
-           *                             -> needs scrollTop > 0
-           *   finger left (deltaX < 0) -> content moves right -> scrollLeft grows
-           *                             -> needs scrollLeft < scrollWidth - clientWidth
-           *   finger right(deltaX > 0) -> content moves left  -> scrollLeft shrinks
-           *                             -> needs scrollLeft > 0
-           * `canScroll` takes content-direction deltas, so negate the finger delta.
-           * Equal absolute values stay on the vertical axis. */
-          const scrollX = -deltaX
-          const scrollY = -deltaY
           const horizontal = Math.abs(deltaX) > Math.abs(deltaY)
-          const allowed = horizontal ? canScroll(event.target, scrollX, 0) : canScroll(event.target, 0, scrollY)
-          /* Advance the origin on every move: a mid-gesture reversal is judged by the
-           * current segment, never by the accumulated displacement. */
+          const allowed = horizontal ? canScroll(event.target, -deltaX, 0) : canScroll(event.target, 0, -deltaY)
           touchOrigin = { x: touch.clientX, y: touch.clientY }
           if (allowed) return
           event.preventDefault()
@@ -1199,6 +1229,7 @@ window.__ModuleLoader__.load({
           node.removeEventListener('touchcancel', onTouchEnd)
         }
       }, [])
+
       useEffect(() => {
         const node = boxRef.current
         if (node !== null && typeof node.querySelector === 'function') {
@@ -1209,7 +1240,8 @@ window.__ModuleLoader__.load({
           focusQuietly(returnFocus)
         }
       }, [props.returnFocus])
-      const sizeClass = props.size === 'confirm' ? ' mm-dialog-confirm' : ''
+
+      const sizeClass = props.size !== undefined && props.size !== '' ? ' mm-dialog-' + props.size : ''
       return h(
         'div',
         {
@@ -1217,14 +1249,14 @@ window.__ModuleLoader__.load({
           ref: backdropRef,
           onMouseDown: (event) => {
             if (event.target !== event.currentTarget) return
-            /* Mirror the Escape hierarchy: an open in-dialog popover consumes the first
-             * backdrop click; only the next click closes the dialog itself. */
-            if (escapeOverlays.length > 0) {
-              const overlay = escapeOverlays[escapeOverlays.length - 1]
-              if (overlay !== null && overlay !== undefined && typeof overlay.close === 'function') overlay.close()
+            if (dialogStack.length === 0 || dialogStack[dialogStack.length - 1] !== stackToken.current) return
+            // Layered dismissal, same as Escape: a visible tooltip consumes the click;
+            // the dialog only closes when no tooltip is painted.
+            if (tooltipVisible()) {
+              hideTooltip()
               return
             }
-            if (dialogStack.length === 0 || dialogStack[dialogStack.length - 1] !== stackToken.current) return
+            hideTooltip()
             const close = onCloseRef.current
             if (typeof close === 'function') close()
           },
@@ -1237,818 +1269,1890 @@ window.__ModuleLoader__.load({
             'aria-modal': 'true',
             'aria-label': props.title,
             ref: boxRef,
-            style: panelBox !== null ? panelBox : undefined,
           },
           h(
             'div',
             { className: 'mm-dialog-head' },
-            h('h2', { className: 'mm-dialog-title' }, props.title),
-            h('button', { type: 'button', className: 'mm-icon-btn', 'aria-label': props.closeLabel, onClick: props.onClose }, '\u00d7'),
-          ),
-          props.settings !== undefined && props.settings !== null ? h('div', { className: 'mm-dialog-settings' }, props.settings) : null,
-          props.tabs !== undefined && props.tabs !== null ? h('div', { className: 'mm-dialog-tabs' }, props.tabs) : null,
-          props.status !== undefined && props.status !== null ? h('div', { className: 'mm-status-slot' }, props.status) : null,
-          h('div', { className: 'mm-dialog-body' }, props.children),
-          props.footer !== undefined && props.footer !== null ? h('div', { className: 'mm-dialog-foot' }, props.footer) : null,
-        ),
-      )
-    }
-
-    /* ------------------------------------------------------------------ *
-     * Row card.                                                          *
-     * ------------------------------------------------------------------ */
-
-    function RowCard(props) {
-      const t = props.t
-      const row = props.row
-      const live = row.live !== undefined ? row.live : null
-      const readOnly = row.readOnly === true
-      const enabled = row.disabled !== true
-      const toolCount = typeof row.toolCount === 'number' && Number.isFinite(row.toolCount) ? row.toolCount : null
-      const meta = []
-      meta.push(h(Chip, { key: 'enabled', tone: enabled ? 'ok' : '' }, enabled ? t('row.enabled') : t('row.disabled')))
-      meta.push(h(Chip, { key: 'live', tone: liveTone(live) }, liveLabel(t, live)))
-      /* Always rendered: probing fills `toolCount` in place, so the card never grows. */
-      meta.push(h('span', { key: 'tools', className: 'mm-muted mm-card-tools' }, toolCount !== null ? t('row.tools', { count: toolCount }) : DASH))
-      if (readOnly === true) meta.push(h(Chip, { key: 'ro', tone: '' }, t('row.readOnly')))
-      const rowWorkspaces = Array.isArray(row.workspaces) ? row.workspaces.filter((path) => textOf(path) !== '') : []
-      const probeText = probeSummary(t, row.lastProbe)
-      const targetText = textOf(row.target) !== '' ? row.target : DASH
-      return h(
-        'article',
-        { className: 'mm-card' + (enabled ? '' : ' mm-card-off') },
-        h(
-          'div',
-          { className: 'mm-card-head' },
-          h('span', { className: 'mm-card-name' }, row.serverName),
-          h(Chip, { tone: 'brand' }, textOf(row.transport) !== '' ? row.transport : transportOf(row.config)),
-          h(Chip, { tone: '' }, row.level === 'global' ? t('scope.global') : t('scope.workspace')),
-          h('span', { className: 'mm-spacer' }),
-          h(Switch, {
-            checked: enabled,
-            disabled: readOnly === true || props.busy === true,
-            label: enabled ? t('aria.disable', { name: row.serverName }) : t('aria.enable', { name: row.serverName }),
-            onClick: () => {
-              if (typeof props.onToggle === 'function') props.onToggle(row)
-            },
-          }),
-        ),
-        h(
-          'div',
-          { className: 'mm-card-meta' },
-          meta,
-        ),
-        h('div', { className: 'mm-target', title: targetText, 'aria-label': t('row.target') }, targetText),
-        rowWorkspaces.length > 0
-          ? h(
-            'div',
-            { className: 'mm-card-ws' },
-            rowWorkspaces.map((path) => h(
-              Chip,
-              { key: path, title: path },
-              workspaceLabel(props.workspaces, path),
-            )),
-          )
-          : null,
-        readOnly === true ? h('p', { className: 'mm-hint' }, t('row.readOnlyHint')) : null,
-        h('div', { className: 'mm-card-probe', title: probeText }, probeText),
-        h(
-          'div',
-          { className: 'mm-row-actions' },
-          h(Button, {
-            disabled: readOnly === true || props.busy === true,
-            ariaLabel: t('aria.edit', { name: row.serverName }),
-            onClick: (event) => {
-              if (typeof props.onEdit === 'function') props.onEdit(row, event)
-            },
-          }, t('action.edit')),
-          h(Button, {
-            ariaLabel: t('aria.json', { name: row.serverName }),
-            onClick: (event) => {
-              if (typeof props.onJson === 'function') props.onJson(row, event)
-            },
-          }, t('action.json')),
-          h(Button, {
-            disabled: props.busy === true,
-            ariaLabel: t('aria.test', { name: row.serverName }),
-            onClick: () => {
-              if (typeof props.onTest === 'function') props.onTest(row)
-            },
-          }, t('action.test')),
-          h(Button, {
-            variant: 'danger',
-            disabled: readOnly === true || props.busy === true,
-            ariaLabel: t('aria.delete', { name: row.serverName }),
-            onClick: (event) => {
-              if (typeof props.onDelete === 'function') props.onDelete(row, event)
-            },
-          }, t('action.delete')),
-        ),
-      )
-    }
-
-    /* ------------------------------------------------------------------ *
-     * JSON viewer dialog.                                                *
-     * ------------------------------------------------------------------ */
-
-    function JsonDialog(props) {
-      const t = props.t
-      const text = useMemo(() => {
-        const config = props.row.config !== null && props.row.config !== undefined ? props.row.config : {}
-        try {
-          return JSON.stringify(config, null, 2)
-        } catch (error) {
-          return String(config)
-        }
-      }, [props.row])
-      return h(
-        Dialog,
-        {
-          title: t('dialog.jsonTitle') + ' · ' + props.row.serverName,
-          closeLabel: t('action.close'),
-          onClose: props.onClose,
-          returnFocus: props.returnFocus,
-          footer: h(
-            Fragment,
-            null,
-            h(Button, {
-              onClick: async () => {
-                const copied = await copyText(text)
-                if (typeof props.onCopied === 'function') props.onCopied(copied)
-              },
-            }, t('action.copy')),
-            h(Button, { onClick: props.onClose }, t('action.close')),
-          ),
-        },
-        h('pre', { className: 'mm-code mm-code-fill' }, text),
-      )
-    }
-
-    /* ------------------------------------------------------------------ *
-     * Editor dialog: structured form plus a JSON view.                   *
-     * ------------------------------------------------------------------ */
-
-    function EditorDialog(props) {
-      const t = props.t
-      const editing = props.mode === 'edit'
-      const [draft, setDraft] = useState(() => {
-        if (editing) return configToDraft(props.row.config, props.row.level, props.row.workspaces)
-        return blankDraft(props.level)
-      })
-      const [tab, setTab] = useState('form')
-      const [jsonText, setJsonText] = useState('')
-      const [jsonNotice, setJsonNotice] = useState(null)
-      const [error, setError] = useState('')
-      const [testResult, setTestResult] = useState(null)
-      const [testing, setTesting] = useState(false)
-
-      const setField = (key, value) => {
-        setDraft((previous) => {
-          const next = Object.assign({}, previous)
-          next[key] = value
-          return next
-        })
-      }
-
-      const scopeOptions = [
-        { value: 'global', label: t('scope.global') },
-        { value: 'workspace', label: t('scope.workspace') },
-      ]
-
-      const validate = () => {
-        const parsed = draftToConfig(draft)
-        if (parsed.errors.length > 0) {
-          setError(t('dialog.invalid', { message: parsed.errors.join(', ') }))
-          return null
-        }
-        setError('')
-        return parsed.config
-      }
-
-      const generateJson = () => {
-        const config = validate()
-        if (config === null) return
-        try {
-          setJsonText(JSON.stringify(config, null, 2))
-          setJsonNotice({ kind: 'ok', text: t('dialog.generated') })
-        } catch (failure) {
-          setJsonNotice({ kind: 'err', text: messageOf(failure) })
-        }
-      }
-
-      const parseJson = () => {
-        let parsed = null
-        try {
-          parsed = JSON.parse(jsonText)
-        } catch (failure) {
-          setJsonNotice({ kind: 'err', text: t('io.invalidJson', { message: messageOf(failure) }) })
-          return
-        }
-        const candidate = pickServerObject(parsed)
-        if (candidate === null) {
-          setJsonNotice({ kind: 'err', text: t('dialog.jsonShape') })
-          return
-        }
-        const next = configToDraft(candidate, draft.level, draft.workspaces)
-        setDraft(next)
-        setJsonNotice({ kind: 'ok', text: t('dialog.parseOk') })
-        setError('')
-      }
-
-      const testDraft = async () => {
-        const config = validate()
-        if (config === null) return
-        setTesting(true)
-        try {
-          const payload = await callApi('probe', { config: config })
-          setTestResult(payload.result !== undefined ? payload.result : null)
-        } catch (failure) {
-          setTestResult({ ok: false, error: { message: failure.code === 'unauthorized' ? t('state.unauthorized') : describeError(t, failure) } })
-        } finally {
-          setTesting(false)
-        }
-      }
-
-      const submit = async () => {
-        const config = validate()
-        if (config === null) return
-        if (typeof props.onSubmit !== 'function') return
-        const workspaces = draft.level === 'workspace' && Array.isArray(draft.workspaces) ? draft.workspaces : []
-        const result = await props.onSubmit({ level: draft.level, config: config, workspaces: workspaces })
-        if (result !== null && result !== undefined && result.ok === false) {
-          setError(t('state.operationFailed') + ': ' + result.error)
-        }
-      }
-
-      const formBody = h(
-        'div',
-        { className: 'mm-form-body' },
-        h(
-          'div',
-          { className: 'mm-grid2' },
-          h(
-            Field,
-            {
-              label: h('span', null, t('field.serverName'), h('span', { className: 'mm-required', 'aria-label': t('dialog.required') }, '*')),
-              hint: t('field.serverNameHint'),
-            },
-            h(TextInput, { value: draft.serverName, onChange: (value) => setField('serverName', value) }),
-          ),
-          h(
-            Field,
-            { label: t('field.transport') },
-            h(Select, {
-              value: draft.transport,
-              options: [
-                { value: 'stdio', label: 'stdio' },
-                { value: 'streamable-http', label: 'streamable-http' },
-              ],
-              onChange: (value) => setField('transport', value),
-            }),
-          ),
-        ),
-        draft.transport === 'stdio'
-          ? h(
-            Fragment,
-            null,
-            h(
-              Field,
-              { label: t('field.command') },
-              h(TextInput, { value: draft.command, onChange: (value) => setField('command', value) }),
-            ),
-            h(
-              Field,
-              { label: t('field.args') },
-              h(TextArea, { value: draft.argsText, rows: 3, mono: true, onChange: (value) => setField('argsText', value) }),
-            ),
-            h(
-              Field,
-              { label: t('field.env'), hint: t('field.kvHint') },
-              h(TextArea, { value: draft.envText, rows: 3, mono: true, onChange: (value) => setField('envText', value) }),
-            ),
-            h(
-              Field,
-              { label: t('field.cwd') },
-              h(TextInput, { value: draft.cwd, onChange: (value) => setField('cwd', value) }),
-            ),
-          )
-          : h(
-            Fragment,
-            null,
-            h(
-              Field,
-              { label: t('field.url') },
-              h(TextInput, { value: draft.url, onChange: (value) => setField('url', value) }),
-            ),
-            h(
-              Field,
-              { label: t('field.headers'), hint: t('field.kvHint') },
-              h(TextArea, { value: draft.headersText, rows: 3, mono: true, onChange: (value) => setField('headersText', value) }),
-            ),
-          ),
-        h(
-          'details',
-          { className: 'mm-advanced' },
-          h('summary', null, t('dialog.advanced')),
-          h(
-            'div',
-            { className: 'mm-advanced-body' },
             h(
               'div',
-              { className: 'mm-grid2' },
-              h(
-                Field,
-                { label: t('field.toolCallTimeout') },
-                h(TextInput, { value: draft.toolCallTimeoutMs, onChange: (value) => setField('toolCallTimeoutMs', value) }),
-              ),
-              h(
-                Field,
-                { label: t('field.maxInstructionBytes') },
-                h(TextInput, { value: draft.maxInstructionBytes, onChange: (value) => setField('maxInstructionBytes', value) }),
-              ),
+              { className: 'mm-dialog-titles' },
+              h('h2', { className: 'mm-dialog-title' }, props.title),
+              props.subtitle !== undefined && props.subtitle !== null
+                ? h('p', { className: 'mm-dialog-sub' }, props.subtitle)
+                : null,
             ),
-            h(Checkbox, {
-              checked: draft.failOnStartupError,
-              label: t('field.failOnStartup'),
-              onChange: (value) => setField('failOnStartupError', value),
-            }),
-            h(Checkbox, {
-              checked: draft.reconnectEnabled,
-              label: t('field.reconnectEnabled'),
-              onChange: (value) => setField('reconnectEnabled', value),
-            }),
             h(
               'div',
-              { className: 'mm-grid2' },
+              { className: 'mm-dialog-head-actions' },
+              props.headerExtra !== undefined && props.headerExtra !== null ? props.headerExtra : null,
               h(
-                Field,
-                { label: t('field.reconnectInitial') },
-                h(TextInput, {
-                  value: draft.reconnectInitialDelayMs,
-                  disabled: draft.reconnectEnabled !== true,
-                  onChange: (value) => setField('reconnectInitialDelayMs', value),
-                }),
-              ),
-              h(
-                Field,
-                { label: t('field.reconnectMaxDelay') },
-                h(TextInput, {
-                  value: draft.reconnectMaxDelayMs,
-                  disabled: draft.reconnectEnabled !== true,
-                  onChange: (value) => setField('reconnectMaxDelayMs', value),
-                }),
+                IconButton,
+                {
+                  label: props.closeLabel,
+                  tooltip: props.closeTooltip,
+                  onClick: () => {
+                    hideTooltip()
+                    if (typeof props.onClose === 'function') props.onClose()
+                  },
+                  tone: 'plain',
+                },
+                h('path', { d: 'M6 18L18 6M6 6l12 12' }),
               ),
             ),
-            h(
-              Field,
-              { label: t('field.reconnectMaxAttempts') },
-              h(TextInput, {
-                value: draft.reconnectMaxAttempts,
-                disabled: draft.reconnectEnabled !== true,
-                onChange: (value) => setField('reconnectMaxAttempts', value),
-              }),
-            ),
           ),
-        ),
-        h('p', { className: 'mm-hint' }, t('dialog.testHint')),
-      )
-
-      const jsonBody = h(
-        'div',
-        { className: 'mm-json-body' },
-        h(TextArea, {
-          value: jsonText,
-          rows: 12,
-          mono: true,
-          fill: true,
-          placeholder: t('dialog.jsonHint'),
-          onChange: (value) => {
-            setJsonText(value)
-            setJsonNotice(null)
-          },
-        }),
-        h(
-          'div',
-          { className: 'mm-inline' },
-          h(Button, { onClick: generateJson }, t('action.generate')),
-          h(Button, { onClick: parseJson, disabled: jsonText.trim() === '' }, t('action.parse')),
-        ),
-        h('div', { className: 'mm-notice-slot' }, h(Notice, { notice: jsonNotice })),
-      )
-
-      const settingsRow = h(
-        Fragment,
-        null,
-        h(
-          'div',
-          { className: 'mm-settings-scope' },
-          h('span', { className: 'mm-scope-label' }, t('dialog.scope')),
-          h(
-            'div',
-            {
-              className: 'mm-seg',
-              role: 'group',
-              'aria-label': t('dialog.scope'),
-              title: editing ? t('dialog.scopeLocked') : undefined,
-            },
-            scopeOptions.map((option) => h(
-              'button',
-              {
-                key: option.value,
-                type: 'button',
-                className: 'mm-seg-btn' + (draft.level === option.value ? ' mm-seg-btn-active' : ''),
-                'aria-pressed': draft.level === option.value ? 'true' : 'false',
-                disabled: editing,
-                onClick: () => setField('level', option.value),
-              },
-              option.label,
-            )),
-          ),
-        ),
-        h(
-          'div',
-          { className: 'mm-settings-ws' + (draft.level === 'workspace' ? '' : ' mm-hidden') },
-          h(WorkspacePicker, {
-            t: t,
-            workspaces: props.workspaces,
-            value: draft.workspaces,
-            visible: draft.level === 'workspace',
-            onChange: (value) => setField('workspaces', value),
-          }),
-        ),
-      )
-
-      const tabsRow = h(
-        'div',
-        { className: 'mm-tabs', role: 'tablist' },
-        h(
-          'button',
-          {
-            type: 'button',
-            role: 'tab',
-            'aria-selected': tab === 'form' ? 'true' : 'false',
-            className: 'mm-tab' + (tab === 'form' ? ' mm-tab-active' : ''),
-            onClick: () => setTab('form'),
-          },
-          t('dialog.tab.form'),
-        ),
-        h(
-          'button',
-          {
-            type: 'button',
-            role: 'tab',
-            'aria-selected': tab === 'json' ? 'true' : 'false',
-            className: 'mm-tab' + (tab === 'json' ? ' mm-tab-active' : ''),
-            onClick: () => setTab('json'),
-          },
-          t('dialog.tab.json'),
-        ),
-      )
-
-      /* One fixed prompt slot shared by both tabs: validation error first, then the test result. */
-      const statusText = error !== '' ? error : testResult !== null ? probeSummary(t, testResult) : ''
-      const statusKind = error !== '' ? 'err' : testResult !== null ? (testResult.ok === true ? 'ok' : 'err') : ''
-      const statusLine = h(
-        'p',
-        {
-          className: 'mm-status-text' + (statusKind !== '' ? ' mm-status-' + statusKind : ''),
-          role: statusKind === 'err' ? 'alert' : 'status',
-          'aria-live': 'polite',
-          title: statusText !== '' ? statusText : undefined,
-        },
-        statusText,
-      )
-
-      return h(
-        Dialog,
-        {
-          title: editing ? t('dialog.editTitle') : t('dialog.addTitle'),
-          closeLabel: t('action.close'),
-          onClose: props.onClose,
-          returnFocus: props.returnFocus,
-          settings: settingsRow,
-          tabs: tabsRow,
-          status: statusLine,
-          footer: h(
-            Fragment,
-            null,
-            h(
-              'div',
-              { className: 'mm-foot-left' },
-              h(Button, { fixed: true, onClick: testDraft, disabled: testing === true || props.busy === true }, testing === true ? t('state.testing') : t('action.testDraft')),
-            ),
-            h(Button, { onClick: props.onClose }, t('action.cancel')),
-            h(Button, { fixed: true, variant: 'primary', onClick: submit, disabled: props.busy === true }, props.busy === true ? t('state.saving') : t('action.save')),
-          ),
-        },
-        tab === 'form' ? formBody : jsonBody,
-      )
-    }
-
-    /* ------------------------------------------------------------------ *
-     * Add-to-scope dialog for a library entry.                           *
-     * ------------------------------------------------------------------ */
-
-    function LibraryAddDialog(props) {
-      const t = props.t
-      const [level, setLevel] = useState('workspace')
-      const [name, setName] = useState(props.entry.serverName)
-      return h(
-        Dialog,
-        {
-          title: t('library.addTitle'),
-          closeLabel: t('action.close'),
-          onClose: props.onClose,
-          returnFocus: props.returnFocus,
-          footer: h(
-            Fragment,
-            null,
-            h(Button, { onClick: props.onClose }, t('action.cancel')),
-            h(Button, { variant: 'primary', onClick: () => props.onSubmit({ level: level, serverName: name }) }, t('action.add')),
-          ),
-        },
-        h(
-          'div',
-          { className: 'mm-grid2' },
-          h(
-            Field,
-            { label: t('io.level') },
-            h(Select, {
-              value: level,
-              options: [
-                { value: 'workspace', label: t('scope.workspace') },
-                { value: 'global', label: t('scope.global') },
-              ],
-              onChange: setLevel,
-            }),
-          ),
-          h(
-            Field,
-            { label: t('library.addName') },
-            h(TextInput, { value: name, onChange: setName }),
-          ),
-        ),
-        h('p', { className: 'mm-hint' }, t('library.addHint')),
-        h('p', { className: 'mm-muted' }, t('row.target') + ': ' + targetOfConfig(props.entry.config)),
-      )
-    }
-
-    /* ------------------------------------------------------------------ *
-     * Import / export section.                                           *
-     * ------------------------------------------------------------------ */
-
-    function ImportExportSection(props) {
-      const t = props.t
-      const [text, setText] = useState('')
-      const [level, setLevel] = useState('workspace')
-      const [overwrite, setOverwrite] = useState(false)
-      const [exported, setExported] = useState('')
-      const [notice, setNotice] = useState(null)
-      const [busy, setBusy] = useState(false)
-
-      const exportJson = async () => {
-        setBusy(true)
-        try {
-          const payload = await callApi('export', { format: 'mcpServers' })
-          const json = textOf(payload.json)
-          setExported(json)
-          const copied = await copyText(json)
-          setNotice(copied ? { kind: 'ok', text: t('action.copied') } : { kind: 'warn', text: t('io.copyFailed') })
-        } catch (failure) {
-          if (failure.code === 'unauthorized') setNotice({ kind: 'err', text: t('state.unauthorized') })
-          else setNotice({ kind: 'err', text: t('state.operationFailed') + ': ' + describeError(t, failure) })
-        } finally {
-          setBusy(false)
-        }
-      }
-
-      const importJson = async () => {
-        const trimmed = text.trim()
-        if (trimmed === '') {
-          setNotice({ kind: 'err', text: t('io.importEmpty') })
-          return
-        }
-        try {
-          JSON.parse(trimmed)
-        } catch (failure) {
-          setNotice({ kind: 'err', text: t('io.invalidJson', { message: messageOf(failure) }) })
-          return
-        }
-        setBusy(true)
-        try {
-          const payload = await callApi('import', { level: level, json: trimmed, overwrite: overwrite === true })
-          const added = Array.isArray(payload.added) ? payload.added : []
-          const updated = Array.isArray(payload.updated) ? payload.updated : []
-          const skipped = Array.isArray(payload.skipped) ? payload.skipped : []
-          let report = t('io.report', { added: added.length, updated: updated.length, skipped: skipped.length })
-          if (skipped.length > 0) {
-            const items = skipped.map((entry) => {
-              const name = entry !== null && entry !== undefined && typeof entry.serverName === 'string' ? entry.serverName : DASH
-              const reason = entry !== null && entry !== undefined && typeof entry.reason === 'string' ? entry.reason : DASH
-              return name + ' (' + reason + ')'
-            })
-            report = report + ' · ' + t('io.reportSkipped', { items: items.join(', ') })
-          }
-          setNotice({ kind: skipped.length > 0 ? 'warn' : 'ok', text: report })
-          setText('')
-          if (typeof props.onImported === 'function') props.onImported()
-        } catch (failure) {
-          if (failure.code === 'unauthorized') setNotice({ kind: 'err', text: t('state.unauthorized') })
-          else setNotice({ kind: 'err', text: t('state.operationFailed') + ': ' + describeError(t, failure) })
-        } finally {
-          setBusy(false)
-        }
-      }
-
-      const copyExported = async () => {
-        const copied = await copyText(exported)
-        setNotice(copied ? { kind: 'ok', text: t('action.copied') } : { kind: 'warn', text: t('io.copyFailed') })
-      }
-
-      return h(
-        'section',
-        { className: 'mm-section' },
-        h('h2', { className: 'mm-section-title' }, t('io.title')),
-        h('p', { className: 'mm-section-hint' }, t('io.hint')),
-        h(
-          'div',
-          { className: 'mm-inline' },
-          h(Button, { onClick: exportJson, disabled: busy === true }, t('action.export')),
-          h(Button, { onClick: copyExported, disabled: exported === '' }, t('action.copy')),
-        ),
-        h(TextArea, {
-          value: text,
-          rows: 6,
-          mono: true,
-          placeholder: t('io.placeholder'),
-          onChange: (value) => {
-            setText(value)
-            setNotice(null)
-          },
-        }),
-        h(
-          'div',
-          { className: 'mm-inline' },
-          h(
-            'div',
-            { className: 'mm-grow' },
-            h(
-              Field,
-              { label: t('io.level') },
-              h(Select, {
-                value: level,
-                options: [
-                  { value: 'workspace', label: t('scope.workspace') },
-                  { value: 'global', label: t('scope.global') },
-                ],
-                onChange: setLevel,
-              }),
-            ),
-          ),
-          h(Checkbox, { checked: overwrite, label: t('io.overwrite'), onChange: setOverwrite }),
-          h(Button, { variant: 'primary', onClick: importJson, disabled: busy === true }, t('action.import')),
-        ),
-        h('div', { className: 'mm-notice-slot' }, h(Notice, { notice: notice })),
-        h(
-          'div',
-          { className: 'mm-export-slot' },
-          exported !== ''
-            ? h(Fragment, null, h('span', { className: 'mm-muted' }, t('io.exported')), h('pre', { className: 'mm-code' }, exported))
+          h('div', { className: 'mm-dialog-body' + (props.bodyClass !== undefined && props.bodyClass !== '' ? ' ' + props.bodyClass : '') }, props.children),
+          props.footer !== undefined && props.footer !== null
+            ? h('div', { className: 'mm-dialog-foot' }, props.footer)
             : null,
         ),
       )
     }
 
     /* ------------------------------------------------------------------ *
-     * Server library section.                                            *
+     * Row / library card.                                                *
      * ------------------------------------------------------------------ */
 
-    function LibrarySection(props) {
+    function rowStatus(t, row, testing) {
+      if (testing === true) return { tone: 'warn', text: t('card.testing'), pulse: true, detail: '' }
+      if (row.disabled === true) return { tone: 'muted', text: t('card.disabled'), pulse: false, detail: '' }
+      const probe = row.lastProbe
+      if (isObject(probe)) {
+        if (probe.ok === true) {
+          const ms = typeof probe.durationMs === 'number' && Number.isFinite(probe.durationMs) ? Math.round(probe.durationMs) : null
+          return { tone: 'ok', text: ms !== null ? t('card.connectedMs', { ms: ms }) : t('card.connected'), pulse: false, detail: '' }
+        }
+        if (probe.ok === false) {
+          const detail = isObject(probe.error) ? textOf(probe.error.message) : ''
+          return { tone: 'err', text: t('card.testFailed'), pulse: false, detail: detail }
+        }
+      }
+      if (isObject(row.live)) {
+        if (row.live.phase === 'failed') return { tone: 'err', text: t('card.liveFailed'), pulse: false, detail: '' }
+        if (row.live.phase === 'active') return { tone: 'ok', text: t('card.connected'), pulse: false, detail: '' }
+        if (row.live.phase === 'inactive') return { tone: 'muted', text: t('card.notLoaded'), pulse: false, detail: '' }
+      }
+      return { tone: 'muted', text: t('card.unknown'), pulse: false, detail: '' }
+    }
+
+    function toolNamesOf(row) {
+      const probe = isObject(row) ? row.lastProbe : null
+      if (!isObject(probe) || !Array.isArray(probe.toolNames)) return []
+      return probe.toolNames.map((name) => textOf(name)).filter((name) => name !== '')
+    }
+
+    function ServerCard(props) {
       const t = props.t
-      const profile = props.profile
-      const entries = props.entries
-      const [dialogEntry, setDialogEntry] = useState(null)
-      const [dialogReturnFocus, setDialogReturnFocus] = useState(null)
-      const [confirmEntry, setConfirmEntry] = useState(null)
-      const [confirmReturnFocus, setConfirmReturnFocus] = useState(null)
-      const [busy, setBusy] = useState(false)
-      const [notice, setNotice] = useState(null)
-
-      const applyEntry = async (input) => {
-        const entry = dialogEntry
-        setDialogEntry(null)
-        if (entry === null) return
-        setBusy(true)
-        try {
-          const name = textOf(input.serverName).trim()
-          const args = { level: input.level, serverName: entry.serverName }
-          if (name !== '' && name !== entry.serverName) args.serverNameOverride = name
-          await callApi('libraryApply', args)
-          setNotice({ kind: 'ok', text: t('notice.libraryAdded', { name: name !== '' ? name : entry.serverName }) })
-          if (typeof props.onChanged === 'function') props.onChanged()
-        } catch (failure) {
-          if (failure.code === 'unauthorized') setNotice({ kind: 'err', text: t('state.unauthorized') })
-          else setNotice({ kind: 'err', text: t('state.operationFailed') + ': ' + describeError(t, failure) })
-        } finally {
-          setBusy(false)
-        }
-      }
-
-      const removeEntry = async () => {
-        const entry = confirmEntry
-        setConfirmEntry(null)
-        if (entry === null) return
-        setBusy(true)
-        try {
-          await callApi('libraryRemove', { serverName: entry.serverName })
-          setNotice({ kind: 'ok', text: t('notice.libraryRemoved', { name: entry.serverName }) })
-          if (typeof props.onChanged === 'function') props.onChanged()
-        } catch (failure) {
-          if (failure.code === 'unauthorized') setNotice({ kind: 'err', text: t('state.unauthorized') })
-          else setNotice({ kind: 'err', text: t('state.operationFailed') + ': ' + describeError(t, failure) })
-        } finally {
-          setBusy(false)
-        }
-      }
-
-      return h(
-        'section',
-        { className: 'mm-section' },
-        h('h2', { className: 'mm-section-title' }, t('library.title')),
-        h('p', { className: 'mm-section-hint' }, t('library.hint')),
-        h('div', { className: 'mm-notice-slot' }, h(Notice, { notice: notice })),
-        entries.length === 0
-          ? h(EmptyState, { title: t('empty.library') })
-          : h(
-            'div',
-            { className: 'mm-library' },
-            entries.map((entry) => h(
-              'div',
-              { key: entry.serverName, className: 'mm-library-row' },
-              h(
-                'div',
-                { className: 'mm-library-main' },
-                h('span', { className: 'mm-card-name' }, entry.serverName),
-                h(Chip, { tone: 'brand' }, transportOf(entry.config)),
-                h(
-                  'span',
-                  { className: 'mm-muted' },
-                  t('library.origins') + ': ' + (
-                    Array.isArray(entry.origins) && entry.origins.length > 0
-                      ? entry.origins.map((origin) => originLabel(t, origin, profile)).join(' · ')
-                      : t('library.origin.none')
-                  ),
-                ),
-              ),
-              h(
-                'div',
-                { className: 'mm-row-actions' },
-                h(Button, {
-                  disabled: busy === true,
-                  onClick: (event) => {
-                    setDialogReturnFocus(event.currentTarget)
-                    setDialogEntry(entry)
-                  },
-                }, t('action.addTo')),
-                h(Button, {
-                  variant: 'danger',
-                  disabled: busy === true,
-                  onClick: (event) => {
-                    setConfirmReturnFocus(event.currentTarget)
-                    setConfirmEntry(entry)
-                  },
-                }, t('action.remove')),
-              ),
-            )),
-          ),
-        dialogEntry !== null
-          ? h(LibraryAddDialog, {
-            t: t,
-            entry: dialogEntry,
-            returnFocus: dialogReturnFocus,
-            onClose: () => setDialogEntry(null),
-            onSubmit: applyEntry,
-          })
-          : null,
-        confirmEntry !== null
-          ? h(
-            Dialog,
-            {
-              title: t('dialog.removeTitle'),
-              closeLabel: t('action.close'),
-              onClose: () => setConfirmEntry(null),
-              returnFocus: confirmReturnFocus,
-              size: 'confirm',
-              footer: h(
-                Fragment,
-                null,
-                h(Button, { onClick: () => setConfirmEntry(null) }, t('action.cancel')),
-                h(Button, { variant: 'danger', onClick: removeEntry }, t('action.remove')),
-              ),
+      const item = props.item
+      const library = props.kind === 'library'
+      const row = item
+      const enabled = library === false && row.disabled !== true
+      const readOnly = library === false && row.readOnly === true
+      const config = isObject(row.config) ? row.config : {}
+      const extra = isObject(row.extra) ? row.extra : {}
+      const transport = transportOf(config)
+      const status = library === true
+        ? { tone: 'warn', text: t('card.notApplied'), pulse: false, detail: '' }
+        : rowStatus(t, row, props.testing === true || (props.testingAll === true && enabled))
+      const description = textOf(row.description) !== '' ? row.description : t('card.noDescription')
+      const target = library === false && textOf(row.target) !== '' ? row.target : targetOfConfig(config)
+      const toolCount = library === false && typeof row.toolCount === 'number' && Number.isFinite(row.toolCount) ? row.toolCount : null
+      const expandLabel = toolCount !== null ? t('card.toolsDetails', { count: toolCount }) : t('card.details')
+      const toolNames = library === false ? toolNamesOf(row) : []
+      const autoApprove = Array.isArray(extra.autoApprove) ? extra.autoApprove.map((name) => textOf(name)) : []
+      const disabledTools = Array.isArray(extra.disabledTools) ? extra.disabledTools.map((name) => textOf(name)) : []
+      const rowWorkspaces = Array.isArray(row.workspaces) ? row.workspaces.map((path) => textOf(path)).filter((path) => path !== '') : []
+      const scopeNames = rowWorkspaces.map((path) => workspaceLabel(props.workspaces, path)).join('、')
+      const timeout = typeof config.toolCallTimeoutMs === 'number' && Number.isFinite(config.toolCallTimeoutMs) ? config.toolCallTimeoutMs : 60000
+      const writePath = row.level === 'global'
+        ? (props.homePatch !== '' ? props.homePatch : t('config.unknownPath'))
+        : (props.profilePatch !== '' ? props.profilePatch : t('config.unknownPath'))
+      const dim = library === true || enabled === false
+      const scopeChip = library === true
+        ? h(Chip, { tone: 'warn', nativeTitle: t('card.otherScope') }, t('card.otherScope'))
+        : h(
+          'button',
+          {
+            type: 'button',
+            className: 'mm-scope-chip mm-scope-wrap',
+            title: row.level === 'global' ? t('card.globalScopeTitle') : t('card.scopeTitle'),
+            'aria-disabled': readOnly === true ? 'true' : undefined,
+            onClick: () => {
+              if (readOnly === true) return
+              if (typeof props.onManage === 'function') props.onManage(row)
             },
-            h('p', { className: 'mm-dialog-text' }, t('dialog.removeBody')),
+          },
+          h(
+            Chip,
+            { tone: row.level === 'global' ? 'global' : 'brand' },
+            h('span', { className: 'mm-chip-text' }, row.level === 'global'
+              ? t('card.globalScope')
+              : rowWorkspaces.length > 0
+                ? t('card.workspaceScope', { names: scopeNames })
+                : t('card.profileScope')),
+            row.level === 'global'
+              ? null
+              : h('svg', { className: 'mm-scope-chevron', viewBox: '0 0 24 24', width: 10, height: 10, fill: 'none', stroke: 'currentColor', strokeWidth: 2, strokeLinecap: 'round', strokeLinejoin: 'round', 'aria-hidden': 'true' }, h('path', { d: 'M19 9l-7 7-7-7' })),
+          ),
+        )
+      const actions = library === true
+        ? h(
+          Fragment,
+          null,
+          h(
+            Button,
+            {
+              variant: 'brand',
+              size: 'sm',
+              disabled: props.busy === true,
+              onClick: () => {
+                if (typeof props.onApply === 'function') props.onApply(row)
+              },
+            },
+            h('svg', { className: 'mm-icon', viewBox: '0 0 24 24', width: 14, height: 14, fill: 'none', stroke: 'currentColor', strokeWidth: 2.2, strokeLinecap: 'round', strokeLinejoin: 'round', 'aria-hidden': 'true' }, h('path', { d: 'M12 4v16m8-8H4' })),
+            h('span', null, t('action.applyCurrent', { name: props.currentName })),
+          ),
+          h(
+            Button,
+            {
+              variant: 'ghost',
+              size: 'sm',
+              disabled: props.busy === true,
+              onClick: () => {
+                if (typeof props.onApplyEdit === 'function') props.onApplyEdit(row)
+              },
+            },
+            h('svg', { className: 'mm-icon', viewBox: '0 0 24 24', width: 14, height: 14, fill: 'none', stroke: 'currentColor', strokeWidth: 2, strokeLinecap: 'round', strokeLinejoin: 'round', 'aria-hidden': 'true' }, h('path', { d: 'M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z' })),
+            h('span', null, t('action.applyAndEdit')),
+          ),
+          h(
+            IconButton,
+            {
+              label: t('action.manage'),
+              tooltip: t('tooltip.manage'),
+              tone: 'brand',
+              disabled: props.busy === true,
+              onClick: () => {
+                if (typeof props.onManageLibrary === 'function') props.onManageLibrary(row)
+              },
+            },
+            h('path', { d: 'M19 11H5m14 0a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 012-2m14 0V9a2 2 0 00-2-2M5 11V9a2 2 0 012-2m0 0V5a2 2 0 012-2h6a2 2 0 012 2v2M7 7h10' }),
+          ),
+          h(
+            IconButton,
+            {
+              label: t('delete.libraryTitle'),
+              tooltip: t('delete.libraryTitle'),
+              tone: 'danger',
+              disabled: props.busy === true,
+              onClick: () => {
+                if (typeof props.onDelete === 'function') props.onDelete(row)
+              },
+            },
+            h('path', { d: 'M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16' }),
+          ),
+        )
+        : h(
+          Fragment,
+          null,
+          h(
+            IconButton,
+            {
+              label: enabled ? t('action.toggleDisable') : t('action.toggleEnable'),
+              tooltip: enabled ? t('tooltip.disable') : t('tooltip.enable'),
+              tone: enabled ? 'ok' : 'plain',
+              disabled: readOnly === true || props.busy === true,
+              onClick: () => {
+                if (typeof props.onToggleEnabled === 'function') props.onToggleEnabled(row)
+              },
+            },
+            h('path', { d: 'M12 3v9m6.364-5.364a9 9 0 11-12.728 0' }),
+          ),
+          h(
+            IconButton,
+            {
+              label: t('action.testOne'),
+              tooltip: t('tooltip.test'),
+              tone: props.testing === true || (props.testingAll === true && enabled) ? 'warn' : 'brand',
+              spin: props.testing === true || (props.testingAll === true && enabled),
+              disabled: readOnly === true || props.busy === true,
+              onClick: () => {
+                if (typeof props.onTest === 'function') props.onTest(row)
+              },
+            },
+            h('path', { d: 'M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15' }),
+          ),
+          h(
+            IconButton,
+            {
+              label: t('action.manage'),
+              tooltip: t('tooltip.manage'),
+              tone: 'brand',
+              disabled: readOnly === true || props.busy === true,
+              onClick: () => {
+                if (typeof props.onManage === 'function') props.onManage(row)
+              },
+            },
+            h('path', { d: 'M19 11H5m14 0a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 012-2m14 0V9a2 2 0 00-2-2M5 11V9a2 2 0 012-2m0 0V5a2 2 0 012-2h6a2 2 0 012 2v2M7 7h10' }),
+          ),
+          h(
+            IconButton,
+            {
+              label: t('action.edit'),
+              tooltip: t('tooltip.edit'),
+              tone: 'plain',
+              disabled: readOnly === true || props.busy === true,
+              onClick: () => {
+                if (typeof props.onEdit === 'function') props.onEdit(row)
+              },
+            },
+            h('path', { d: 'M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z' }),
+          ),
+          h(
+            IconButton,
+            {
+              label: t('action.delete'),
+              tooltip: t('tooltip.delete'),
+              tone: 'danger',
+              disabled: readOnly === true || props.busy === true,
+              onClick: () => {
+                if (typeof props.onDelete === 'function') props.onDelete(row)
+              },
+            },
+            h('path', { d: 'M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16' }),
+          ),
+        )
+      return h(
+        'article',
+        { className: 'mm-card' + (dim ? ' mm-card-dim' : '') },
+        h(
+          'div',
+          { className: 'mm-card-main' },
+          h(
+            'div',
+            { className: 'mm-card-row1' },
+            h(Dot, { tone: status.tone, pulse: status.pulse === true }),
+            h('span', { className: 'mm-card-id', title: row.serverName }, row.serverName),
+            scopeChip,
+            h(Chip, { tone: 'neutral', className: 'mm-chip-mono' }, transport),
+            transport === 'sse' ? h(Chip, { tone: 'err' }, t('card.sseUnsupported')) : null,
+            h('span', { className: 'mm-status mm-status-' + status.tone, title: status.detail !== '' ? status.detail : undefined }, status.text),
+            readOnly === true ? h(Chip, { tone: 'warn' }, t('card.readOnly')) : null,
+          ),
+          h('p', { className: 'mm-card-desc' }, description),
+          library === true && rowWorkspaces.length > 0
+            ? h(
+              'div',
+              { className: 'mm-ws-badges' },
+              rowWorkspaces.map((path) => h(
+                Chip,
+                { key: path, tone: 'brand', className: 'mm-chip-ws', nativeTitle: path },
+                workspaceLabel(props.workspaces, path),
+              )),
+            )
+            : null,
+          h(
+            'div',
+            { className: 'mm-card-row3' },
+            h('span', { className: 'mm-card-endpoint mm-mono', title: target }, target),
+            h(
+              'button',
+              {
+                type: 'button',
+                className: 'mm-expand',
+                'aria-expanded': props.expanded === true ? 'true' : 'false',
+                onClick: () => {
+                  if (typeof props.onToggleExpand === 'function') props.onToggleExpand()
+                },
+              },
+              h('span', null, expandLabel),
+              h('svg', { className: 'mm-chevron' + (props.expanded === true ? ' mm-chevron-open' : ''), viewBox: '0 0 24 24', width: 12, height: 12, fill: 'none', stroke: 'currentColor', strokeWidth: 2, strokeLinecap: 'round', strokeLinejoin: 'round', 'aria-hidden': 'true' }, h('path', { d: 'M19 9l-7 7-7-7' })),
+            ),
+          ),
+        ),
+        h('div', { className: 'mm-card-actions' }, actions),
+        props.expanded === true
+          ? h(
+            'div',
+            { className: 'mm-card-detail' },
+            h(
+              'div',
+              { className: 'mm-detail-row' },
+              h('span', { className: 'mm-detail-label' }, t('card.toolsTitle')),
+              toolNames.length === 0
+                ? h('span', { className: 'mm-muted' }, t('card.noTools'))
+                : h(
+                  'div',
+                  { className: 'mm-chips-row' },
+                  toolNames.map((tool) => {
+                    const auto = autoApprove.includes(tool)
+                    const blocked = disabledTools.includes(tool)
+                    return h(
+                      Chip,
+                      { key: tool, tone: blocked ? 'err' : auto ? 'ok' : 'neutral', className: blocked ? 'mm-chip-strike' : '' },
+                      tool,
+                      auto ? ' ✓' + t('card.autoApprove') : '',
+                      blocked ? ' · ' + t('card.blocked') : '',
+                    )
+                  }),
+                ),
+            ),
+            h(
+              'div',
+              { className: 'mm-detail-row mm-detail-meta' },
+              library === true
+                ? h('span', null, t('card.notConfigured'))
+                : h('span', null, t('card.writePath', { path: writePath })),
+              h('span', null, t('card.timeout', { ms: timeout })),
+              h(
+                'button',
+                {
+                  type: 'button',
+                  className: 'mm-link',
+                  onClick: () => {
+                    if (typeof props.onCopyShare === 'function') props.onCopyShare(row)
+                  },
+                },
+                t('action.copyShareJson'),
+              ),
+            ),
+            readOnly === true ? h('p', { className: 'mm-hint' }, t('card.readOnlyHint')) : null,
           )
           : null,
+      )
+    }
+
+    /* ------------------------------------------------------------------ *
+     * Editor draft helpers.                                              *
+     * ------------------------------------------------------------------ */
+
+    function emptyRows() {
+      return [{ key: '', value: '' }]
+    }
+
+    function makeDraft(mode, row) {
+      if (mode === 'edit' && isObject(row)) {
+        const config = isObject(row.config) ? row.config : {}
+        const extra = isObject(row.extra) ? row.extra : {}
+        const oauth = isObject(extra.oauth) ? extra.oauth : {}
+        const caps = isObject(extra.capabilities) ? extra.capabilities : {}
+        const reconnect = isObject(config.reconnect) ? config.reconnect : {}
+        const env = entriesOf(config.env)
+        const headers = entriesOf(config.headers)
+        const attached = Array.isArray(row.workspaces) ? row.workspaces.map((path) => textOf(path)).filter((path) => path !== '') : []
+        return {
+          scope: row.level === 'global' ? 'global' : 'workspace',
+          workspaces: attached,
+          serverName: textOf(row.serverName),
+          description: textOf(row.description),
+          transport: transportOf(config),
+          command: textOf(config.command) !== '' ? textOf(config.command) : 'npx',
+          // Raw args array: `!!js` markers survive JSON round-trips untouched.
+          args: Array.isArray(config.args) ? config.args.slice() : [],
+          cwd: textOf(config.cwd),
+          envRows: env.length > 0 ? env : emptyRows(),
+          url: textOf(config.url),
+          headerRows: headers.length > 0 ? headers : emptyRows(),
+          oauthEnabled: oauth.enabled === true,
+          oauthClientId: textOf(oauth.clientId),
+          oauthScopes: textOf(oauth.scopes),
+          timeout: numberTextOf(config.toolCallTimeoutMs, 60000),
+          maxRetries: numberTextOf(extra.maxRetries, 3),
+          maxInstructionBytes: numberTextOf(config.maxInstructionBytes, 32768),
+          failOnStartupError: config.failOnStartupError === true,
+          reconnectEnabled: reconnect.enabled !== false,
+          reconnectInitialDelayMs: numberTextOf(reconnect.initialDelayMs, 500),
+          reconnectMaxDelayMs: numberTextOf(reconnect.maxDelayMs, 30000),
+          reconnectMaxAttempts: numberTextOf(reconnect.maxAttempts, 10),
+          capTools: caps.tools !== false,
+          capResources: caps.resources !== false,
+          capPrompts: caps.prompts !== false,
+          autoApprove: Array.isArray(extra.autoApprove) ? extra.autoApprove.map((entry) => textOf(entry)).join(', ') : '',
+          disabledTools: Array.isArray(extra.disabledTools) ? extra.disabledTools.map((entry) => textOf(entry)).join(', ') : '',
+          enabled: row.disabled !== true,
+        }
+      }
+      return {
+        // New servers default to the global layer, as the user asked: no workspace must be
+        // picked before saving, and the row applies to every session of this machine.
+        scope: 'global',
+        // No workspace is pre-selected: only explicit user choices or API data select one.
+        workspaces: [],
+        serverName: '',
+        description: '',
+        transport: 'stdio',
+        command: 'npx',
+        args: [],
+        cwd: '',
+        envRows: emptyRows(),
+        url: '',
+        headerRows: emptyRows(),
+        oauthEnabled: false,
+        oauthClientId: '',
+        oauthScopes: '',
+        timeout: '60000',
+        maxRetries: '3',
+        maxInstructionBytes: '32768',
+        failOnStartupError: false,
+        reconnectEnabled: true,
+        reconnectInitialDelayMs: '500',
+        reconnectMaxDelayMs: '30000',
+        reconnectMaxAttempts: '10',
+        capTools: true,
+        capResources: true,
+        capPrompts: true,
+        autoApprove: '',
+        disabledTools: '',
+        enabled: true,
+      }
+    }
+
+    function draftToNode(draft) {
+      const node = {}
+      const description = textOf(draft.description).trim()
+      if (description !== '') node.description = description
+      node.transport = draft.transport
+      if (draft.enabled === false) node.disabled = true
+      if (draft.transport === 'stdio') {
+        node.command = textOf(draft.command).trim() !== '' ? textOf(draft.command).trim() : 'npx'
+        node.args = Array.isArray(draft.args) ? draft.args.slice() : []
+        const cwd = textOf(draft.cwd).trim()
+        if (cwd !== '') node.cwd = cwd
+        const env = objectFromRows(draft.envRows)
+        if (Object.keys(env).length > 0) node.env = env
+      } else {
+        node.url = textOf(draft.url).trim()
+        const headers = objectFromRows(draft.headerRows)
+        if (Object.keys(headers).length > 0) node.headers = headers
+        const oauthClientId = textOf(draft.oauthClientId).trim()
+        const oauthScopes = textOf(draft.oauthScopes).trim()
+        // Keep disabled OAuth details so switching tabs cannot silently drop them.
+        if (draft.oauthEnabled === true || oauthClientId !== '' || oauthScopes !== '') {
+          node.oauth = {
+            enabled: draft.oauthEnabled === true,
+            clientId: oauthClientId,
+            scopes: splitWhitespace(oauthScopes),
+          }
+        }
+      }
+      const timeout = integerText(draft.timeout)
+      node.toolCallTimeoutMs = timeout !== null ? timeout : 60000
+      const retries = integerText(draft.maxRetries)
+      node.maxRetries = retries !== null ? retries : 3
+      const maxInstructionBytes = integerText(draft.maxInstructionBytes)
+      node.maxInstructionBytes = maxInstructionBytes !== null ? maxInstructionBytes : 32768
+      node.failOnStartupError = draft.failOnStartupError === true
+      const reconnectInitialDelayMs = integerText(draft.reconnectInitialDelayMs)
+      const reconnectMaxDelayMs = integerText(draft.reconnectMaxDelayMs)
+      const reconnectMaxAttempts = integerText(draft.reconnectMaxAttempts)
+      node.reconnect = {
+        enabled: draft.reconnectEnabled !== false,
+        initialDelayMs: reconnectInitialDelayMs !== null ? reconnectInitialDelayMs : 500,
+        maxDelayMs: reconnectMaxDelayMs !== null ? reconnectMaxDelayMs : 30000,
+        maxAttempts: reconnectMaxAttempts !== null ? reconnectMaxAttempts : 10,
+      }
+      node.capabilities = {
+        tools: draft.capTools !== false,
+        resources: draft.capResources !== false,
+        prompts: draft.capPrompts !== false,
+      }
+      const autoApprove = splitComma(draft.autoApprove)
+      if (autoApprove.length > 0) node.autoApprove = autoApprove
+      const disabledTools = splitComma(draft.disabledTools)
+      if (disabledTools.length > 0) node.disabledTools = disabledTools
+      return node
+    }
+
+    function jsonTextOf(draft) {
+      const name = textOf(draft.serverName).trim() !== '' ? textOf(draft.serverName).trim() : '<server-id>'
+      return JSON.stringify({ mcpServers: { [name]: draftToNode(draft) } }, null, 2)
+    }
+
+    function applyJsonNode(draft, serverId, node) {
+      if (!isObject(node)) return draft
+      let transport = textOf(node.transport !== undefined ? node.transport : node.type).toLowerCase()
+      if (transport === 'http') transport = 'streamable-http'
+      if (transport !== 'stdio' && transport !== 'streamable-http' && transport !== 'sse') {
+        const url = textOf(node.url)
+        if (url !== '') transport = url.includes('/sse') ? 'sse' : 'streamable-http'
+        else transport = 'stdio'
+      }
+      const oauth = isObject(node.oauth) ? node.oauth : {}
+      const caps = isObject(node.capabilities) ? node.capabilities : {}
+      const reconnect = isObject(node.reconnect) ? node.reconnect : {}
+      const env = entriesOf(node.env)
+      const headers = entriesOf(node.headers)
+      // Keep the original array (including `!!js` marker objects) verbatim.
+      const args = Array.isArray(node.args) ? node.args.slice() : []
+      const autoApprove = Array.isArray(node.autoApprove) ? node.autoApprove.map((entry) => textOf(entry)) : []
+      const disabledTools = Array.isArray(node.disabledTools) ? node.disabledTools.map((entry) => textOf(entry)) : []
+      const scopes = Array.isArray(oauth.scopes) ? oauth.scopes.map((entry) => textOf(entry)).join(' ') : textOf(oauth.scopes)
+      const timeout = typeof node.toolCallTimeoutMs === 'number' ? node.toolCallTimeoutMs : (typeof node.timeout === 'number' ? node.timeout : 60000)
+      const retries = typeof node.maxRetries === 'number' ? node.maxRetries : 3
+      return Object.assign({}, draft, {
+        serverName: textOf(serverId),
+        description: textOf(node.description),
+        transport: transport,
+        command: textOf(node.command) !== '' ? textOf(node.command) : 'npx',
+        args: args,
+        cwd: textOf(node.cwd),
+        envRows: env.length > 0 ? env : emptyRows(),
+        url: textOf(node.url),
+        headerRows: headers.length > 0 ? headers : emptyRows(),
+        oauthEnabled: oauth.enabled === true,
+        oauthClientId: textOf(oauth.clientId),
+        oauthScopes: scopes,
+        timeout: numberTextOf(timeout, 60000),
+        maxRetries: numberTextOf(retries, 3),
+        maxInstructionBytes: numberTextOf(node.maxInstructionBytes, 32768),
+        failOnStartupError: node.failOnStartupError === true,
+        reconnectEnabled: reconnect.enabled !== false,
+        reconnectInitialDelayMs: numberTextOf(reconnect.initialDelayMs, 500),
+        reconnectMaxDelayMs: numberTextOf(reconnect.maxDelayMs, 30000),
+        reconnectMaxAttempts: numberTextOf(reconnect.maxAttempts, 10),
+        capTools: caps.tools !== false,
+        capResources: caps.resources !== false,
+        capPrompts: caps.prompts !== false,
+        autoApprove: autoApprove.join(', '),
+        disabledTools: disabledTools.join(', '),
+        enabled: node.disabled !== true,
+      })
+    }
+
+    /** A JSON value only counts as a server object when it names a transport or endpoint. */
+    function looksLikeServerNode(node) {
+      return isObject(node)
+        && (node.command !== undefined
+          || node.url !== undefined
+          || node.transport !== undefined
+          || node.type !== undefined
+          || node.serverName !== undefined
+          || node.name !== undefined)
+    }
+
+    function pickJsonNode(parsed, fallbackId) {
+      if (!isObject(parsed)) return null
+      if (parsed.mcpServers !== undefined && parsed.mcpServers !== null) {
+        const servers = parsed.mcpServers
+        if (Array.isArray(servers)) {
+          for (const entry of servers) {
+            if (!looksLikeServerNode(entry)) continue
+            const id = textOf(entry.serverName !== undefined ? entry.serverName : entry.name) || fallbackId
+            return { id: id, node: entry }
+          }
+          return null
+        }
+        if (isObject(servers)) {
+          const keys = Object.keys(servers)
+          for (const key of keys) {
+            const node = servers[key]
+            if (!looksLikeServerNode(node)) continue
+            return { id: key, node: node }
+          }
+        }
+        return null
+      }
+      if (Array.isArray(parsed.servers)) {
+        for (const entry of parsed.servers) {
+          if (!looksLikeServerNode(entry)) continue
+          const id = textOf(entry.serverName !== undefined ? entry.serverName : entry.name) || fallbackId
+          return { id: id, node: entry }
+        }
+        return null
+      }
+      if (parsed.command !== undefined || parsed.url !== undefined || parsed.transport !== undefined || parsed.type !== undefined || parsed.serverName !== undefined || parsed.name !== undefined) {
+        const id = textOf(parsed.serverName !== undefined ? parsed.serverName : parsed.name) || fallbackId
+        return { id: id, node: parsed }
+      }
+      const keys = Object.keys(parsed)
+      if (keys.length === 1 && looksLikeServerNode(parsed[keys[0]])) return { id: keys[0], node: parsed[keys[0]] }
+      return null
+    }
+
+    function buildDraft(t, draft, workspaceCount) {
+      const errors = []
+      const serverName = textOf(draft.serverName).trim()
+      if (serverName === '' || !SERVER_NAME_PATTERN.test(serverName)) errors.push(t('editor.validationName'))
+      if (draft.transport === 'sse') errors.push(t('editor.validationSse'))
+      const transport = draft.transport === 'streamable-http' ? 'streamable-http' : 'stdio'
+      // Built from the draft alone: a stale baseConfig must never override JSON edits.
+      const config = { serverName: serverName, transport: transport }
+      if (transport === 'stdio') {
+        const command = textOf(draft.command).trim()
+        if (command === '') errors.push(t('editor.validationCommand'))
+        else config.command = command
+        const args = Array.isArray(draft.args) ? draft.args.slice() : []
+        if (args.length > 0) config.args = args
+        const env = objectFromRows(draft.envRows)
+        if (Object.keys(env).length > 0) config.env = env
+        const cwd = textOf(draft.cwd).trim()
+        if (cwd !== '') config.cwd = cwd
+      } else {
+        const url = textOf(draft.url).trim()
+        if (url === '' || !/^https?:\/\//iu.test(url)) errors.push(t('editor.validationUrl'))
+        else config.url = url
+        const headers = objectFromRows(draft.headerRows)
+        if (Object.keys(headers).length > 0) config.headers = headers
+      }
+      const timeout = integerText(draft.timeout)
+      if (timeout !== null && timeout > 0) config.toolCallTimeoutMs = timeout
+      else if (textOf(draft.timeout).trim() !== '') errors.push(t('editor.validationTimeout'))
+      const maxInstructionBytes = integerText(draft.maxInstructionBytes)
+      if (maxInstructionBytes !== null && maxInstructionBytes > 0) config.maxInstructionBytes = maxInstructionBytes
+      else if (textOf(draft.maxInstructionBytes).trim() !== '') errors.push(t('editor.validationNumber'))
+      config.failOnStartupError = draft.failOnStartupError === true
+      const reconnectInitialDelayMs = integerText(draft.reconnectInitialDelayMs)
+      const reconnectMaxDelayMs = integerText(draft.reconnectMaxDelayMs)
+      const reconnectMaxAttempts = integerText(draft.reconnectMaxAttempts)
+      if (textOf(draft.reconnectInitialDelayMs).trim() !== '' && (reconnectInitialDelayMs === null || reconnectInitialDelayMs <= 0)) errors.push(t('editor.validationNumber'))
+      if (textOf(draft.reconnectMaxDelayMs).trim() !== '' && (reconnectMaxDelayMs === null || reconnectMaxDelayMs <= 0)) errors.push(t('editor.validationNumber'))
+      if (textOf(draft.reconnectMaxAttempts).trim() !== '' && (reconnectMaxAttempts === null || reconnectMaxAttempts <= 0)) errors.push(t('editor.validationNumber'))
+      config.reconnect = {
+        enabled: draft.reconnectEnabled !== false,
+        initialDelayMs: reconnectInitialDelayMs !== null && reconnectInitialDelayMs > 0 ? reconnectInitialDelayMs : 500,
+        maxDelayMs: reconnectMaxDelayMs !== null && reconnectMaxDelayMs > 0 ? reconnectMaxDelayMs : 30000,
+        maxAttempts: reconnectMaxAttempts !== null && reconnectMaxAttempts > 0 ? reconnectMaxAttempts : 10,
+      }
+      const retries = integerText(draft.maxRetries)
+      if (retries !== null && retries >= 0 && retries <= 100) {
+        // stored in `extra`, not in the Loader config
+      } else if (textOf(draft.maxRetries).trim() !== '') {
+        errors.push(t('editor.validationRetries'))
+      }
+      const workspaces = draft.scope === 'workspace' ? draft.workspaces.map((path) => textOf(path)).filter((path) => path !== '') : []
+      if (draft.scope === 'workspace' && workspaces.length === 0 && workspaceCount > 0) errors.push(t('editor.validationWorkspaces'))
+      const extra = {
+        capabilities: {
+          tools: draft.capTools !== false,
+          resources: draft.capResources !== false,
+          prompts: draft.capPrompts !== false,
+        },
+        autoApprove: splitComma(draft.autoApprove),
+        disabledTools: splitComma(draft.disabledTools),
+        oauth: {
+          enabled: draft.oauthEnabled === true,
+          clientId: textOf(draft.oauthClientId).trim(),
+          scopes: textOf(draft.oauthScopes).trim(),
+        },
+      }
+      if (retries !== null && retries >= 0 && retries <= 100) extra.maxRetries = retries
+      return {
+        errors: errors,
+        config: config,
+        extra: extra,
+        description: textOf(draft.description).trim(),
+        workspaces: workspaces,
+        enabled: draft.enabled !== false,
+        level: draft.scope === 'global' ? 'global' : 'workspace',
+      }
+    }
+
+    /* ------------------------------------------------------------------ *
+     * Key/value rows.                                                    *
+     * ------------------------------------------------------------------ */
+
+    function KeyValueList(props) {
+      const t = props.t
+      const rows = Array.isArray(props.rows) ? props.rows : []
+      const keyPlaceholder = props.kind === 'header' ? t('editor.kvKeyHeader') : t('editor.kvKeyEnv')
+      const valuePlaceholder = props.kind === 'header' ? t('editor.kvValHeader') : t('editor.kvValEnv')
+      return h(
+        'div',
+        { className: 'mm-kv-list' },
+        rows.map((row, index) => {
+          const current = isObject(row) ? row : { key: '', value: '' }
+          return h(
+            'div',
+            { className: 'mm-kv-row', key: index },
+            h(TextInput, {
+              value: current.key,
+              placeholder: keyPlaceholder,
+              mono: true,
+              onChange: (value) => props.onChange(index, 'key', value),
+            }),
+            h(TextInput, {
+              value: current.value,
+              placeholder: valuePlaceholder,
+              mono: true,
+              onChange: (value) => props.onChange(index, 'value', value),
+            }),
+            h(
+              IconButton,
+              {
+                label: t('editor.removeRow'),
+                tooltip: t('tooltip.removeRow'),
+                tone: 'plain',
+                onClick: () => props.onRemove(index),
+              },
+              h('path', { d: 'M6 18L18 6M6 6l12 12' }),
+            ),
+          )
+        }),
+      )
+    }
+
+    /* ------------------------------------------------------------------ *
+     * Editor dialog.                                                     *
+     * ------------------------------------------------------------------ */
+
+    function EditorDialog(props) {
+      const t = props.t
+      const editing = props.mode === 'edit'
+      const [draft, setDraft] = useState(() => makeDraft(props.mode, props.row))
+      // Independent editing state for the structured args textarea: typing must keep the
+      // raw text (newlines and blank lines included) instead of being re-parsed and
+      // re-rendered on every keystroke. It only becomes authoritative after a real edit
+      // (the `argsDirty` flag below); blur, submit and tab switches parse it only then,
+      // and it is regenerated from the array when data changes externally (JSON / template).
+      const [argsText, setArgsText] = useState(() => argsTextOf(makeDraft(props.mode, props.row).args))
+      // True only while the args textarea holds edits the user actually typed. Untouched
+      // arrays (opened from JSON, npx template, blur parse) keep `draft.args` authoritative,
+      // so embedded newlines and `$js` markers survive tab switches, save and test.
+      const [argsDirty, setArgsDirty] = useState(false)
+      const [mode, setMode] = useState('structured')
+      const [jsonText, setJsonText] = useState(() => jsonTextOf(makeDraft(props.mode, props.row)))
+      const [jsonFeedback, setJsonFeedback] = useState({ ok: true, text: t('editor.jsonValid') })
+      // `jsonBroken` is independent of the active tab: a failed parse blocks save/test
+      // until the text parses again or the user explicitly discards the JSON edits.
+      const [jsonBroken, setJsonBroken] = useState(false)
+      const [jsonEdited, setJsonEdited] = useState(false)
+      const [discardPrompt, setDiscardPrompt] = useState(false)
+      const [testState, setTestState] = useState({ status: 'idle', text: '' })
+      const [saving, setSaving] = useState(false)
+      const counts = isObject(props.workspaceCounts) ? props.workspaceCounts : {}
+
+      // Structured edits make the draft the source of truth again, so the JSON tab may be
+      // regenerated the next time it is opened.
+      const setField = (key, value) => {
+        setJsonEdited(false)
+        setDraft((previous) => Object.assign({}, previous, { [key]: value }))
+      }
+      const updateKv = (kind, index, field, value) => {
+        setJsonEdited(false)
+        setDraft((previous) => {
+          const rowsKey = kind === 'header' ? 'headerRows' : 'envRows'
+          const rows = Array.isArray(previous[rowsKey]) ? previous[rowsKey].slice() : []
+          const current = isObject(rows[index]) ? Object.assign({}, rows[index]) : { key: '', value: '' }
+          current[field] = value
+          rows[index] = current
+          return Object.assign({}, previous, { [rowsKey]: rows })
+        })
+      }
+      const addKv = (kind) => {
+        setJsonEdited(false)
+        setDraft((previous) => {
+          const rowsKey = kind === 'header' ? 'headerRows' : 'envRows'
+          const rows = Array.isArray(previous[rowsKey]) ? previous[rowsKey].slice() : []
+          rows.push({ key: '', value: '' })
+          return Object.assign({}, previous, { [rowsKey]: rows })
+        })
+      }
+      const removeKv = (kind, index) => {
+        setJsonEdited(false)
+        setDraft((previous) => {
+          const rowsKey = kind === 'header' ? 'headerRows' : 'envRows'
+          const rows = Array.isArray(previous[rowsKey]) ? previous[rowsKey].slice() : []
+          rows.splice(index, 1)
+          if (rows.length === 0) rows.push({ key: '', value: '' })
+          return Object.assign({}, previous, { [rowsKey]: rows })
+        })
+      }
+
+      const parseJson = (text, announce) => {
+        let parsed = null
+        try {
+          parsed = JSON.parse(text)
+        } catch (failure) {
+          setJsonBroken(true)
+          setJsonFeedback({ ok: false, text: t('editor.jsonInvalid', { message: messageOf(failure) }) })
+          return null
+        }
+        const picked = pickJsonNode(parsed, textOf(draft.serverName).trim() !== '' ? textOf(draft.serverName).trim() : 'shared-mcp-server')
+        if (picked === null) {
+          setJsonBroken(true)
+          setJsonFeedback({ ok: false, text: t('editor.jsonShape') })
+          return null
+        }
+        const next = applyJsonNode(draft, picked.id, picked.node)
+        setDraft(next)
+        // External data change: re-render the args control from the parsed array.
+        setArgsText(argsTextOf(next.args))
+        setArgsDirty(false)
+        setJsonBroken(false)
+        // A successful parse clears the "JSON syntax is broken" confirmation bar.
+        setDiscardPrompt(false)
+        if (next.transport === 'sse') {
+          setJsonFeedback({ ok: false, text: t('editor.validationSse') })
+        } else {
+          setJsonFeedback({ ok: true, text: announce === true ? t('editor.jsonParsed', { name: picked.id }) : t('editor.jsonValid') })
+        }
+        return next
+      }
+
+      /** Explicit reset: drop the JSON edits and regenerate the text from the form draft. */
+      const resetJsonFromDraft = () => {
+        setJsonEdited(false)
+        setJsonText(jsonTextOf(draft))
+        setJsonBroken(false)
+        setJsonFeedback({ ok: true, text: t('editor.jsonValid') })
+        setDiscardPrompt(false)
+      }
+
+      const switchMode = (next) => {
+        if (next === mode) return
+        if (next === 'json') {
+          // Only a textarea the user actually typed into is authoritative: parse it once
+          // (a manual edit may legitimately split one line per argument) and regenerate
+          // the JSON from the resulting array so the displayed value matches the submit.
+          let syncedDraft = draft
+          if (argsDirty === true) {
+            syncedDraft = Object.assign({}, draft, { args: argsFromText(argsText) })
+            setDraft(syncedDraft)
+            setArgsDirty(false)
+            setJsonEdited(false)
+            setJsonText(jsonTextOf(syncedDraft))
+            setJsonBroken(false)
+            setJsonFeedback({ ok: true, text: t('editor.jsonValid') })
+          } else if (jsonEdited !== true) {
+            // Untouched args keep `draft.args` verbatim (embedded newlines, `$js` markers);
+            // user-entered JSON is never overwritten by a stale form draft.
+            setJsonText(jsonTextOf(syncedDraft))
+            setJsonBroken(false)
+            setJsonFeedback({ ok: true, text: t('editor.jsonValid') })
+          }
+          setDiscardPrompt(false)
+          setMode('json')
+          return
+        }
+        // Invalid JSON blocks the structured form too; switching back requires an explicit
+        // confirmation that discards the JSON edits (and therefore clears the error state).
+        if (jsonBroken === true) {
+          setDiscardPrompt(true)
+          return
+        }
+        let nextDraft = draft
+        if (jsonEdited === true) {
+          const parsed = parseJson(jsonText, false)
+          if (parsed === null) return
+          nextDraft = parsed
+        }
+        // The structured textarea must never re-parse its stale text here: refresh it
+        // from the parsed array so JSON-only values (embedded newlines, `$js` markers)
+        // survive the tab switch, and drop any pending textarea edit flag.
+        setArgsText(argsTextOf(nextDraft.args))
+        setArgsDirty(false)
+        setDiscardPrompt(false)
+        setMode('structured')
+      }
+
+      const onJsonChange = (value) => {
+        setJsonEdited(true)
+        setJsonText(value)
+        parseJson(value, false)
+      }
+
+      const formatJson = () => {
+        setJsonEdited(true)
+        let parsed = null
+        try {
+          parsed = JSON.parse(jsonText)
+        } catch (failure) {
+          setJsonBroken(true)
+          setJsonFeedback({ ok: false, text: t('editor.jsonInvalid', { message: messageOf(failure) }) })
+          return
+        }
+        const formatted = JSON.stringify(parsed, null, 2)
+        setJsonText(formatted)
+        // Formatting is not a validation bypass: run the full parse/shape check again.
+        const next = parseJson(formatted, false)
+        if (next !== null && next.transport !== 'sse') {
+          setJsonFeedback({ ok: true, text: t('editor.jsonFormatted') })
+        }
+      }
+
+      const pasteSample = () => {
+        const sample = {
+          mcpServers: {
+            'playwright-browser-automation': {
+              description: '社区分享的端到端网页自动化与截图取证 MCP 服务',
+              transport: 'stdio',
+              command: 'npx',
+              args: ['-y', '@executeautomation/playwright-mcp-server', '--headless'],
+              env: { BROWSER_WIDTH: '1440', BROWSER_HEIGHT: '900' },
+              timeout: 45000,
+              maxRetries: 2,
+              autoApprove: ['playwright_navigate', 'playwright_screenshot', 'playwright_click'],
+            },
+          },
+        }
+        const text = JSON.stringify(sample, null, 2)
+        setJsonEdited(true)
+        setJsonText(text)
+        parseJson(text, true)
+        if (typeof props.onToast === 'function') props.onToast('success', t('editor.jsonSample'))
+      }
+
+      const copyJson = async () => {
+        const copied = await copyText(jsonText)
+        if (typeof props.onToast === 'function') props.onToast(copied ? 'success' : 'warning', copied ? t('editor.jsonCopied') : t('action.copyFailed'))
+      }
+
+      const fillNpx = () => {
+        setJsonEdited(false)
+        const templateArgs = ['-y', '@modelcontextprotocol/server-brave-search']
+        setDraft((previous) => Object.assign({}, previous, {
+          command: 'npx',
+          args: templateArgs,
+          envRows: [{ key: 'BRAVE_API_KEY', value: '' }],
+        }))
+        // External data change: re-render the args control from the template array.
+        setArgsText(argsTextOf(templateArgs))
+        setArgsDirty(false)
+        if (typeof props.onToast === 'function') props.onToast('info', t('editor.npxFilled'))
+      }
+
+      const discardJson = () => {
+        resetJsonFromDraft()
+        setMode('structured')
+      }
+
+      const validate = () => {
+        // The textarea only overrides `draft.args` after a real user edit. When it was
+        // filled from JSON (or the npx template) it may not be able to express embedded
+        // newlines, so re-deriving would split arguments and drop `$js` markers.
+        const syncedDraft = argsDirty === true
+          ? Object.assign({}, draft, { args: argsFromText(argsText) })
+          : draft
+        if (argsDirty === true) setDraft(syncedDraft)
+        const built = buildDraft(t, syncedDraft, Array.isArray(props.workspaces) ? props.workspaces.length : 0)
+        if (built.errors.length > 0) {
+          if (typeof props.onToast === 'function') props.onToast('warning', built.errors[0])
+          return null
+        }
+        return built
+      }
+
+      // A failed JSON parse blocks saving/testing regardless of the active tab.
+      const jsonBlocked = jsonBroken === true
+
+      const testDraft = async () => {
+        if (jsonBlocked) {
+          if (typeof props.onToast === 'function') props.onToast('warning', t('editor.jsonBlocked'))
+          return
+        }
+        const built = validate()
+        if (built === null) return
+        setTestState({ status: 'testing', text: t('state.testing') })
+        try {
+          const payload = await callApi('probe', { config: built.config })
+          const result = payload.result !== undefined ? payload.result : null
+          if (isObject(result) && result.ok === true) {
+            const ms = typeof result.durationMs === 'number' && Number.isFinite(result.durationMs) ? Math.round(result.durationMs) : 0
+            const tools = typeof result.toolCount === 'number' && Number.isFinite(result.toolCount) ? result.toolCount : 0
+            const version = textOf(result.protocolVersion) !== '' ? result.protocolVersion : DASH
+            setTestState({ status: 'ok', text: t('editor.testOk', { ms: ms, version: version, tools: tools }) })
+          } else {
+            const message = isObject(result) && isObject(result.error) && textOf(result.error.message) !== '' ? result.error.message : t('state.unknownError')
+            setTestState({ status: 'err', text: t('editor.testFail', { message: message }) })
+          }
+        } catch (failure) {
+          setTestState({ status: 'err', text: t('editor.testFail', { message: describeError(t, failure) }) })
+        }
+      }
+
+      const submit = async () => {
+        if (jsonBlocked) {
+          if (typeof props.onToast === 'function') props.onToast('warning', t('editor.jsonBlocked'))
+          return
+        }
+        const built = validate()
+        if (built === null) return
+        const workspaces = built.workspaces
+        const args = editing
+          ? {
+            id: props.row.id,
+            level: props.row.level,
+            config: built.config,
+            enabled: built.enabled,
+            workspaces: workspaces,
+            description: built.description,
+            extra: built.extra,
+          }
+          : {
+            level: built.level,
+            config: built.config,
+            enabled: built.enabled,
+            workspaces: workspaces,
+            description: built.description,
+            extra: built.extra,
+          }
+        setSaving(true)
+        await props.onSubmit(args)
+        setSaving(false)
+      }
+
+      const selectedNames = draft.workspaces.map((path) => workspaceLabel(props.workspaces, path)).join('、')
+      const profilePatch = textOf(props.profilePatch) !== '' ? props.profilePatch : t('config.unknownPath')
+      const homePatch = textOf(props.homePatch) !== '' ? props.homePatch : t('config.unknownPath')
+      const mergePreview = draft.scope === 'global'
+        ? h('div', { className: 'mm-merge-preview mm-global-hint' }, t('editor.mergePreviewGlobal', { path: homePatch }))
+        : draft.workspaces.length === 0
+          ? h('div', { className: 'mm-merge-preview mm-merge-empty' }, t('editor.mergeEmpty'))
+          : h('div', { className: 'mm-merge-preview' }, t('editor.mergePreview', {
+            names: selectedNames,
+            path: profilePatch,
+          }))
+
+      const scopeCard = h(
+        'div',
+        { className: 'mm-scope-card' },
+        h(
+          'div',
+          { className: 'mm-scope-head' },
+          h(
+            'div',
+            null,
+            h(
+              'div',
+              { className: 'mm-scope-title' },
+              h('span', null, t('editor.scopeTitle')),
+              h('span', { className: 'mm-scope-badge' }, t('editor.scopeBadge')),
+            ),
+            h('p', { className: 'mm-scope-hint' }, t('editor.scopeHint')),
+          ),
+          h(Segmented, {
+            value: draft.scope,
+            ariaLabel: t('editor.scopeTitle'),
+            disabled: editing,
+            options: [
+              { value: 'workspace', label: t('editor.scopeWorkspace'), nativeTitle: editing ? t('editor.scopeLocked') : undefined },
+              { value: 'global', label: t('editor.scopeGlobal'), nativeTitle: editing ? t('editor.scopeLocked') : undefined },
+            ],
+            onChange: (value) => setField('scope', value),
+          }),
+        ),
+        draft.scope === 'workspace'
+          ? h(
+            Fragment,
+            null,
+            h(
+              'div',
+              { className: 'mm-ws-grid' },
+              Array.isArray(props.workspaces) && props.workspaces.length > 0
+                ? props.workspaces.map((workspace) => {
+                  const path = textOf(workspace.path)
+                  const checked = draft.workspaces.includes(path)
+                  const count = counts[path] !== undefined ? counts[path] : 0
+                  return h(
+                    'label',
+                    { key: path !== '' ? path : workspace.id, className: 'mm-ws-option' + (checked ? ' mm-ws-option-active' : ''), title: path },
+                    h('input', {
+                      type: 'checkbox',
+                      checked: checked,
+                      onChange: (event) => {
+                        if (event.target.checked) setField('workspaces', draft.workspaces.includes(path) ? draft.workspaces : draft.workspaces.concat([path]))
+                        else setField('workspaces', draft.workspaces.filter((entry) => entry !== path))
+                      },
+                    }),
+                    h(
+                      'div',
+                      { className: 'mm-ws-option-body' },
+                      h('div', { className: 'mm-ws-option-label' }, workspaceLabel(props.workspaces, path)),
+                      h('div', { className: 'mm-ws-option-sub' }, t('editor.wsExisting', { count: count })),
+                    ),
+                  )
+                })
+                : h('p', { className: 'mm-hint' }, t('editor.wsEmpty')),
+            ),
+            mergePreview,
+          )
+          : mergePreview,
+      )
+
+      const transportCards = [
+        { value: 'stdio', badge: t('editor.transportStdioBadge'), desc: t('editor.transportStdioDesc'), disabled: false },
+        { value: 'streamable-http', badge: t('editor.transportHttpBadge'), desc: t('editor.transportHttpDesc'), disabled: false },
+        { value: 'sse', badge: t('editor.transportSseBadge'), desc: t('editor.transportSseDesc'), disabled: true },
+      ]
+
+      const structured = h(
+        'div',
+        { className: 'mm-form' },
+        h(
+          'div',
+          { className: 'mm-form-section' },
+          h('div', { className: 'mm-form-title' }, t('editor.section1')),
+          h(
+            'div',
+            { className: 'mm-grid2' },
+            h(
+              Field,
+              {
+                label: h(Fragment, null, t('editor.serverId'), h('span', { className: 'mm-required', 'aria-label': t('editor.required') }, '*')),
+              },
+              h(TextInput, {
+                value: draft.serverName,
+                placeholder: t('editor.serverIdPlaceholder'),
+                mono: true,
+                onChange: (value) => setField('serverName', value),
+              }),
+            ),
+            h(
+              Field,
+              { label: t('editor.description') },
+              h(TextInput, {
+                value: draft.description,
+                placeholder: t('editor.descriptionPlaceholder'),
+                onChange: (value) => setField('description', value),
+              }),
+            ),
+          ),
+          h(
+            'div',
+            { className: 'mm-field' },
+            h('span', { className: 'mm-field-label' }, t('editor.transport'), h('span', { className: 'mm-required', 'aria-label': t('editor.required') }, '*')),
+            h(
+              'div',
+              { className: 'mm-transport-grid' },
+              transportCards.map((card) => h(
+                'button',
+                {
+                  key: card.value,
+                  type: 'button',
+                  className: 'mm-transport-card'
+                    + (draft.transport === card.value ? ' mm-transport-card-active' : '')
+                    + (card.disabled ? ' mm-transport-card-disabled' : ''),
+                  disabled: card.disabled,
+                  onClick: () => setField('transport', card.value),
+                },
+                h(
+                  'div',
+                  { className: 'mm-transport-head' },
+                  h('span', { className: 'mm-transport-name mm-mono' }, card.value),
+                  h('span', { className: 'mm-transport-badge' }, card.badge),
+                ),
+                h('p', { className: 'mm-transport-desc' }, card.desc),
+              )),
+            ),
+            h('p', { className: 'mm-hint' }, t('editor.sseUnsupported')),
+          ),
+        ),
+        draft.transport === 'stdio'
+          ? h(
+            'div',
+            { className: 'mm-form-section' },
+            h('div', { className: 'mm-form-title' }, t('editor.section2stdio')),
+            h(
+              'div',
+              { className: 'mm-grid3' },
+              h(
+                Field,
+                { label: h(Fragment, null, t('editor.command'), h('span', { className: 'mm-required', 'aria-label': t('editor.required') }, '*')) },
+                h(TextInput, {
+                  value: draft.command,
+                  placeholder: t('editor.commandPlaceholder'),
+                  mono: true,
+                  onChange: (value) => setField('command', value),
+                }),
+              ),
+              h(
+                'div',
+                { className: 'mm-col-2' },
+                h(
+                  Field,
+                  { label: t('editor.cwd') },
+                  h(TextInput, {
+                    value: draft.cwd,
+                    placeholder: t('editor.cwdPlaceholder'),
+                    mono: true,
+                    onChange: (value) => setField('cwd', value),
+                  }),
+                ),
+              ),
+            ),
+            h(
+              'div',
+              { className: 'mm-field' },
+              h(
+                'div',
+                { className: 'mm-field-head' },
+                h('span', { className: 'mm-field-label' }, t('editor.args')),
+                h('button', { type: 'button', className: 'mm-link', onClick: fillNpx }, t('action.fillNpx')),
+              ),
+              h(TextArea, {
+                value: argsText,
+                rows: 3,
+                mono: true,
+                onChange: (value) => {
+                  setJsonEdited(false)
+                  setArgsText(value)
+                  // A real keystroke is the only thing that makes the text authoritative.
+                  setArgsDirty(true)
+                },
+                // Blur is a parse point for text the user typed; the raw text (with
+                // newlines) stays on screen. An untouched control is never re-parsed, so
+                // JSON arrays with embedded newlines survive a focus/blur round-trip.
+                onBlur: () => {
+                  if (argsDirty !== true) return
+                  setDraft((previous) => Object.assign({}, previous, { args: argsFromText(argsText) }))
+                  setArgsDirty(false)
+                },
+              }),
+            ),
+            h(
+              'div',
+              { className: 'mm-field' },
+              h(
+                'div',
+                { className: 'mm-field-head' },
+                h('span', { className: 'mm-field-label' }, t('editor.env')),
+                h('button', { type: 'button', className: 'mm-link', onClick: () => addKv('env') }, t('action.addEnv')),
+              ),
+              h(KeyValueList, {
+                t: t,
+                kind: 'env',
+                rows: draft.envRows,
+                onChange: (index, field, value) => updateKv('env', index, field, value),
+                onRemove: (index) => removeKv('env', index),
+              }),
+            ),
+          )
+          : h(
+            'div',
+            { className: 'mm-form-section' },
+            h('div', { className: 'mm-form-title' }, t('editor.section2remote')),
+            h(
+              Field,
+              { label: h(Fragment, null, t('editor.url'), h('span', { className: 'mm-required', 'aria-label': t('editor.required') }, '*')) },
+              h(TextInput, {
+                value: draft.url,
+                placeholder: t('editor.urlPlaceholder'),
+                mono: true,
+                onChange: (value) => setField('url', value),
+              }),
+            ),
+            h(
+              'div',
+              { className: 'mm-field' },
+              h(
+                'div',
+                { className: 'mm-field-head' },
+                h('span', { className: 'mm-field-label' }, t('editor.headers')),
+                h('button', { type: 'button', className: 'mm-link', onClick: () => addKv('header') }, t('action.addHeader')),
+              ),
+              h(KeyValueList, {
+                t: t,
+                kind: 'header',
+                rows: draft.headerRows,
+                onChange: (index, field, value) => updateKv('header', index, field, value),
+                onRemove: (index) => removeKv('header', index),
+              }),
+            ),
+            h(
+              'div',
+              { className: 'mm-oauth' },
+              h(
+                'div',
+                { className: 'mm-oauth-head' },
+                h(
+                  'div',
+                  null,
+                  h('div', { className: 'mm-oauth-title' }, t('editor.oauth')),
+                  h('div', { className: 'mm-oauth-hint' }, t('editor.oauthHint')),
+                ),
+                h('input', {
+                  type: 'checkbox',
+                  checked: draft.oauthEnabled,
+                  'aria-label': t('editor.oauth'),
+                  onChange: (event) => setField('oauthEnabled', event.target.checked),
+                }),
+              ),
+              draft.oauthEnabled
+                ? h(
+                  'div',
+                  { className: 'mm-oauth-detail' },
+                  h(
+                    Field,
+                    { label: t('editor.oauthClientId') },
+                    h(TextInput, {
+                      value: draft.oauthClientId,
+                      placeholder: t('editor.oauthClientIdPlaceholder'),
+                      mono: true,
+                      onChange: (value) => setField('oauthClientId', value),
+                    }),
+                  ),
+                  h(
+                    Field,
+                    { label: t('editor.oauthScopes') },
+                    h(TextInput, {
+                      value: draft.oauthScopes,
+                      placeholder: t('editor.oauthScopesPlaceholder'),
+                      mono: true,
+                      onChange: (value) => setField('oauthScopes', value),
+                    }),
+                  ),
+                )
+                : null,
+            ),
+          ),
+        h(
+          'div',
+          { className: 'mm-form-section' },
+          h('div', { className: 'mm-form-title' }, t('editor.section3')),
+          h(
+            'div',
+            { className: 'mm-grid3' },
+            h(
+              Field,
+              { label: t('editor.timeout') },
+              h(TextInput, {
+                type: 'number',
+                value: draft.timeout,
+                min: 0,
+                step: 1000,
+                mono: true,
+                onChange: (value) => setField('timeout', value),
+              }),
+            ),
+            h(
+              Field,
+              { label: t('editor.retries') },
+              h(TextInput, {
+                type: 'number',
+                value: draft.maxRetries,
+                min: 0,
+                max: 100,
+                mono: true,
+                onChange: (value) => setField('maxRetries', value),
+              }),
+            ),
+            h(
+              'div',
+              { className: 'mm-field' },
+              h('span', { className: 'mm-field-label' }, t('editor.capabilities')),
+              h(
+                'div',
+                { className: 'mm-cap-box' },
+                h(Checkbox, { checked: draft.capTools, label: t('editor.capTools'), onChange: (value) => setField('capTools', value) }),
+                h(Checkbox, { checked: draft.capResources, label: t('editor.capResources'), onChange: (value) => setField('capResources', value) }),
+                h(Checkbox, { checked: draft.capPrompts, label: t('editor.capPrompts'), onChange: (value) => setField('capPrompts', value) }),
+              ),
+            ),
+          ),
+          h(
+            'div',
+            { className: 'mm-grid2' },
+            h(
+              Field,
+              { label: t('editor.autoApprove') },
+              h(TextInput, {
+                value: draft.autoApprove,
+                placeholder: t('editor.autoApprovePlaceholder'),
+                mono: true,
+                onChange: (value) => setField('autoApprove', value),
+              }),
+            ),
+            h(
+              Field,
+              { label: t('editor.disabledTools') },
+              h(TextInput, {
+                value: draft.disabledTools,
+                placeholder: t('editor.disabledToolsPlaceholder'),
+                mono: true,
+                onChange: (value) => setField('disabledTools', value),
+              }),
+            ),
+          ),
+          h(
+            'div',
+            { className: 'mm-grid3' },
+            h(
+              Field,
+              { label: t('editor.maxInstructionBytes') },
+              h(TextInput, {
+                type: 'number',
+                value: draft.maxInstructionBytes,
+                min: 0,
+                mono: true,
+                onChange: (value) => setField('maxInstructionBytes', value),
+              }),
+            ),
+            h(
+              Field,
+              { label: t('editor.reconnectInitialDelayMs') },
+              h(TextInput, {
+                type: 'number',
+                value: draft.reconnectInitialDelayMs,
+                min: 0,
+                mono: true,
+                onChange: (value) => setField('reconnectInitialDelayMs', value),
+              }),
+            ),
+            h(
+              Field,
+              { label: t('editor.reconnectMaxDelayMs') },
+              h(TextInput, {
+                type: 'number',
+                value: draft.reconnectMaxDelayMs,
+                min: 0,
+                mono: true,
+                onChange: (value) => setField('reconnectMaxDelayMs', value),
+              }),
+            ),
+          ),
+          h(
+            'div',
+            { className: 'mm-grid2' },
+            h(
+              Field,
+              { label: t('editor.reconnectMaxAttempts') },
+              h(TextInput, {
+                type: 'number',
+                value: draft.reconnectMaxAttempts,
+                min: 0,
+                mono: true,
+                onChange: (value) => setField('reconnectMaxAttempts', value),
+              }),
+            ),
+            h(
+              'div',
+              { className: 'mm-field' },
+              h('span', { className: 'mm-field-label' }, t('editor.reconnect')),
+              h(
+                'div',
+                { className: 'mm-cap-box' },
+                h(Checkbox, { checked: draft.reconnectEnabled, label: t('editor.reconnectEnabled'), onChange: (value) => setField('reconnectEnabled', value) }),
+                h(Checkbox, { checked: draft.failOnStartupError, label: t('editor.failOnStartupError'), onChange: (value) => setField('failOnStartupError', value) }),
+              ),
+            ),
+          ),
+        ),
+      )
+
+      const jsonPanel = h(
+        'div',
+        { className: 'mm-json-panel' },
+        h(
+          'div',
+          { className: 'mm-json-toolbar' },
+          h('span', { className: 'mm-json-hint' }, t('editor.jsonHint')),
+          h(
+            'div',
+            { className: 'mm-json-actions' },
+            h(Button, { size: 'sm', variant: 'warn', onClick: pasteSample }, t('action.pasteSample')),
+            h(Button, { size: 'sm', variant: 'ghost', onClick: formatJson }, t('action.formatJson')),
+            h(Button, { size: 'sm', variant: 'ghost', onClick: copyJson }, t('action.copyConfig')),
+          ),
+        ),
+        h(TextArea, {
+          value: jsonText,
+          rows: 14,
+          mono: true,
+          fill: true,
+          placeholder: t('editor.jsonPlaceholder'),
+          onChange: onJsonChange,
+        }),
+        h(
+          'div',
+          { className: 'mm-json-feedback' + (jsonFeedback.ok === true ? ' mm-json-feedback-ok' : ' mm-json-feedback-err'), role: 'status' },
+          h('span', null, jsonFeedback.text),
+          jsonBroken === true
+            ? h('button', { type: 'button', className: 'mm-link', onClick: resetJsonFromDraft }, t('editor.jsonReset'))
+            : null,
+        ),
+        discardPrompt === true
+          ? h(
+            'div',
+            { className: 'mm-json-confirm', role: 'alert' },
+            h('span', { className: 'mm-json-confirm-text' }, t('editor.jsonDiscardConfirm')),
+            h(Button, { size: 'sm', variant: 'ghost', onClick: () => setDiscardPrompt(false) }, t('editor.jsonDiscardNo')),
+            h(Button, { size: 'sm', variant: 'warn', onClick: discardJson }, t('editor.jsonDiscardYes')),
+          )
+          : null,
+      )
+
+      const testText = testState.status === 'idle' ? '' : testState.text
+      const testClass = testState.status === 'ok' ? ' mm-test-ok' : testState.status === 'err' ? ' mm-test-err' : testState.status === 'testing' ? ' mm-test-warn' : ''
+
+      return h(
+        Dialog,
+        {
+          title: editing ? t('editor.editTitle', { name: props.row.serverName }) : t('editor.addTitle'),
+          subtitle: t('editor.subtitle'),
+          closeLabel: t('action.closeDialog'),
+          closeTooltip: t('tooltip.closeDialog'),
+          onClose: props.onClose,
+          returnFocus: props.returnFocus,
+          size: 'editor',
+          headerExtra: h(Segmented, {
+            value: mode,
+            ariaLabel: t('editor.tabStructured'),
+            options: [
+              {
+                value: 'structured',
+                label: h(Fragment, null, h('svg', { className: 'mm-seg-icon', viewBox: '0 0 24 24', width: 13, height: 13, fill: 'none', stroke: 'currentColor', strokeWidth: 2, strokeLinecap: 'round', strokeLinejoin: 'round', 'aria-hidden': 'true' }, h('path', { d: 'M4 6h16M4 12h16M4 18h10' })), h('span', null, t('editor.tabStructured'))),
+              },
+              {
+                value: 'json',
+                label: h(Fragment, null, h('svg', { className: 'mm-seg-icon', viewBox: '0 0 24 24', width: 13, height: 13, fill: 'none', stroke: 'currentColor', strokeWidth: 2, strokeLinecap: 'round', strokeLinejoin: 'round', 'aria-hidden': 'true' }, h('path', { d: 'M10 20l4-16m4 4l4 4-4 4M6 16l-4-4 4-4' })), h('span', null, t('editor.tabJson'))),
+              },
+            ],
+            onChange: switchMode,
+          }),
+          footer: h(
+            Fragment,
+            null,
+            h(
+              'div',
+              { className: 'mm-foot-left' },
+              h(
+                Button,
+                { onClick: testDraft, disabled: testState.status === 'testing' || saving === true || jsonBlocked === true },
+                h('svg', { className: 'mm-icon', viewBox: '0 0 24 24', width: 14, height: 14, fill: 'none', stroke: 'currentColor', strokeWidth: 2, strokeLinecap: 'round', strokeLinejoin: 'round', 'aria-hidden': 'true' }, h('path', { d: 'M13 10V3L4 14h7v7l9-11h-7z' })),
+                h('span', null, t('action.testBeforeSave')),
+              ),
+              h('span', { className: 'mm-test-text' + testClass, title: testText !== '' ? testText : undefined }, testText),
+              h('span', { className: 'mm-sync-hint' }, t('editor.syncHint')),
+            ),
+            h(
+              'div',
+              { className: 'mm-foot-right' },
+              h(Button, { onClick: props.onClose }, t('action.cancel')),
+              h(
+                Button,
+                { variant: 'primary', onClick: submit, disabled: saving === true || jsonBlocked === true },
+                saving === true ? t('state.saving') : t('action.save'),
+              ),
+            ),
+          ),
+        },
+        scopeCard,
+        mode === 'structured' ? structured : jsonPanel,
+      )
+    }
+
+    /* ------------------------------------------------------------------ *
+     * Manage-workspaces dialog.                                          *
+     * ------------------------------------------------------------------ */
+
+    function ManageDialog(props) {
+      const t = props.t
+      const row = props.row
+      const [selected, setSelected] = useState(() => Array.isArray(row.workspaces) ? row.workspaces.map((path) => textOf(path)).filter((path) => path !== '') : [])
+      const [targetLevel, setTargetLevel] = useState(row.level === 'global' ? 'global' : 'workspace')
+      const [movedRow, setMovedRow] = useState(null)
+      const [busy, setBusy] = useState(false)
+      const [error, setError] = useState('')
+      const counts = isObject(props.workspaceCounts) ? props.workspaceCounts : {}
+      const current = movedRow !== null && movedRow !== undefined ? movedRow : row
+      const currentLevel = current.level === 'global' ? 'global' : 'workspace'
+      const toggle = (path, checked) => {
+        if (checked) setSelected((previous) => previous.includes(path) ? previous : previous.concat([path]))
+        else setSelected((previous) => previous.filter((entry) => entry !== path))
+      }
+      const save = async () => {
+        setBusy(true)
+        setError('')
+        let effective = current
+        if (targetLevel !== currentLevel) {
+          const moved = await props.onMove(targetLevel, current)
+          if (moved === null || moved === undefined || moved.ok !== true) {
+            setBusy(false)
+            setError(moved !== null && moved !== undefined && typeof moved.error === 'string' && moved.error !== '' ? moved.error : t('state.operationFailed'))
+            return
+          }
+          if (moved.row !== null && moved.row !== undefined) {
+            effective = moved.row
+            setMovedRow(moved.row)
+          }
+        }
+        const result = await props.onSave(selected, effective)
+        setBusy(false)
+        if (result !== null && result !== undefined && result.ok === true) props.onClose()
+        else if (result !== null && result !== undefined && typeof result.error === 'string' && result.error !== '') setError(result.error)
+      }
+      const globalChecked = targetLevel === 'global'
+      const globalTitle = currentLevel === 'global' && globalChecked !== true ? t('manage.toWorkspace') : t('manage.global')
+      const globalHint = targetLevel === 'global' ? t('manage.globalHint') : t('manage.workspaceHint')
+      return h(
+        Dialog,
+        {
+          title: t('manage.title'),
+          subtitle: t('manage.subtitle'),
+          closeLabel: t('action.closeManage'),
+          closeTooltip: t('tooltip.closeManage'),
+          onClose: props.onClose,
+          returnFocus: props.returnFocus,
+          size: 'manage',
+          footer: h(
+            Fragment,
+            null,
+            h(Button, { onClick: props.onClose }, t('action.cancel')),
+            h(Button, { variant: 'brand', onClick: save, disabled: busy === true }, busy === true ? t('state.saving') : t('action.saveWorkspaces')),
+          ),
+        },
+        h(
+          'div',
+          { className: 'mm-manage-target' },
+          h('span', { className: 'mm-muted' }, t('manage.target')),
+          h('strong', { className: 'mm-card-id mm-mono' }, current.serverName),
+          h(Chip, { tone: 'neutral', className: 'mm-chip-mono' }, transportOf(current.config)),
+        ),
+        h(
+          'label',
+          { className: 'mm-manage-global' },
+          h('input', {
+            type: 'checkbox',
+            checked: globalChecked,
+            disabled: busy === true,
+            onChange: (event) => {
+              setTargetLevel(event.target.checked ? 'global' : 'workspace')
+              setError('')
+            },
+          }),
+          h(
+            'div',
+            null,
+            h(
+              'div',
+              { className: 'mm-manage-global-title' },
+              h('span', null, globalTitle),
+              h('span', { className: 'mm-scope-badge' }, t('manage.globalBadge')),
+            ),
+            h('div', { className: 'mm-manage-global-hint' }, globalHint),
+          ),
+        ),
+        error !== ''
+          ? h('p', { className: 'mm-hint mm-danger-text' }, t('state.operationFailed') + ': ' + error)
+          : null,
+        h(
+          'div',
+          { className: 'mm-manage-specific' },
+          h('div', { className: 'mm-manage-specific-title' }, t('manage.specific')),
+          Array.isArray(props.workspaces) && props.workspaces.length > 0
+            ? h(
+              'div',
+              { className: 'mm-manage-list' },
+              props.workspaces.map((workspace) => {
+                const path = textOf(workspace.path)
+                const checked = selected.includes(path)
+                const count = counts[path] !== undefined ? counts[path] : 0
+                return h(
+                  'label',
+                  { key: path !== '' ? path : workspace.id, className: 'mm-manage-ws' + (checked ? ' mm-manage-ws-active' : ''), title: path },
+                  h('input', {
+                    type: 'checkbox',
+                    checked: checked,
+                    onChange: (event) => toggle(path, event.target.checked),
+                  }),
+                  h(
+                    'div',
+                    { className: 'mm-manage-ws-body' },
+                    h('div', { className: 'mm-manage-ws-title' }, workspaceLabel(props.workspaces, path)),
+                    h('div', { className: 'mm-manage-ws-path mm-mono' }, path),
+                  ),
+                  h('span', { className: 'mm-manage-count' }, t('manage.existing', { count: count })),
+                )
+              }),
+            )
+            : h('p', { className: 'mm-hint' }, t('manage.empty')),
+        ),
+        h('div', { className: 'mm-manage-note' }, t('manage.note')),
+      )
+    }
+
+    /* ------------------------------------------------------------------ *
+     * Delete dialogs.                                                    *
+     * ------------------------------------------------------------------ */
+
+    function DeleteDialog(props) {
+      const t = props.t
+      const row = props.row
+      const [mode, setMode] = useState('current')
+      const [busy, setBusy] = useState(false)
+      const workspaces = Array.isArray(row.workspaces) ? row.workspaces.map((path) => textOf(path)).filter((path) => path !== '') : []
+      const multi = row.level === 'workspace' && workspaces.length > 1
+      const names = workspaces.map((path) => workspaceLabel(props.workspaces, path)).join('、')
+      const scope = row.level === 'global' ? t('delete.descGlobalScope') : t('delete.descWorkspaceScope')
+      const description = multi
+        ? t('delete.descMulti', { name: row.serverName, names: names })
+        : t('delete.descSingle', { name: row.serverName, scope: scope })
+      const currentTitle = row.level === 'global' ? t('delete.optCurrentGlobal') : t('delete.optCurrent')
+      const currentSub = row.level === 'global' ? t('delete.optCurrentGlobalSub') : t('delete.optCurrentSub')
+      const allTitle = row.level === 'global' ? t('delete.optAllGlobal') : t('delete.optAll')
+      const allSub = row.level === 'global' ? t('delete.optAllGlobalSub') : t('delete.optAllSub')
+      const confirm = async () => {
+        setBusy(true)
+        const result = await props.onConfirm(mode)
+        setBusy(false)
+        if (result !== null && result !== undefined && result.ok === true) props.onClose()
+      }
+      return h(
+        Dialog,
+        {
+          title: t('delete.title'),
+          closeLabel: t('action.closeDialog'),
+          closeTooltip: t('tooltip.closeDialog'),
+          onClose: props.onClose,
+          returnFocus: props.returnFocus,
+          size: 'confirm',
+          footer: h(
+            Fragment,
+            null,
+            h(Button, { onClick: props.onClose }, t('action.cancel')),
+            h(Button, { variant: 'danger', onClick: confirm, disabled: busy === true }, busy === true ? t('state.saving') : t('delete.confirm')),
+          ),
+        },
+        h(
+          'div',
+          { className: 'mm-delete-head' },
+          h('span', { className: 'mm-delete-icon' }, h('svg', { viewBox: '0 0 24 24', width: 20, height: 20, fill: 'none', stroke: 'currentColor', strokeWidth: 2, strokeLinecap: 'round', strokeLinejoin: 'round', 'aria-hidden': 'true' }, h('path', { d: 'M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16' }))),
+          h(
+            'div',
+            null,
+            h('p', { className: 'mm-delete-desc' }, description),
+            multi === true ? h('p', { className: 'mm-hint' }, t('delete.tagsNote')) : null,
+          ),
+        ),
+        h(
+          'div',
+          { className: 'mm-delete-choices' },
+          h(
+            'label',
+            { className: 'mm-delete-option' + (mode === 'current' ? ' mm-delete-option-active' : '') },
+            h('input', { type: 'radio', name: 'mm-delete-mode', value: 'current', checked: mode === 'current', onChange: () => setMode('current') }),
+            h(
+              'div',
+              null,
+              h('div', { className: 'mm-delete-option-title' }, currentTitle),
+              h('div', { className: 'mm-delete-option-sub' }, currentSub),
+            ),
+          ),
+          h(
+            'label',
+            { className: 'mm-delete-option mm-delete-option-danger' + (mode === 'purge' ? ' mm-delete-option-active' : '') },
+            h('input', { type: 'radio', name: 'mm-delete-mode', value: 'purge', checked: mode === 'purge', onChange: () => setMode('purge') }),
+            h(
+              'div',
+              null,
+              h('div', { className: 'mm-delete-option-title mm-danger-text' }, allTitle),
+              h('div', { className: 'mm-delete-option-sub' }, allSub),
+            ),
+          ),
+        ),
+      )
+    }
+
+    function LibraryDeleteDialog(props) {
+      const t = props.t
+      const [busy, setBusy] = useState(false)
+      const confirm = async () => {
+        setBusy(true)
+        const result = await props.onConfirm()
+        setBusy(false)
+        if (result !== null && result !== undefined && result.ok === true) props.onClose()
+      }
+      return h(
+        Dialog,
+        {
+          title: t('delete.libraryTitle'),
+          closeLabel: t('action.closeDialog'),
+          closeTooltip: t('tooltip.closeDialog'),
+          onClose: props.onClose,
+          returnFocus: props.returnFocus,
+          size: 'confirm',
+          footer: h(
+            Fragment,
+            null,
+            h(Button, { onClick: props.onClose }, t('action.cancel')),
+            h(Button, { variant: 'danger', onClick: confirm, disabled: busy === true }, busy === true ? t('state.saving') : t('action.remove')),
+          ),
+        },
+        h('p', { className: 'mm-dialog-text' }, t('delete.libraryDesc')),
+      )
+    }
+
+    /* ------------------------------------------------------------------ *
+     * Config-file viewer.                                                *
+     * ------------------------------------------------------------------ */
+
+    function ConfigDialog(props) {
+      const t = props.t
+      const [tab, setTab] = useState('workspace')
+      const [state, setState] = useState({ status: 'loading', path: '', exists: false, text: '', error: '' })
+      useEffect(() => {
+        let cancelled = false
+        // Clear the previous layer immediately: never show (or copy) one layer's text while
+        // another layer is still loading.
+        setState({ status: 'loading', path: '', exists: false, text: '', error: '' })
+        callApi('configText', { level: tab }).then((payload) => {
+          if (cancelled) return
+          setState({
+            status: 'ready',
+            path: textOf(payload.path),
+            exists: payload.exists === true,
+            text: textOf(payload.text),
+            error: '',
+          })
+        }).catch((failure) => {
+          if (cancelled) return
+          const message = failure !== null && failure !== undefined && failure.code === 'unauthorized'
+            ? t('state.unauthorized')
+            : describeError(t, failure)
+          setState({ status: 'error', path: '', exists: false, text: '', error: message })
+        })
+        return () => {
+          cancelled = true
+        }
+      }, [tab])
+      const path = state.path !== '' ? state.path : t('config.unknownPath')
+      const text = state.text
+      const switchTab = (next) => {
+        if (next === tab) return
+        setState({ status: 'loading', path: '', exists: false, text: '', error: '' })
+        setTab(next)
+      }
+      const copyAll = async () => {
+        if (text === '' || state.status !== 'ready') return
+        const copied = await copyText(text)
+        if (typeof props.onToast === 'function') props.onToast(copied ? 'success' : 'warning', copied ? t('config.copied') : t('action.copyFailed'))
+      }
+      return h(
+        Dialog,
+        {
+          title: state.path !== '' ? t('config.titlePath', { path: state.path }) : t('config.title'),
+          subtitle: t('config.subtitle'),
+          closeLabel: t('action.closeConfig'),
+          closeTooltip: t('tooltip.closeConfig'),
+          onClose: props.onClose,
+          returnFocus: props.returnFocus,
+          size: 'config',
+          footer: h(
+            Fragment,
+            null,
+            h('span', { className: 'mm-config-readonly' }, t('config.readonly')),
+            h(Button, { onClick: copyAll, disabled: text === '' || state.status !== 'ready' }, t('config.copy')),
+            h(Button, { variant: 'primary', onClick: props.onClose }, t('config.close')),
+          ),
+        },
+        h(
+          'div',
+          { className: 'mm-config-toolbar' },
+          h(Segmented, {
+            value: tab,
+            ariaLabel: t('config.title'),
+            options: [
+              { value: 'workspace', label: t('config.tabWorkspace') },
+              { value: 'global', label: t('config.tabGlobal') },
+            ],
+            onChange: switchTab,
+          }),
+          h('span', { className: 'mm-config-path mm-mono', title: path }, t('config.path', { path: path })),
+        ),
+        state.status === 'loading'
+          ? h('p', { className: 'mm-hint' }, t('state.loading'))
+          : state.status === 'error'
+            ? h('p', { className: 'mm-hint mm-danger-text' }, state.error)
+            : h('pre', { className: 'mm-code mm-code-fill' }, text !== '' ? text : t('config.empty')),
       )
     }
 
@@ -2062,15 +3166,64 @@ window.__ModuleLoader__.load({
       const tRef = useRef(t)
       tRef.current = t
 
-      const [view, setView] = useState({ status: 'loading', data: null, error: null, updatedAt: 0 })
+      const [view, setView] = useState({ status: 'loading', data: null, error: null })
       const [scopeFilter, setScopeFilter] = useState('all')
       const [query, setQuery] = useState('')
-      const [notice, setNotice] = useState(null)
+      const [expanded, setExpanded] = useState({})
+      const [testingIds, setTestingIds] = useState({})
+      const [testingAll, setTestingAll] = useState(false)
       const [busy, setBusy] = useState('')
       const [editor, setEditor] = useState(null)
-      const [jsonView, setJsonView] = useState(null)
-      const [confirm, setConfirm] = useState(null)
+      const [manage, setManage] = useState(null)
+      const [deleteTarget, setDeleteTarget] = useState(null)
+      const [configView, setConfigView] = useState(null)
+      const [toasts, setToasts] = useState([])
       const requestSeq = useRef(0)
+      const toastSeq = useRef(0)
+      const toastTimers = useRef([])
+
+      const pushToast = useCallback((kind, text) => {
+        const message = textOf(text)
+        if (message === '') return
+        const id = toastSeq.current + 1
+        toastSeq.current = id
+        setToasts((previous) => previous.concat([{ id: id, kind: kind, text: message, leaving: false }]))
+        const leaveTimer = setTimeout(() => {
+          setToasts((previous) => previous.map((toast) => (toast.id === id ? Object.assign({}, toast, { leaving: true }) : toast)))
+          const removeTimer = setTimeout(() => {
+            setToasts((previous) => previous.filter((toast) => toast.id !== id))
+            toastTimers.current = toastTimers.current.filter((entry) => entry !== leaveTimer && entry !== removeTimer)
+          }, 220)
+          toastTimers.current.push(removeTimer)
+        }, 3400)
+        toastTimers.current.push(leaveTimer)
+      }, [])
+
+      useEffect(() => () => {
+        for (const timer of toastTimers.current) clearTimeout(timer)
+        toastTimers.current = []
+      }, [])
+
+      /* Tooltip lifetime: hide on any scroll, blur, or outside mousedown; remove the
+       * body-level node when the section unmounts. */
+      useEffect(() => {
+        const onScroll = () => hideTooltip()
+        const onBlur = () => hideTooltip()
+        const onMouseDown = () => hideTooltip()
+        document.addEventListener('scroll', onScroll, true)
+        document.addEventListener('mousedown', onMouseDown)
+        if (typeof window !== 'undefined' && window !== null) window.addEventListener('blur', onBlur)
+        return () => {
+          document.removeEventListener('scroll', onScroll, true)
+          document.removeEventListener('mousedown', onMouseDown)
+          if (typeof window !== 'undefined' && window !== null) window.removeEventListener('blur', onBlur)
+          hideTooltip()
+          if (tooltip.node !== null) {
+            if (tooltip.node.parentNode !== null && tooltip.node.parentNode !== undefined) tooltip.node.parentNode.removeChild(tooltip.node)
+            tooltip.node = null
+          }
+        }
+      }, [])
 
       const loadState = useCallback(async () => {
         const seq = requestSeq.current + 1
@@ -2078,20 +3231,17 @@ window.__ModuleLoader__.load({
         try {
           const payload = await callApi('state', {})
           if (requestSeq.current !== seq) return null
-          setView({ status: 'ready', data: payload, error: null, updatedAt: Date.now() })
+          setView({ status: 'ready', data: payload, error: null })
           return payload
         } catch (failure) {
           if (requestSeq.current !== seq) return null
-          if (failure.code === 'unauthorized') {
-            setView({ status: 'unauthorized', data: null, error: null, updatedAt: 0 })
+          if (failure !== null && failure !== undefined && failure.code === 'unauthorized') {
+            setView({ status: 'unauthorized', data: null, error: null })
             return null
           }
-          setView((previous) => {
-            if (previous.status === 'ready') {
-              return { status: 'ready', data: previous.data, error: describeError(tRef.current, failure), updatedAt: previous.updatedAt }
-            }
-            return { status: 'error', data: null, error: describeError(tRef.current, failure), updatedAt: 0 }
-          })
+          setView((previous) => previous.status === 'ready'
+            ? { status: 'ready', data: previous.data, error: describeError(tRef.current, failure) }
+            : { status: 'error', data: null, error: describeError(tRef.current, failure) })
           return null
         }
       }, [])
@@ -2109,33 +3259,33 @@ window.__ModuleLoader__.load({
         }
       }, [loadState])
 
-      const handleFailure = useCallback((failure) => {
-        if (failure !== null && failure !== undefined && failure.code === 'unauthorized') {
-          setView({ status: 'unauthorized', data: null, error: null, updatedAt: 0 })
-          return
-        }
-        setNotice({ kind: 'err', text: tRef.current('state.operationFailed') + ': ' + describeError(tRef.current, failure) })
-      }, [])
-
       const mutate = useCallback(async (op, args, successText) => {
         setBusy(op)
         try {
-          await callApi(op, args)
-          if (typeof successText === 'string' && successText !== '') setNotice({ kind: 'ok', text: successText })
-          return { ok: true }
+          const payload = await callApi(op, args)
+          if (typeof successText === 'string' && successText !== '') pushToast('success', successText)
+          return { ok: true, payload: payload }
         } catch (failure) {
           if (failure !== null && failure !== undefined && failure.code === 'unauthorized') {
-            setView({ status: 'unauthorized', data: null, error: null, updatedAt: 0 })
+            setView({ status: 'unauthorized', data: null, error: null })
             return { ok: false, error: tRef.current('state.unauthorized') }
           }
           const message = describeError(tRef.current, failure)
-          setNotice({ kind: 'err', text: tRef.current('state.operationFailed') + ': ' + message })
+          pushToast('error', tRef.current('state.operationFailed') + ': ' + message)
           return { ok: false, error: message }
         } finally {
           setBusy('')
           await loadState()
         }
-      }, [loadState])
+      }, [loadState, pushToast])
+
+      const handleFailure = useCallback((failure) => {
+        if (failure !== null && failure !== undefined && failure.code === 'unauthorized') {
+          setView({ status: 'unauthorized', data: null, error: null })
+          return
+        }
+        pushToast('error', tRef.current('state.operationFailed') + ': ' + describeError(tRef.current, failure))
+      }, [pushToast])
 
       const data = view.data !== null && view.data !== undefined ? view.data : {}
       const rows = Array.isArray(data.rows) ? data.rows : []
@@ -2144,235 +3294,421 @@ window.__ModuleLoader__.load({
       const warnings = Array.isArray(data.warnings) ? data.warnings : []
       const scope = data.scope !== null && data.scope !== undefined && typeof data.scope === 'object' ? data.scope : {}
       const profile = textOf(scope.profile)
-      const ready = view.status === 'ready'
+      const homePatch = textOf(scope.homePatch)
+      const profilePatch = textOf(scope.profilePatch)
+      // DSH exposes no workspace↔profile association; never infer one from a title or
+      // directory name. The profile name alone labels the page.
+      const currentName = profile !== '' ? profile : t('page.profileFallback')
+
+      const libraryOther = library.filter((entry) => isObject(entry) && (!Array.isArray(entry.origins) || entry.origins.length === 0))
+      const enabledCount = rows.filter((row) => isObject(row) && row.disabled !== true).length
+      const counts = {
+        all: rows.length,
+        global: rows.filter((row) => isObject(row) && row.level === 'global').length,
+        workspace: rows.filter((row) => isObject(row) && row.level === 'workspace').length,
+        other: libraryOther.length,
+      }
+      const workspaceCounts = {}
+      for (const row of rows) {
+        if (!isObject(row) || row.level !== 'workspace') continue
+        const attached = Array.isArray(row.workspaces) ? row.workspaces : []
+        for (const path of attached) {
+          const key = textOf(path)
+          if (key === '') continue
+          workspaceCounts[key] = (workspaceCounts[key] !== undefined ? workspaceCounts[key] : 0) + 1
+        }
+      }
 
       const needle = query.trim().toLowerCase()
+      const matches = (haystack) => needle === '' || haystack.toLowerCase().includes(needle)
+      const rowHaystack = (row) => {
+        const parts = [textOf(row.serverName), textOf(row.description), textOf(row.target), textOf(row.id)]
+        const attached = Array.isArray(row.workspaces) ? row.workspaces : []
+        for (const path of attached) parts.push(workspaceLabel(workspaces, path))
+        const probe = isObject(row.lastProbe) ? row.lastProbe : null
+        if (isObject(probe) && Array.isArray(probe.toolNames)) {
+          for (const name of probe.toolNames) parts.push(textOf(name))
+        }
+        return parts.join(' ')
+      }
+      const libraryHaystack = (entry) => {
+        const parts = [textOf(entry.serverName), textOf(entry.description), targetOfConfig(entry.config)]
+        const attached = Array.isArray(entry.workspaces) ? entry.workspaces : []
+        for (const path of attached) parts.push(workspaceLabel(workspaces, path))
+        const extra = isObject(entry.extra) ? entry.extra : {}
+        if (Array.isArray(extra.autoApprove)) for (const name of extra.autoApprove) parts.push(textOf(name))
+        if (Array.isArray(extra.disabledTools)) for (const name of extra.disabledTools) parts.push(textOf(name))
+        return parts.join(' ')
+      }
       const visibleRows = rows.filter((row) => {
-        if (needle === '') return true
-        const haystack = [textOf(row.serverName), textOf(row.target), textOf(row.id)].join(' ').toLowerCase()
-        return haystack.includes(needle)
+        if (!isObject(row)) return false
+        if (scopeFilter === 'global' && row.level !== 'global') return false
+        if (scopeFilter === 'workspace' && row.level !== 'workspace') return false
+        if (scopeFilter === 'other') return false
+        return matches(rowHaystack(row))
       })
-      const filteredRows = scopeFilter === 'all' ? visibleRows : visibleRows.filter((row) => row.level === scopeFilter)
-      const globalRows = filteredRows.filter((row) => row.level === 'global')
-      const workspaceRows = filteredRows.filter((row) => row.level === 'workspace')
-
-      const scopeOptions = [
-        { value: 'all', label: t('scope.all') },
-        { value: 'global', label: t('scope.global') },
-        { value: 'workspace', label: t('scope.workspace') },
-      ]
-
-      const openCreate = (event) => {
-        setEditor({ mode: 'create', level: 'global', row: null, returnFocus: event !== undefined && event !== null ? event.currentTarget : null })
-      }
-      const openEdit = (row, event) => {
-        setEditor({ mode: 'edit', level: row.level, row: row, returnFocus: event !== undefined && event !== null ? event.currentTarget : null })
-      }
-      const openJson = (row, event) => {
-        setJsonView({ row: row, returnFocus: event !== undefined && event !== null ? event.currentTarget : null })
-      }
-      const openDelete = (row, event) => {
-        setConfirm({ row: row, returnFocus: event !== undefined && event !== null ? event.currentTarget : null })
-      }
-
-      const submitEditor = async (input) => {
-        if (editor === null) return
-        const editing = editor.mode === 'edit'
-        const op = editing ? 'update' : 'create'
-        const workspaces = Array.isArray(input.workspaces) ? input.workspaces : []
-        const args = editing
-          ? { id: editor.row.id, level: editor.row.level, config: input.config, workspaces: workspaces }
-          : { level: input.level, config: input.config, workspaces: workspaces }
-        const name = textOf(input.config.serverName)
-        const successText = editing ? t('notice.updated', { name: name }) : t('notice.created', { name: name })
-        const result = await mutate(op, args, successText)
-        if (result.ok === true) setEditor(null)
-        return result
-      }
+      const visibleLibrary = scopeFilter === 'other'
+        ? libraryOther.filter((entry) => matches(libraryHaystack(entry)))
+        : []
+      const empty = visibleRows.length === 0 && visibleLibrary.length === 0
 
       const toggleRow = (row) => {
         const nextEnabled = row.disabled === true
-        const successText = nextEnabled ? t('notice.enabled', { name: row.serverName }) : t('notice.disabled', { name: row.serverName })
-        void mutate('setEnabled', { id: row.id, level: row.level, enabled: nextEnabled }, successText)
+        const text = nextEnabled ? t('card.enabledToast', { name: row.serverName }) : t('card.disabledToast', { name: row.serverName })
+        void mutate('setEnabled', { id: row.id, level: row.level, enabled: nextEnabled }, text)
       }
 
       const testRow = async (row) => {
-        setBusy('probe')
+        if (testingIds[row.id] === true) return
+        const key = row.id
+        setTestingIds((previous) => Object.assign({}, previous, { [key]: true }))
         try {
           const payload = await callApi('probe', { id: row.id, level: row.level })
           const result = payload.result !== undefined ? payload.result : null
-          setNotice({ kind: result !== null && result.ok === true ? 'ok' : 'err', text: probeSummary(t, result) })
+          if (isObject(result) && result.ok === true) {
+            const ms = typeof result.durationMs === 'number' && Number.isFinite(result.durationMs) ? Math.round(result.durationMs) : 0
+            const tools = typeof result.toolCount === 'number' && Number.isFinite(result.toolCount) ? result.toolCount : 0
+            pushToast('success', t('card.testOkToast', { name: row.serverName, ms: ms, tools: tools }))
+          } else {
+            const message = isObject(result) && isObject(result.error) && textOf(result.error.message) !== '' ? result.error.message : t('state.unknownError')
+            pushToast('warning', t('card.testFailToast', { name: row.serverName, message: message }))
+          }
         } catch (failure) {
           handleFailure(failure)
         } finally {
-          setBusy('')
+          setTestingIds((previous) => {
+            const next = Object.assign({}, previous)
+            delete next[key]
+            return next
+          })
           await loadState()
         }
       }
 
       const testAll = async () => {
-        setBusy('probeAll')
+        if (testingAll === true) return
+        const active = rows.filter((row) => isObject(row) && row.disabled !== true)
+        if (active.length === 0) {
+          pushToast('warning', t('card.testAllNone'))
+          return
+        }
+        setTestingAll(true)
+        pushToast('info', t('card.testAllRunning', { count: active.length }))
         try {
           const payload = await callApi('probeAll', {})
           const results = Array.isArray(payload.results) ? payload.results : []
-          let okCount = 0
+          let ok = 0
           for (const entry of results) {
-            if (entry !== null && entry !== undefined && entry.result !== null && entry.result !== undefined && entry.result.ok === true) okCount += 1
+            if (isObject(entry) && isObject(entry.result) && entry.result.ok === true) ok += 1
           }
-          setNotice({
-            kind: okCount === results.length ? 'ok' : 'warn',
-            text: t('notice.probeAll', { total: results.length, ok: okCount }),
-          })
+          if (results.length === active.length && ok === results.length) {
+            pushToast('success', t('card.testAllDone', { count: results.length }))
+          } else {
+            pushToast('warning', t('card.testAllPartial', { total: results.length, ok: ok }))
+          }
         } catch (failure) {
           handleFailure(failure)
         } finally {
-          setBusy('')
+          setTestingAll(false)
           await loadState()
         }
       }
 
-      const removeRow = async () => {
-        if (confirm === null) return
-        const row = confirm.row
-        setConfirm(null)
-        await mutate('remove', { id: row.id, level: row.level }, t('notice.removed', { name: row.serverName }))
+      const openCreate = (event) => {
+        hideTooltip()
+        setEditor({ mode: 'create', row: null, returnFocus: event !== undefined && event !== null ? event.currentTarget : null })
+      }
+      const openEdit = (row) => {
+        hideTooltip()
+        setEditor({ mode: 'edit', row: row, returnFocus: typeof document !== 'undefined' ? document.activeElement : null })
+      }
+      const openManage = (row) => {
+        hideTooltip()
+        setManage({ row: row, returnFocus: typeof document !== 'undefined' ? document.activeElement : null })
+      }
+      const openDelete = (item, kind) => {
+        hideTooltip()
+        setDeleteTarget({ kind: kind !== undefined ? kind : 'row', item: item, returnFocus: typeof document !== 'undefined' ? document.activeElement : null })
+      }
+      const openConfig = (event) => {
+        hideTooltip()
+        setConfigView({ returnFocus: event !== undefined && event !== null ? event.currentTarget : null })
       }
 
-      const copyJson = async (copied) => {
-        setNotice(copied ? { kind: 'ok', text: t('action.copied') } : { kind: 'warn', text: t('io.copyFailed') })
+      const submitEditor = async (args) => {
+        if (editor === null) return { ok: false, error: '' }
+        const editing = editor.mode === 'edit'
+        const name = textOf(args.config.serverName)
+        const target = args.level === 'global' ? t('editor.targetGlobal') : t('editor.targetWorkspace')
+        const success = editing
+          ? t('editor.updated', { target: target })
+          : t('editor.created', { name: name, target: target })
+        const result = await mutate(editing ? 'update' : 'create', args, success)
+        if (result.ok === true) setEditor(null)
+        return result
+      }
+
+      const saveManage = async (selected, targetRow) => {
+        if (manage === null) return { ok: false, error: '' }
+        const row = targetRow !== undefined && targetRow !== null && isObject(targetRow) ? targetRow : manage.row
+        return mutate(
+          'setWorkspaces',
+          { id: row.id, level: row.level, workspaces: selected },
+          t('manage.saved', { name: row.serverName }),
+        )
+      }
+
+      const moveManage = async (targetLevel, sourceRow) => {
+        if (manage === null) return { ok: false, error: '', row: null }
+        const source = sourceRow !== undefined && sourceRow !== null && isObject(sourceRow) ? sourceRow : manage.row
+        const target = targetLevel === 'global' ? t('editor.targetGlobal') : t('editor.targetWorkspace')
+        const result = await mutate(
+          'moveLevel',
+          { id: source.id, level: source.level, targetLevel: targetLevel },
+          t('manage.moved', { name: source.serverName, target: target }),
+        )
+        const row = result.ok === true && isObject(result.payload) && isObject(result.payload.row) ? result.payload.row : null
+        return { ok: result.ok === true, error: typeof result.error === 'string' ? result.error : '', row: row }
+      }
+
+      const confirmDelete = async (mode) => {
+        if (deleteTarget === null) return { ok: false, error: '' }
+        if (deleteTarget.kind === 'library') {
+          const entry = deleteTarget.item
+          return mutate('libraryRemove', { serverName: entry.serverName }, t('card.libraryRemoved', { name: entry.serverName }))
+        }
+        const row = deleteTarget.item
+        const purge = mode === 'purge'
+        return mutate(
+          'remove',
+          { id: row.id, level: row.level, purge: purge },
+          purge ? t('delete.purged', { name: row.serverName }) : t('delete.done', { name: row.serverName }),
+        )
+      }
+
+      const libraryApplyArgs = (entry) => {
+        const attached = Array.isArray(entry.workspaces) ? entry.workspaces.map((path) => textOf(path)).filter((path) => path !== '') : []
+        const args = { level: 'workspace', serverName: entry.serverName }
+        if (attached.length > 0) args.workspaces = attached
+        return args
+      }
+
+      const applyLibrary = async (entry) => {
+        const result = await mutate('libraryApply', libraryApplyArgs(entry), t('card.applied', { name: entry.serverName }))
+        if (result.ok === true) setScopeFilter('all')
+        return result
+      }
+
+      const applyLibraryAndEdit = async (entry) => {
+        const result = await mutate('libraryApply', libraryApplyArgs(entry), t('card.applied', { name: entry.serverName }))
+        if (result.ok === true) {
+          setScopeFilter('all')
+          const row = isObject(result.payload) && isObject(result.payload.row) ? result.payload.row : null
+          if (row !== null) setEditor({ mode: 'edit', row: row, returnFocus: typeof document !== 'undefined' ? document.activeElement : null })
+        }
+        return result
+      }
+
+      // Library entry -> apply to the current profile first, then manage the workspace
+      // tags of the row the Host just returned. An apply failure (e.g. duplicate name)
+      // surfaces the Host error toast and no dialog opens.
+      const applyLibraryAndManage = async (entry) => {
+        const result = await mutate('libraryApply', libraryApplyArgs(entry), t('card.applied', { name: entry.serverName }))
+        if (result.ok !== true) return result
+        setScopeFilter('all')
+        const row = isObject(result.payload) && isObject(result.payload.row) ? result.payload.row : null
+        if (row !== null) setManage({ row: row, returnFocus: typeof document !== 'undefined' ? document.activeElement : null })
+        return result
+      }
+
+      const copyShare = async (item) => {
+        const config = isObject(item.config) ? item.config : {}
+        const node = Object.assign({}, config)
+        if (item.disabled === true) node.disabled = true
+        const description = textOf(item.description)
+        if (description !== '') node.description = description
+        const extra = isObject(item.extra) ? item.extra : {}
+        if (isObject(extra.oauth) && (extra.oauth.enabled === true || textOf(extra.oauth.clientId) !== '' || textOf(extra.oauth.scopes) !== '')) {
+          node.oauth = {
+            enabled: extra.oauth.enabled === true,
+            clientId: textOf(extra.oauth.clientId),
+            scopes: splitWhitespace(extra.oauth.scopes),
+          }
+        }
+        if (isObject(extra.capabilities)) {
+          node.capabilities = {
+            tools: extra.capabilities.tools !== false,
+            resources: extra.capabilities.resources !== false,
+            prompts: extra.capabilities.prompts !== false,
+          }
+        }
+        if (Array.isArray(extra.autoApprove) && extra.autoApprove.length > 0) node.autoApprove = extra.autoApprove.map((name) => textOf(name))
+        if (Array.isArray(extra.disabledTools) && extra.disabledTools.length > 0) node.disabledTools = extra.disabledTools.map((name) => textOf(name))
+        if (typeof extra.maxRetries === 'number' && Number.isFinite(extra.maxRetries)) node.maxRetries = extra.maxRetries
+        const text = JSON.stringify({ mcpServers: { [item.serverName]: node } }, null, 2)
+        const copied = await copyText(text)
+        pushToast(copied ? 'success' : 'warning', copied ? t('action.copied') : t('action.copyFailed'))
       }
 
       const header = h(
         'div',
         { className: 'mm-head' },
-        h('h1', { className: 'mm-title' }, t('section.title')),
-        h('p', { className: 'mm-subtitle' }, t('page.subtitle')),
-        h('span', { className: 'mm-updated' }, view.updatedAt > 0 ? t('updated.at', { time: formatTime(view.updatedAt) }) : t('updated.never')),
-        h(
-          IconButton,
-          {
-            className: 'mm-head-icon',
-            label: t('action.refresh'),
-            title: t('action.refresh'),
-            onClick: () => { void loadState() },
-            disabled: busy !== '',
-          },
-          /* Circular arrow: an almost-closed ring plus the arrow head. */
-          h('path', { d: 'M21 12a9 9 0 1 1-9-9c2.52 0 4.93 1 6.74 2.74L21 8' }),
-          h('path', { d: 'M21 3v5h-5' }),
-        ),
-        h(
-          IconButton,
-          {
-            className: 'mm-head-icon',
-            label: t('action.probeAll'),
-            title: t('action.probeAll'),
-            onClick: testAll,
-            disabled: busy !== '' || rows.length === 0,
-          },
-          /* Radar ring with a play glyph: run every enabled server. */
-          h('circle', { cx: 12, cy: 12, r: 9 }),
-          h('path', { d: 'M10 8.5l6 3.5-6 3.5z', fill: 'currentColor', stroke: 'none' }),
-        ),
-      )
-
-      const toolbar = h(
-        'div',
-        { className: 'mm-toolbar' },
         h(
           'div',
-          { className: 'mm-seg', role: 'group', 'aria-label': t('section.title') },
-          scopeOptions.map((option) => h(
-            'button',
-            {
-              key: option.value,
-              type: 'button',
-              className: 'mm-seg-btn' + (scopeFilter === option.value ? ' mm-seg-btn-active' : ''),
-              'aria-pressed': scopeFilter === option.value ? 'true' : 'false',
-              onClick: () => setScopeFilter(option.value),
-            },
-            option.label,
-          )),
+          { className: 'mm-head-text' },
+          h(
+            'div',
+            { className: 'mm-title-row' },
+            h('h1', { className: 'mm-title' }, t('page.title')),
+            h('span', { className: 'mm-enabled-pill' }, t('page.enabledPill', { count: enabledCount })),
+          ),
+          h('p', { className: 'mm-subtitle' }, t('page.subtitle', { name: currentName })),
         ),
-        h('div', { className: 'mm-search' }, h(TextInput, { value: query, onChange: setQuery, placeholder: t('search.placeholder') })),
-        h(Button, { variant: 'primary', onClick: openCreate }, t('action.add')),
+        h(
+          'div',
+          { className: 'mm-head-actions' },
+          h(
+            IconButton,
+            {
+              label: t('action.testAll'),
+              tooltip: t('tooltip.testAll'),
+              tone: 'ok',
+              spin: testingAll === true,
+              disabled: testingAll === true,
+              onClick: testAll,
+            },
+            h('path', { d: 'M13 10V3L4 14h7v7l9-11h-7z' }),
+          ),
+          h(
+            IconButton,
+            {
+              label: t('action.openConfig'),
+              tooltip: t('tooltip.openConfig'),
+              tone: 'plain',
+              onClick: openConfig,
+            },
+            h('path', { d: 'M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z' }),
+          ),
+          h(
+            Button,
+            { variant: 'primary', onClick: openCreate },
+            h('svg', { className: 'mm-icon', viewBox: '0 0 24 24', width: 15, height: 15, fill: 'none', stroke: 'currentColor', strokeWidth: 2.2, strokeLinecap: 'round', strokeLinejoin: 'round', 'aria-hidden': 'true' }, h('path', { d: 'M12 4v16m8-8H4' })),
+            h('span', null, t('action.addServer')),
+          ),
+        ),
       )
 
-      const rowActions = {
+      const filterBar = h(
+        'div',
+        { className: 'mm-filter' },
+        h(Segmented, {
+          value: scopeFilter,
+          ariaLabel: t('page.title'),
+          options: [
+            { value: 'all', label: t('filter.all'), count: counts.all },
+            { value: 'global', label: t('filter.global'), count: counts.global, dot: 'global' },
+            { value: 'workspace', label: t('filter.workspace'), count: counts.workspace, dot: 'brand' },
+            { value: 'other', label: t('filter.other'), count: counts.other, dot: 'warn' },
+          ],
+          onChange: setScopeFilter,
+        }),
+        h(
+          'div',
+          { className: 'mm-search' },
+          h('svg', { className: 'mm-search-icon', viewBox: '0 0 24 24', width: 14, height: 14, fill: 'none', stroke: 'currentColor', strokeWidth: 2, strokeLinecap: 'round', strokeLinejoin: 'round', 'aria-hidden': 'true' }, h('path', { d: 'M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z' })),
+          h(TextInput, {
+            value: query,
+            placeholder: t('search.placeholder'),
+            ariaLabel: t('search.placeholder'),
+            className: 'mm-search-input',
+            onChange: setQuery,
+          }),
+        ),
+      )
+
+      const cardProps = {
         t: t,
         workspaces: workspaces,
+        currentName: currentName,
+        homePatch: homePatch,
+        profilePatch: profilePatch,
         busy: busy !== '',
-        onEdit: openEdit,
-        onJson: openJson,
+        testingAll: testingAll,
+        onToggleEnabled: toggleRow,
         onTest: testRow,
-        onToggle: toggleRow,
-        onDelete: openDelete,
+        onManage: openManage,
+        onEdit: openEdit,
+        onApplyEdit: applyLibraryAndEdit,
+        onManageLibrary: applyLibraryAndManage,
+        onCopyShare: copyShare,
       }
 
-      let rowsBody
-      if (rows.length === 0) {
-        rowsBody = h(EmptyState, { title: t('empty.none'), hint: t('empty.noneHint') })
-      } else if (filteredRows.length === 0) {
-        rowsBody = h(EmptyState, { title: t('empty.filtered') })
-      } else if (scopeFilter === 'all') {
-        rowsBody = h(
-          'div',
-          { className: 'mm-groups' },
-          h(
-            'div',
-            { className: 'mm-group' },
-            h('h2', { className: 'mm-group-title' }, t('group.global')),
-            globalRows.length === 0
-              ? h(EmptyState, { title: t('empty.global') })
-              : globalRows.map((row) => h(RowCard, Object.assign({ key: row.id, row: row }, rowActions))),
-          ),
-          h(
-            'div',
-            { className: 'mm-group' },
-            h('h2', { className: 'mm-group-title' }, t('group.workspace')),
-            workspaceRows.length === 0
-              ? h(EmptyState, { title: t('empty.workspace') })
-              : workspaceRows.map((row) => h(RowCard, Object.assign({ key: row.id, row: row }, rowActions))),
-          ),
-        )
+      let results
+      if (empty) {
+        results = h(EmptyState, {
+          title: scopeFilter === 'other' ? t('empty.other') : t('empty.title'),
+          hint: scopeFilter === 'other' ? null : t('empty.hint'),
+          actionLabel: scopeFilter === 'other' ? null : t('empty.add'),
+          onAction: openCreate,
+        })
       } else {
-        rowsBody = h('div', { className: 'mm-list' }, filteredRows.map((row) => h(RowCard, Object.assign({ key: row.id, row: row }, rowActions))))
+        results = h(
+          'div',
+          { className: 'mm-list' },
+          visibleRows.map((row) => h(ServerCard, Object.assign({}, cardProps, {
+            key: row.id,
+            kind: 'row',
+            item: row,
+            expanded: expanded[row.id] === true,
+            testing: testingIds[row.id] === true,
+            onToggleExpand: () => setExpanded((previous) => Object.assign({}, previous, { [row.id]: !previous[row.id] })),
+            onDelete: (item) => openDelete(item, 'row'),
+          }))),
+          visibleLibrary.map((entry) => h(ServerCard, Object.assign({}, cardProps, {
+            key: 'lib:' + entry.serverName,
+            kind: 'library',
+            item: entry,
+            expanded: expanded['lib:' + entry.serverName] === true,
+            testing: false,
+            onToggleExpand: () => setExpanded((previous) => Object.assign({}, previous, { ['lib:' + entry.serverName]: !previous['lib:' + entry.serverName] })),
+            onApply: applyLibrary,
+            onDelete: (item) => openDelete(item, 'library'),
+          }))),
+        )
       }
 
-      const warningText = warnings.map((warning) => textOf(warning)).join(' · ')
-      const body = h(
-        Fragment,
-        null,
-        h(
+      const warningsBanner = warnings.length > 0
+        ? h(
           'div',
-          { className: 'mm-warn-slot' },
-          warnings.length > 0
-            ? h(
-              'div',
-              {
-                className: 'mm-warn-banner',
-                role: 'status',
-                title: warnings.map((warning) => textOf(warning)).join('\n'),
-              },
-              h('strong', null, t('warnings.title')),
-              h('span', { className: 'mm-warn-text' }, warningText),
-            )
-            : null,
-        ),
-        h('div', { className: 'mm-notice-slot' }, h(Notice, { notice: notice, dismissLabel: t('action.close'), onDismiss: () => setNotice(null) })),
-        toolbar,
-        h(
+          { className: 'mm-warn-banner', role: 'status', title: warnings.map((warning) => textOf(warning)).join('\n') },
+          h('strong', null, t('warnings.title')),
+          h('span', { className: 'mm-warn-text' }, warnings.map((warning) => textOf(warning)).join(' · ')),
+        )
+        : null
+      const errorBanner = view.error !== null && view.error !== undefined && view.status === 'ready'
+        ? h(
           'div',
-          { className: 'mm-results' + (filteredRows.length === 0 ? ' mm-results-empty' : ' mm-results-list') },
-          rowsBody,
-        ),
-        h(ImportExportSection, { t: t, onImported: () => { void loadState() } }),
-        h(LibrarySection, { t: t, profile: profile, entries: library, onChanged: () => { void loadState() } }),
-      )
+          { className: 'mm-warn-banner mm-err-banner', role: 'alert', title: view.error },
+          h('strong', null, t('state.error')),
+          h('span', { className: 'mm-warn-text' }, view.error),
+        )
+        : null
 
       let content
-      if (view.status === 'loading') {
-        content = h(StatePanel, { title: t('state.loading') })
+      if (view.status === 'ready') {
+        content = h(
+          Fragment,
+          null,
+          header,
+          warningsBanner,
+          errorBanner,
+          filterBar,
+          h(
+            'div',
+            { className: 'mm-results' + (empty ? ' mm-results-empty' : ' mm-results-list') },
+            results,
+          ),
+        )
       } else if (view.status === 'unauthorized') {
         content = h(StatePanel, {
           title: t('state.unauthorized'),
@@ -2389,69 +3725,67 @@ window.__ModuleLoader__.load({
           onAction: () => { void loadState() },
         })
       } else {
-        content = body
+        content = h(StatePanel, { title: t('state.loading') })
       }
 
       return h(
         'section',
         { className: 'mm-page', 'aria-label': t('section.title') },
-        header,
-        h(
-          'div',
-          { className: 'mm-err-slot' },
-          view.status === 'ready' && view.error !== null && view.error !== undefined
-            ? h(
-              'p',
-              {
-                className: 'mm-err-text',
-                title: t('state.error') + ': ' + view.error,
-              },
-              t('state.error') + ': ' + view.error,
-            )
-            : null,
-        ),
         content,
         editor !== null
           ? h(EditorDialog, {
             t: t,
             mode: editor.mode,
             row: editor.row,
-            level: editor.level,
             workspaces: workspaces,
+            workspaceCounts: workspaceCounts,
+            profilePatch: profilePatch,
+            homePatch: homePatch,
             returnFocus: editor.returnFocus,
-            busy: busy !== '',
             onClose: () => setEditor(null),
             onSubmit: submitEditor,
+            onToast: pushToast,
           })
           : null,
-        jsonView !== null
-          ? h(JsonDialog, {
+        manage !== null
+          ? h(ManageDialog, {
             t: t,
-            row: jsonView.row,
-            returnFocus: jsonView.returnFocus,
-            onClose: () => setJsonView(null),
-            onCopied: copyJson,
+            row: manage.row,
+            workspaces: workspaces,
+            workspaceCounts: workspaceCounts,
+            returnFocus: manage.returnFocus,
+            onClose: () => setManage(null),
+            onSave: saveManage,
+            onMove: moveManage,
           })
           : null,
-        confirm !== null
-          ? h(
-            Dialog,
-            {
-              title: t('dialog.deleteTitle'),
-              closeLabel: t('action.close'),
-              onClose: () => setConfirm(null),
-              returnFocus: confirm.returnFocus,
-              size: 'confirm',
-              footer: h(
-                Fragment,
-                null,
-                h(Button, { onClick: () => setConfirm(null) }, t('action.cancel')),
-                h(Button, { variant: 'danger', onClick: removeRow }, t('action.confirmDelete')),
-              ),
-            },
-            h('p', { className: 'mm-dialog-text' }, t('dialog.deleteBody')),
-          )
+        deleteTarget !== null && deleteTarget.kind === 'row'
+          ? h(DeleteDialog, {
+            t: t,
+            row: deleteTarget.item,
+            workspaces: workspaces,
+            returnFocus: deleteTarget.returnFocus,
+            onClose: () => setDeleteTarget(null),
+            onConfirm: confirmDelete,
+          })
           : null,
+        deleteTarget !== null && deleteTarget.kind === 'library'
+          ? h(LibraryDeleteDialog, {
+            t: t,
+            returnFocus: deleteTarget.returnFocus,
+            onClose: () => setDeleteTarget(null),
+            onConfirm: confirmDelete,
+          })
+          : null,
+        configView !== null
+          ? h(ConfigDialog, {
+            t: t,
+            returnFocus: configView.returnFocus,
+            onClose: () => setConfigView(null),
+            onToast: pushToast,
+          })
+          : null,
+        h(ToastHost, { toasts: toasts }),
       )
     }
 
@@ -2460,176 +3794,273 @@ window.__ModuleLoader__.load({
      * ------------------------------------------------------------------ */
 
     const CSS = [
-      '.mm-page{display:flex;flex-direction:column;gap:16px;width:100%;max-width:880px;color:var(--dsw-alias-label-primary);font-family:var(--dsw-font-family);font-size:13px;line-height:20px}',
-      '.mm-head{display:flex;align-items:center;gap:12px;flex-wrap:nowrap;min-width:0}',
-      '.mm-title{flex:none;margin:0;font-size:16px;line-height:24px;font-weight:600;white-space:nowrap;color:var(--dsw-alias-label-primary)}',
-      '.mm-subtitle{flex:1 1 0;min-width:0;margin:0;font-size:12px;line-height:18px;color:var(--dsw-alias-label-secondary);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}',
-      '.mm-updated{flex:none;white-space:nowrap;font-variant-numeric:tabular-nums;font-size:11px;line-height:16px;color:var(--dsw-alias-label-tertiary)}',
-      '.mm-head-icon{width:30px;height:30px}',
-      '.mm-icon{display:block;flex:none}',
-      '.mm-btn{font:inherit;font-size:12px;line-height:18px;height:30px;padding:0 11px;display:inline-flex;align-items:center;justify-content:center;gap:6px;white-space:nowrap;cursor:pointer;color:var(--dsw-alias-label-primary);background:transparent;border:1px solid var(--dsw-alias-border-l2);border-radius:var(--dsw-radius-sm)}',
+      '.mm-page{display:flex;flex-direction:column;gap:12px;width:100%;max-width:980px;height:100%;min-height:0;color:var(--dsw-alias-label-primary);font-family:var(--dsw-font-family);font-size:13px;line-height:20px}',
+      '.mm-head{display:flex;align-items:flex-start;justify-content:space-between;gap:16px;padding-bottom:16px;border-bottom:1px solid var(--dsw-alias-border-l1);flex:none;min-width:0}',
+      '.mm-head-text{min-width:0}',
+      '.mm-title-row{display:flex;align-items:center;gap:10px;flex-wrap:wrap;min-width:0}',
+      '.mm-title{margin:0;font-size:16px;line-height:24px;font-weight:600;white-space:nowrap;color:var(--dsw-alias-label-primary)}',
+      '.mm-enabled-pill{display:inline-flex;align-items:center;height:20px;padding:0 8px;border-radius:999px;font-size:12px;line-height:18px;color:var(--dsw-alias-state-success-primary);background:color-mix(in srgb, var(--dsw-alias-state-success-primary) 12%, transparent);border:1px solid color-mix(in srgb, var(--dsw-alias-state-success-primary) 28%, transparent);white-space:nowrap}',
+      '.mm-subtitle{margin:4px 0 0;font-size:13px;line-height:19px;color:var(--dsw-alias-label-secondary);word-break:break-word}',
+      '.mm-head-actions{display:flex;align-items:center;gap:8px;flex:none}',
+      '.mm-head-actions .mm-icon-btn{width:36px;height:36px;border-radius:9px}',
+      '.mm-head-actions .mm-btn{height:36px;border-radius:9px}',
+      '.mm-btn{font:inherit;font-size:12px;line-height:18px;height:32px;padding:0 12px;display:inline-flex;align-items:center;justify-content:center;gap:6px;white-space:nowrap;cursor:pointer;color:var(--dsw-alias-label-primary);background:transparent;border:1px solid var(--dsw-alias-border-l2);border-radius:8px;transition:background .15s ease,border-color .15s ease,color .15s ease}',
       '.mm-btn:hover:not(:disabled){background:var(--dsw-alias-interactive-bg-hover)}',
       '.mm-btn:disabled{opacity:.45;cursor:default}',
-      '.mm-btn-fixed{box-sizing:border-box;flex:0 1 auto;min-width:140px;justify-content:center;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}',
-      '.mm-btn-primary{color:var(--dsw-alias-bg-base);background:var(--dsw-alias-brand-primary);border-color:var(--dsw-alias-brand-primary)}',
-      '.mm-btn-primary:hover:not(:disabled){background:var(--dsw-alias-brand-primary)}',
-      '.mm-btn-danger{color:var(--dsw-alias-state-error-primary);border-color:var(--dsw-alias-state-error-primary)}',
-      '.mm-icon-btn{width:26px;height:26px;display:inline-flex;align-items:center;justify-content:center;border:1px solid transparent;border-radius:var(--dsw-radius-sm);background:transparent;color:var(--dsw-alias-label-secondary);font-size:16px;line-height:1;cursor:pointer;flex:none}',
-      '.mm-icon-btn:hover:not(:disabled){background:var(--dsw-alias-interactive-bg-hover)}',
+      '.mm-btn-sm{height:28px;padding:0 10px;font-size:11.5px}',
+      '.mm-btn-block{width:100%}',
+      '.mm-btn-primary{color:var(--dsw-alias-bg-base);background:var(--dsw-alias-label-primary);border-color:var(--dsw-alias-label-primary);font-weight:600}',
+      '.mm-btn-primary:hover:not(:disabled){background:color-mix(in srgb, var(--dsw-alias-label-primary) 88%, var(--dsw-alias-bg-base))}',
+      '.mm-btn-brand{color:var(--dsw-alias-bg-base);background:var(--dsw-alias-brand-primary);border-color:var(--dsw-alias-brand-primary);font-weight:600}',
+      '.mm-btn-brand:hover:not(:disabled){background:color-mix(in srgb, var(--dsw-alias-brand-primary) 84%, var(--dsw-alias-label-primary))}',
+      '.mm-btn-danger{color:var(--dsw-alias-bg-base);background:var(--dsw-alias-state-error-primary);border-color:var(--dsw-alias-state-error-primary);font-weight:600}',
+      '.mm-btn-danger:hover:not(:disabled){background:color-mix(in srgb, var(--dsw-alias-state-error-primary) 86%, var(--dsw-alias-label-primary))}',
+      '.mm-btn-ghost{background:var(--dsw-alias-bg-layer-2);border-color:var(--dsw-alias-border-l1)}',
+      '.mm-btn-warn{color:var(--dsw-alias-state-warn-primary);background:color-mix(in srgb, var(--dsw-alias-state-warn-primary) 12%, transparent);border-color:color-mix(in srgb, var(--dsw-alias-state-warn-primary) 30%, transparent)}',
+      '.mm-btn-warn:hover:not(:disabled){background:color-mix(in srgb, var(--dsw-alias-state-warn-primary) 20%, transparent)}',
+      '.mm-btn svg{flex:none}',
+      '.mm-icon{display:block;flex:none}',
+      '.mm-icon-btn{width:32px;height:32px;display:inline-flex;align-items:center;justify-content:center;border:1px solid var(--dsw-alias-border-l2);border-radius:8px;background:transparent;color:var(--dsw-alias-label-secondary);cursor:pointer;flex:none;transition:background .15s ease,border-color .15s ease,color .15s ease}',
+      '.mm-icon-btn:hover:not(:disabled){background:var(--dsw-alias-interactive-bg-hover);color:var(--dsw-alias-label-primary)}',
       '.mm-icon-btn:disabled{opacity:.45;cursor:default}',
-      '.mm-chip{display:inline-flex;align-items:center;height:20px;padding:0 8px;border-radius:999px;border:1px solid var(--dsw-alias-border-l2);font-size:11px;line-height:18px;white-space:nowrap;color:var(--dsw-alias-label-secondary);background:transparent}',
-      '.mm-chip-brand{color:var(--dsw-alias-brand-primary);border-color:var(--dsw-alias-brand-primary)}',
-      '.mm-chip-ok{color:var(--dsw-alias-state-success-primary);border-color:var(--dsw-alias-state-success-primary)}',
-      '.mm-chip-warn{color:var(--dsw-alias-state-warn-primary);border-color:var(--dsw-alias-state-warn-primary)}',
-      '.mm-chip-err{color:var(--dsw-alias-state-error-primary);border-color:var(--dsw-alias-state-error-primary)}',
-      '.mm-toolbar{display:flex;align-items:center;gap:8px;flex-wrap:wrap}',
-      '.mm-seg{display:inline-flex;border:1px solid var(--dsw-alias-border-l2);border-radius:var(--dsw-radius-sm);overflow:hidden;flex:none}',
-      '.mm-seg-btn{font:inherit;font-size:12px;height:28px;padding:0 11px;background:transparent;border:none;color:var(--dsw-alias-label-secondary);cursor:pointer}',
-      '.mm-seg-btn:hover{background:var(--dsw-alias-interactive-bg-hover)}',
-      '.mm-seg-btn-active{background:var(--dsw-alias-bg-layer-2);color:var(--dsw-alias-label-primary)}',
-      '.mm-seg-btn:disabled{opacity:.45;cursor:default}',
-      '.mm-ws{position:relative;display:flex;align-items:center;gap:6px;flex-wrap:nowrap;min-width:0;width:100%;flex:1 1 0}',
-      '.mm-ws-label{font-size:11px;line-height:16px;color:var(--dsw-alias-label-tertiary);flex:none}',
-      '.mm-ws-picker{position:relative;display:flex;flex:0 1 140px;min-width:0}',
-      '.mm-ws-picker > .mm-btn{flex:0 1 auto;box-sizing:border-box;width:140px;min-width:0;max-width:100%;padding:0 8px;justify-content:center;overflow:hidden;text-overflow:ellipsis}',
-      '.mm-ws-btn-text{display:block;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}',
-      '.mm-ws-pop{position:absolute;top:calc(100% + 4px);right:0;left:auto;z-index:2;display:flex;flex-direction:column;gap:6px;box-sizing:border-box;width:max-content;min-width:200px;max-width:min(280px,calc(100vw - 96px));max-height:240px;overflow:auto;overscroll-behavior:contain;padding:8px;border:1px solid var(--dsw-alias-border-l2);border-radius:var(--dsw-radius-sm);background:var(--dsw-alias-bg-layer-1);box-shadow:0 8px 24px var(--dsw-alias-bg-overlay,var(--dsw-alias-border-l2))}',
-      '.mm-ws-actions{display:flex;gap:6px}',
-      '.mm-ws-list{display:flex;flex-direction:column;gap:4px}',
-      '.mm-ws-empty{margin:0;font-size:11px;line-height:16px;color:var(--dsw-alias-label-tertiary)}',
-      '.mm-ws-chips{display:flex;align-items:center;gap:4px;flex-wrap:nowrap;overflow-x:auto;overflow-y:hidden;overscroll-behavior:contain;min-width:0;flex:1 1 0;height:22px;scrollbar-width:thin}',
-      '.mm-ws-chip{padding-right:3px;gap:4px;flex:none}',
-      '.mm-ws-chip-x{border:none;background:transparent;color:var(--dsw-alias-label-tertiary);font:inherit;line-height:1;padding:0 2px;cursor:pointer}',
-      '.mm-ws-chip-x:hover{color:var(--dsw-alias-label-primary)}',
-      '.mm-card-ws{display:flex;align-items:center;gap:4px;flex-wrap:wrap;min-width:0}',
-      '.mm-search{flex:1 1 200px;min-width:160px}',
-      '.mm-input{font:inherit;font-size:12px;line-height:18px;box-sizing:border-box;width:100%;color:var(--dsw-alias-label-primary);background:var(--dsw-alias-bg-base);border:1px solid var(--dsw-alias-border-l2);border-radius:var(--dsw-radius-sm);padding:5px 8px;outline:none;min-width:0}',
-      '.mm-input:focus-visible{border-color:var(--dsw-alias-brand-primary);outline:2px solid var(--dsw-alias-brand-primary);outline-offset:1px}',
-      '.mm-input::placeholder{color:var(--dsw-alias-label-tertiary)}',
-      '.mm-textarea{resize:vertical;min-height:64px}',
-      '.mm-fill{flex:1 1 auto;min-height:0;resize:none}',
-      '.mm-form-body{display:flex;flex-direction:column;gap:10px;min-width:0}',
-      '.mm-json-body{display:flex;flex-direction:column;gap:8px;flex:1 1 auto;min-height:0}',
-      '.mm-mono{font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;font-size:11px;line-height:17px}',
-      '.mm-results{flex:none;display:flex;flex-direction:column;overscroll-behavior:contain}',
-      '.mm-results-empty{height:auto;overflow:visible}',
-      '.mm-results-list{max-height:360px;overflow:auto;scrollbar-gutter:stable}',
-      '.mm-groups{display:flex;flex-direction:column;gap:16px}',
-      '.mm-group{display:flex;flex-direction:column;gap:8px}',
-      '.mm-group-title{margin:0;font-size:12px;line-height:18px;font-weight:600;color:var(--dsw-alias-label-secondary);padding-bottom:4px;border-bottom:1px solid var(--dsw-alias-border-l1)}',
-      '.mm-list{display:flex;flex-direction:column;gap:8px}',
-      '.mm-card{display:flex;flex-direction:column;gap:8px;padding:12px 14px;border:1px solid var(--dsw-alias-border-l1);border-radius:var(--dsw-radius-sm);background:var(--dsw-alias-bg-layer-1);min-width:0}',
-      '.mm-card-off{opacity:.72}',
-      '.mm-card-head{display:flex;align-items:center;gap:8px;flex-wrap:wrap;min-width:0}',
-      '.mm-card-name{font-size:13px;line-height:20px;font-weight:600;color:var(--dsw-alias-label-primary);word-break:break-all}',
-      '.mm-spacer{flex:1 1 auto}',
-      '.mm-card-meta{display:flex;align-items:center;gap:8px;flex-wrap:nowrap;min-width:0;overflow:hidden;white-space:nowrap}',
-      '.mm-card-meta > *{flex:none}',
-      '.mm-card-tools{flex:none;white-space:nowrap}',
-      '.mm-target{font-size:11px;line-height:16px;color:var(--dsw-alias-label-tertiary);min-width:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}',
-      '.mm-card-probe{font-size:11px;line-height:16px;min-height:16px;color:var(--dsw-alias-label-secondary);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}',
-      '.mm-row-actions{display:flex;align-items:center;gap:6px;flex-wrap:wrap}',
-      '.mm-hint{margin:0;font-size:11px;line-height:16px;color:var(--dsw-alias-label-tertiary)}',
-      '.mm-muted{font-size:11px;line-height:16px;color:var(--dsw-alias-label-tertiary);word-break:break-all}',
-      '.mm-status-slot{flex:none;height:26px;box-sizing:border-box;display:flex;align-items:center;padding:0 16px;overflow:hidden}',
-      '.mm-status-text{margin:0;flex:1 1 auto;min-width:0;font-size:12px;line-height:18px;color:var(--dsw-alias-label-secondary);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}',
+      '.mm-icon-btn-ok{color:var(--dsw-alias-state-success-primary);background:color-mix(in srgb, var(--dsw-alias-state-success-primary) 12%, transparent);border-color:color-mix(in srgb, var(--dsw-alias-state-success-primary) 32%, transparent)}',
+      '.mm-icon-btn-brand{color:var(--dsw-alias-brand-primary)}',
+      '.mm-icon-btn-warn{color:var(--dsw-alias-state-warn-primary)}',
+      '.mm-icon-btn-plain{color:var(--dsw-alias-label-secondary)}',
+      '.mm-icon-btn-danger:hover:not(:disabled){color:var(--dsw-alias-state-error-primary);border-color:color-mix(in srgb, var(--dsw-alias-state-error-primary) 40%, transparent);background:color-mix(in srgb, var(--dsw-alias-state-error-primary) 12%, transparent)}',
+      '.mm-icon-btn-spin .mm-icon{animation:mm-spin .85s linear infinite}',
+      '.mm-chip{display:inline-flex;align-items:center;height:20px;padding:0 8px;border-radius:6px;border:1px solid var(--dsw-alias-border-l2);font-size:11px;line-height:18px;white-space:nowrap;color:var(--dsw-alias-label-secondary);background:var(--dsw-alias-bg-layer-2)}',
+      '.mm-chip-brand{color:var(--dsw-alias-brand-primary);border-color:color-mix(in srgb, var(--dsw-alias-brand-primary) 34%, transparent);background:color-mix(in srgb, var(--dsw-alias-brand-primary) 12%, transparent)}',
+      '.mm-chip-global{color:color-mix(in srgb, var(--dsw-alias-brand-primary) 78%, var(--dsw-alias-label-primary));border-color:color-mix(in srgb, var(--dsw-alias-brand-primary) 52%, transparent);background:color-mix(in srgb, var(--dsw-alias-brand-primary) 24%, transparent)}',
+      '.mm-chip-text{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}',
+      '.mm-ws-badges{display:flex;align-items:center;gap:6px;flex-wrap:nowrap;overflow-x:auto;overflow-y:hidden;min-width:0;max-width:100%;scrollbar-width:thin;padding-bottom:1px}',
+      '.mm-ws-badges > *{flex:none}',
+      '.mm-chip-ws{max-width:220px;overflow:hidden;text-overflow:ellipsis;display:inline-block;line-height:18px}',
+      '.mm-chip-ok{color:var(--dsw-alias-state-success-primary);border-color:color-mix(in srgb, var(--dsw-alias-state-success-primary) 34%, transparent);background:color-mix(in srgb, var(--dsw-alias-state-success-primary) 12%, transparent)}',
+      '.mm-chip-warn{color:var(--dsw-alias-state-warn-primary);border-color:color-mix(in srgb, var(--dsw-alias-state-warn-primary) 34%, transparent);background:color-mix(in srgb, var(--dsw-alias-state-warn-primary) 12%, transparent)}',
+      '.mm-chip-err{color:var(--dsw-alias-state-error-primary);border-color:color-mix(in srgb, var(--dsw-alias-state-error-primary) 34%, transparent);background:color-mix(in srgb, var(--dsw-alias-state-error-primary) 12%, transparent)}',
+      '.mm-chip-neutral{color:var(--dsw-alias-label-secondary)}',
+      '.mm-chip-mono{font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;font-size:10.5px;background:var(--dsw-alias-bg-base)}',
+      '.mm-chip-strike{text-decoration:line-through}',
+      '.mm-scope-chip{border:none;background:transparent;padding:0;cursor:pointer;display:inline-flex;font:inherit;min-width:0;max-width:100%;flex:0 1 auto}',
+      '.mm-scope-wrap{min-width:0;max-width:min(320px,100%);overflow:hidden}',
+      '.mm-scope-chip .mm-chip{min-width:0;max-width:100%;overflow:hidden}',
+      '.mm-scope-chip:hover .mm-chip{border-color:var(--dsw-alias-brand-primary)}',
+      '.mm-scope-chip[aria-disabled="true"]{opacity:.6;cursor:default}',
+      '.mm-scope-chevron{margin-left:4px;display:block;flex:none;opacity:.75}',
+      '.mm-dot{width:8px;height:8px;border-radius:50%;flex:none;background:var(--dsw-alias-label-tertiary)}',
+      '.mm-dot-ok{background:var(--dsw-alias-state-success-primary)}',
+      '.mm-dot-warn{background:var(--dsw-alias-state-warn-primary)}',
+      '.mm-dot-err{background:var(--dsw-alias-state-error-primary)}',
+      '.mm-dot-muted{background:var(--dsw-alias-label-tertiary)}',
+      '.mm-dot-brand{background:var(--dsw-alias-brand-primary)}',
+      '.mm-dot-global{background:color-mix(in srgb, var(--dsw-alias-brand-primary) 70%, var(--dsw-alias-label-primary))}',
+      '.mm-dot-pulse{animation:mm-pulse 1.8s ease-in-out infinite}',
+      '.mm-status{font-size:11px;line-height:16px;white-space:nowrap}',
       '.mm-status-ok{color:var(--dsw-alias-state-success-primary)}',
       '.mm-status-warn{color:var(--dsw-alias-state-warn-primary)}',
       '.mm-status-err{color:var(--dsw-alias-state-error-primary)}',
-      '.mm-err-slot{flex:none;height:20px;display:flex;align-items:center;overflow:hidden}',
-      '.mm-err-text{margin:0;flex:1 1 auto;min-width:0;font-size:12px;line-height:18px;color:var(--dsw-alias-state-error-primary);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}',
-      '.mm-warn-slot{flex:none;height:32px;overflow:hidden}',
-      '.mm-warn-banner{display:flex;align-items:center;gap:8px;height:100%;box-sizing:border-box;padding:0 10px;border:1px solid var(--dsw-alias-state-warn-primary);border-radius:var(--dsw-radius-sm);background:var(--dsw-alias-bg-layer-1);color:var(--dsw-alias-label-secondary);font-size:12px;line-height:18px;white-space:nowrap;overflow:hidden}',
-      '.mm-warn-banner strong{flex:none;color:var(--dsw-alias-state-warn-primary);font-weight:600}',
-      '.mm-warn-text{flex:1 1 auto;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}',
-      '.mm-notice-slot{flex:none;height:46px;overflow:auto}',
-      '.mm-export-slot{flex:none;height:120px;overflow:auto;display:flex;flex-direction:column;gap:4px}',
-      '.mm-notice{display:flex;align-items:flex-start;gap:8px;padding:8px 10px;border:1px solid var(--dsw-alias-border-l2);border-radius:var(--dsw-radius-sm);background:var(--dsw-alias-bg-layer-2);font-size:12px;line-height:18px;color:var(--dsw-alias-label-secondary)}',
-      '.mm-notice-text{flex:1 1 auto;min-width:0;word-break:break-word}',
-      '.mm-notice-ok{border-color:var(--dsw-alias-state-success-primary);color:var(--dsw-alias-state-success-primary)}',
-      '.mm-notice-warn{border-color:var(--dsw-alias-state-warn-primary);color:var(--dsw-alias-state-warn-primary)}',
-      '.mm-notice-err{border-color:var(--dsw-alias-state-error-primary);color:var(--dsw-alias-state-error-primary)}',
-      '.mm-state{display:flex;flex-direction:column;align-items:center;gap:8px;padding:28px 16px;border:1px dashed var(--dsw-alias-border-l2);border-radius:var(--dsw-radius-sm);text-align:center;color:var(--dsw-alias-label-secondary)}',
+      '.mm-status-muted{color:var(--dsw-alias-label-tertiary)}',
+      '.mm-filter{display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap;flex:none}',
+      '.mm-seg{display:inline-flex;align-items:center;gap:2px;padding:4px;border:1px solid var(--dsw-alias-border-l1);border-radius:10px;background:var(--dsw-alias-bg-layer-2);flex:none;max-width:100%;flex-wrap:wrap}',
+      '.mm-seg-btn{font:inherit;font-size:12px;line-height:18px;height:26px;padding:0 10px;display:inline-flex;align-items:center;gap:6px;background:transparent;border:none;border-radius:7px;color:var(--dsw-alias-label-secondary);cursor:pointer;white-space:nowrap}',
+      '.mm-seg-btn:hover:not(:disabled){color:var(--dsw-alias-label-primary)}',
+      '.mm-seg-btn-active{background:color-mix(in srgb, var(--dsw-alias-brand-primary) 18%, var(--dsw-alias-bg-layer-2));color:var(--dsw-alias-label-primary);font-weight:600}',
+      '.mm-seg-btn:disabled{opacity:.55;cursor:default}',
+      '.mm-seg-text{display:inline-flex;align-items:center;gap:6px}',
+      '.mm-seg-count{font-size:11px;color:var(--dsw-alias-label-tertiary)}',
+      '.mm-seg-btn-active .mm-seg-count{color:var(--dsw-alias-label-secondary)}',
+      '.mm-seg-icon{display:block;flex:none}',
+      '.mm-search{position:relative;flex:0 1 240px;min-width:180px}',
+      '.mm-search-icon{position:absolute;left:10px;top:50%;transform:translateY(-50%);color:var(--dsw-alias-label-tertiary);pointer-events:none}',
+      '.mm-search-input{padding-left:30px}',
+      '.mm-input{font:inherit;font-size:12px;line-height:18px;box-sizing:border-box;width:100%;height:32px;color:var(--dsw-alias-label-primary);background:var(--dsw-alias-bg-layer-2);border:1px solid var(--dsw-alias-border-l2);border-radius:8px;padding:5px 10px;outline:none;min-width:0}',
+      '.mm-input:focus-visible{border-color:var(--dsw-alias-brand-primary);outline:2px solid color-mix(in srgb, var(--dsw-alias-brand-primary) 35%, transparent);outline-offset:1px}',
+      '.mm-input::placeholder{color:var(--dsw-alias-label-tertiary)}',
+      '.mm-textarea{height:auto;resize:vertical;min-height:64px;line-height:18px}',
+      '.mm-fill{flex:1 1 auto;min-height:0;resize:none}',
+      '.mm-mono{font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;font-size:11.5px}',
+      '.mm-results{flex:1 1 auto;min-height:0;display:flex;flex-direction:column;overflow:hidden}',
+      '.mm-results-list{overflow-y:auto;overscroll-behavior:contain;scrollbar-gutter:stable;padding-right:2px;max-height:calc(100vh - 280px)}',
+      '.mm-results-empty{overflow:visible}',
+      '.mm-list{display:flex;flex-direction:column;gap:10px}',
+      '.mm-card{display:flex;flex-wrap:wrap;align-items:flex-start;gap:12px;padding:16px;border:1px solid var(--dsw-alias-border-l1);border-radius:12px;background:var(--dsw-alias-bg-layer-1);min-width:0;transition:background .15s ease,border-color .15s ease}',
+      '.mm-card:hover{background:color-mix(in srgb, var(--dsw-alias-bg-layer-1) 88%, var(--dsw-alias-label-primary))}',
+      '.mm-card-dim{opacity:.85}',
+      '.mm-card-main{flex:1 1 260px;min-width:0;display:flex;flex-direction:column;gap:6px}',
+      '.mm-card-row1{display:flex;align-items:center;gap:8px;flex-wrap:wrap;min-width:0}',
+      '.mm-card-id{font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;font-size:14px;line-height:20px;font-weight:600;color:var(--dsw-alias-label-primary);word-break:break-all}',
+      '.mm-card-desc{margin:0;font-size:12.5px;line-height:18px;color:var(--dsw-alias-label-secondary)}',
+      '.mm-card-row3{display:flex;align-items:center;gap:12px;flex-wrap:wrap;min-width:0}',
+      '.mm-card-endpoint{flex:1 1 200px;min-width:0;color:var(--dsw-alias-label-tertiary);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}',
+      '.mm-expand{display:inline-flex;align-items:center;gap:4px;border:none;background:transparent;color:var(--dsw-alias-brand-primary);font:inherit;font-size:11.5px;cursor:pointer;padding:0;white-space:nowrap}',
+      '.mm-expand:hover{text-decoration:underline}',
+      '.mm-chevron{transition:transform .15s ease}',
+      '.mm-chevron-open{transform:rotate(180deg)}',
+      '.mm-card-actions{display:flex;align-items:center;gap:6px;flex:none;flex-wrap:wrap;justify-content:flex-end}',
+      '.mm-card-detail{flex:1 1 100%;display:flex;flex-direction:column;gap:8px;padding-top:10px;border-top:1px solid var(--dsw-alias-border-l1);min-width:0}',
+      '.mm-detail-row{display:flex;align-items:center;gap:8px;flex-wrap:wrap;min-width:0}',
+      '.mm-detail-label{font-size:12px;color:var(--dsw-alias-label-secondary);flex:none}',
+      '.mm-detail-meta{font-size:11.5px;color:var(--dsw-alias-label-tertiary)}',
+      '.mm-detail-meta > span{min-width:0}',
+      '.mm-chips-row{display:flex;align-items:center;gap:6px;flex-wrap:nowrap;overflow-x:auto;overflow-y:hidden;min-width:0;max-width:100%;padding-bottom:2px;scrollbar-width:thin}',
+      '.mm-chips-row > *{flex:none}',
+      '.mm-empty{display:flex;flex-direction:column;align-items:center;justify-content:center;gap:6px;padding:28px 16px;border:1px dashed var(--dsw-alias-border-l2);border-radius:12px;text-align:center;color:var(--dsw-alias-label-tertiary);font-size:12px;line-height:18px}',
+      '.mm-empty strong{font-size:13px;color:var(--dsw-alias-label-primary);font-weight:600}',
+      '.mm-state{display:flex;flex-direction:column;align-items:center;gap:8px;padding:28px 16px;border:1px dashed var(--dsw-alias-border-l2);border-radius:12px;text-align:center;color:var(--dsw-alias-label-secondary)}',
       '.mm-state-title{margin:0;font-size:13px;line-height:20px;font-weight:600;color:var(--dsw-alias-label-primary)}',
       '.mm-state-hint{margin:0;font-size:11px;line-height:16px;color:var(--dsw-alias-label-tertiary);word-break:break-word}',
-      '.mm-empty{display:flex;flex-direction:column;gap:2px;align-items:center;justify-content:center;padding:18px 14px;border:1px dashed var(--dsw-alias-border-l2);border-radius:var(--dsw-radius-sm);text-align:center;color:var(--dsw-alias-label-tertiary);font-size:12px;line-height:18px}',
-      '.mm-empty strong{font-size:13px;color:var(--dsw-alias-label-primary);font-weight:600}',
-      '.mm-section{display:flex;flex-direction:column;gap:10px;padding:12px 14px;border:1px solid var(--dsw-alias-border-l1);border-radius:var(--dsw-radius-sm);background:var(--dsw-alias-bg-layer-1)}',
-      '.mm-section-title{margin:0;font-size:13px;line-height:20px;font-weight:600;color:var(--dsw-alias-label-primary)}',
-      '.mm-section-hint{margin:0;font-size:11px;line-height:16px;color:var(--dsw-alias-label-tertiary)}',
-      '.mm-inline{display:flex;align-items:flex-end;gap:8px;flex-wrap:wrap}',
-      '.mm-grow{flex:1 1 200px;min-width:160px}',
-      '.mm-grid2{display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:10px}',
+      '.mm-warn-banner{display:flex;align-items:center;gap:8px;padding:8px 10px;border:1px solid color-mix(in srgb, var(--dsw-alias-state-warn-primary) 34%, transparent);border-radius:8px;background:color-mix(in srgb, var(--dsw-alias-state-warn-primary) 8%, transparent);font-size:12px;line-height:18px;color:var(--dsw-alias-label-secondary);min-width:0;flex:none}',
+      '.mm-warn-banner strong{flex:none;color:var(--dsw-alias-state-warn-primary);font-weight:600}',
+      '.mm-warn-text{flex:1 1 auto;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}',
+      '.mm-err-banner{border-color:color-mix(in srgb, var(--dsw-alias-state-error-primary) 34%, transparent);background:color-mix(in srgb, var(--dsw-alias-state-error-primary) 8%, transparent)}',
+      '.mm-err-banner strong{color:var(--dsw-alias-state-error-primary)}',
+      '.mm-hint{margin:0;font-size:11px;line-height:16px;color:var(--dsw-alias-label-tertiary)}',
+      '.mm-muted{font-size:11px;line-height:16px;color:var(--dsw-alias-label-tertiary);word-break:break-all}',
+      '.mm-link{border:none;background:transparent;color:var(--dsw-alias-brand-primary);font:inherit;font-size:11.5px;cursor:pointer;padding:0;white-space:nowrap}',
+      '.mm-link:hover{text-decoration:underline}',
+      '.mm-backdrop{position:fixed;inset:0;z-index:1000;display:flex;align-items:center;justify-content:center;padding:24px;background:transparent}',
+      '.mm-dialog{display:flex;flex-direction:column;box-sizing:border-box;flex:none;background:var(--dsw-alias-bg-base);border:1px solid var(--dsw-alias-border-l2);border-radius:16px;box-shadow:0 24px 64px color-mix(in srgb, var(--dsw-alias-label-primary) 16%, transparent);color:var(--dsw-alias-label-primary);font-family:var(--dsw-font-family);font-size:13px;line-height:20px;overflow:hidden}',
+      '.mm-dialog-editor{width:min(800px,calc(100vw - 48px));height:min(91vh,780px)}',
+      '.mm-dialog-manage{width:min(520px,calc(100vw - 48px));height:min(620px,calc(100vh - 48px))}',
+      '.mm-dialog-confirm{width:min(480px,calc(100vw - 48px));height:min(340px,calc(100vh - 48px))}',
+      '.mm-dialog-config{width:min(760px,calc(100vw - 48px));height:min(88vh,720px)}',
+      '.mm-dialog-head{flex:none;display:flex;align-items:flex-start;justify-content:space-between;gap:16px;padding:16px 24px;border-bottom:1px solid var(--dsw-alias-border-l1)}',
+      '.mm-dialog-titles{min-width:0}',
+      '.mm-dialog-title{margin:0;font-size:16px;line-height:24px;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}',
+      '.mm-dialog-sub{margin:2px 0 0;font-size:12px;line-height:18px;color:var(--dsw-alias-label-secondary);max-width:560px}',
+      '.mm-dialog-head-actions{display:flex;align-items:center;gap:8px;flex:none}',
+      '.mm-dialog-head .mm-icon-btn{border-color:transparent;width:28px;height:28px}',
+      '.mm-dialog-body{flex:1 1 auto;min-height:0;overflow-y:auto;overscroll-behavior:contain;padding:20px 24px;display:flex;flex-direction:column;gap:20px}',
+      '.mm-dialog-foot{flex:none;display:flex;align-items:center;justify-content:flex-end;gap:12px;padding:12px 24px;border-top:1px solid var(--dsw-alias-border-l1);background:var(--dsw-alias-bg-layer-1);flex-wrap:wrap}',
+      '.mm-foot-left{display:flex;align-items:center;gap:10px;min-width:0;flex:1 1 220px;margin-right:auto}',
+      '.mm-foot-right{display:flex;align-items:center;gap:8px;margin-left:auto;flex-wrap:wrap;justify-content:flex-end}',
+      '.mm-sync-hint{font-size:10.5px;line-height:14px;color:var(--dsw-alias-label-tertiary);white-space:nowrap;flex:none}',
+      '.mm-scope-card{padding:16px;border:1px solid var(--dsw-alias-border-l1);border-radius:12px;background:var(--dsw-alias-bg-layer-1);display:flex;flex-direction:column;gap:12px}',
+      '.mm-scope-head{display:flex;align-items:flex-start;justify-content:space-between;gap:12px;flex-wrap:wrap}',
+      '.mm-scope-title{display:flex;align-items:center;gap:8px;font-size:13px;font-weight:600}',
+      '.mm-scope-badge{font-size:10.5px;font-weight:400;padding:1px 6px;border-radius:4px;color:var(--dsw-alias-state-success-primary);background:color-mix(in srgb, var(--dsw-alias-state-success-primary) 12%, transparent);border:1px solid color-mix(in srgb, var(--dsw-alias-state-success-primary) 26%, transparent);white-space:nowrap}',
+      '.mm-scope-hint{margin:2px 0 0;font-size:11.5px;line-height:17px;color:var(--dsw-alias-label-secondary)}',
+      '.mm-ws-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:10px}',
+      '.mm-ws-option{display:flex;align-items:flex-start;gap:8px;padding:10px;border:1px solid var(--dsw-alias-border-l2);border-radius:9px;background:var(--dsw-alias-bg-base);cursor:pointer;min-width:0}',
+      '.mm-ws-option:hover{border-color:color-mix(in srgb, var(--dsw-alias-brand-primary) 40%, transparent)}',
+      '.mm-ws-option-active{border-color:var(--dsw-alias-brand-primary);background:color-mix(in srgb, var(--dsw-alias-brand-primary) 10%, transparent)}',
+      '.mm-ws-option input{margin-top:2px;accent-color:var(--dsw-alias-brand-primary)}',
+      '.mm-ws-option-body{min-width:0}',
+      '.mm-ws-option-label{font-size:12.5px;font-weight:500;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}',
+      '.mm-ws-option-sub{font-size:10.5px;line-height:15px;color:var(--dsw-alias-label-tertiary);margin-top:1px}',
+      '.mm-merge-preview{font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;font-size:11px;line-height:17px;color:var(--dsw-alias-label-secondary);background:var(--dsw-alias-bg-layer-2);border:1px solid var(--dsw-alias-border-l1);border-radius:8px;padding:8px 10px;word-break:break-word}',
+      '.mm-global-hint{color:var(--dsw-alias-brand-primary);background:color-mix(in srgb, var(--dsw-alias-brand-primary) 10%, transparent);border-color:color-mix(in srgb, var(--dsw-alias-brand-primary) 28%, transparent)}',
+      '.mm-merge-empty{color:var(--dsw-alias-state-error-primary);background:color-mix(in srgb, var(--dsw-alias-state-error-primary) 8%, transparent);border-color:color-mix(in srgb, var(--dsw-alias-state-error-primary) 28%, transparent)}',
+      '.mm-form{display:flex;flex-direction:column;gap:20px;min-width:0}',
+      '.mm-form-section{display:flex;flex-direction:column;gap:12px;padding-top:16px;border-top:1px solid var(--dsw-alias-border-l1);min-width:0}',
+      '.mm-form-section:first-child{padding-top:0;border-top:none}',
+      '.mm-form-title{font-size:12px;line-height:18px;font-weight:600;letter-spacing:.04em;text-transform:uppercase;color:var(--dsw-alias-label-secondary)}',
+      '.mm-grid2{display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:12px}',
+      '.mm-grid3{display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:12px}',
+      '.mm-col-2{grid-column:span 2}',
       '.mm-field{display:flex;flex-direction:column;gap:4px;min-width:0}',
+      '.mm-field-head{display:flex;align-items:center;justify-content:space-between;gap:8px}',
       '.mm-field-label{font-size:12px;line-height:18px;color:var(--dsw-alias-label-secondary)}',
       '.mm-field-hint{font-size:11px;line-height:16px;color:var(--dsw-alias-label-tertiary)}',
       '.mm-required{color:var(--dsw-alias-state-error-primary);margin-left:2px}',
-      '.mm-check{display:inline-flex;align-items:center;gap:8px;font-size:12px;line-height:18px;color:var(--dsw-alias-label-secondary);cursor:pointer;user-select:none}',
-      '.mm-check input{accent-color:var(--dsw-alias-brand-primary)}',
-      '.mm-dialog-settings{flex:none;height:44px;box-sizing:border-box;display:flex;align-items:center;gap:12px;flex-wrap:nowrap;padding:0 16px;border-bottom:1px solid var(--dsw-alias-border-l1)}',
-      '.mm-settings-scope{display:inline-flex;align-items:center;gap:6px;flex:none}',
-      '.mm-settings-ws{display:flex;align-items:center;justify-content:flex-end;flex:1 1 0;min-width:0;margin-left:auto}',
-      '.mm-settings-ws.mm-hidden{display:none}',
-      '.mm-dialog-tabs{flex:none;height:40px;box-sizing:border-box;display:flex;align-items:center;gap:4px;padding:0 16px;border-bottom:1px solid var(--dsw-alias-border-l1)}',
-      '.mm-scope-label{font-size:11px;line-height:16px;color:var(--dsw-alias-label-tertiary);flex:none}',
-      '.mm-tabs{display:flex;gap:4px}',
-      '.mm-tab{font:inherit;font-size:12px;line-height:18px;padding:5px 10px;background:transparent;border:none;border-bottom:2px solid transparent;color:var(--dsw-alias-label-secondary);cursor:pointer}',
-      '.mm-tab:hover{color:var(--dsw-alias-label-primary)}',
-      '.mm-tab-active{color:var(--dsw-alias-brand-primary);border-bottom-color:var(--dsw-alias-brand-primary)}',
-      '.mm-advanced{border:1px solid var(--dsw-alias-border-l1);border-radius:var(--dsw-radius-sm);padding:8px 10px}',
-      '.mm-advanced summary{cursor:pointer;font-size:12px;line-height:18px;color:var(--dsw-alias-label-secondary);user-select:none}',
-      '.mm-advanced-body{display:flex;flex-direction:column;gap:10px;padding-top:8px}',
-      '.mm-code{margin:0;padding:8px 10px;max-height:320px;overflow:auto;border:1px solid var(--dsw-alias-border-l1);border-radius:var(--dsw-radius-sm);background:var(--dsw-alias-bg-base);color:var(--dsw-alias-label-secondary);font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;font-size:11px;line-height:17px;white-space:pre-wrap;word-break:break-all}',
-      '.mm-library{display:flex;flex-direction:column;gap:6px}',
-      '.mm-library-row{display:flex;align-items:center;justify-content:space-between;gap:8px;flex-wrap:wrap;padding:8px 10px;border:1px solid var(--dsw-alias-border-l1);border-radius:var(--dsw-radius-sm);background:var(--dsw-alias-bg-base)}',
-      '.mm-library-main{display:flex;align-items:center;gap:8px;flex-wrap:wrap;min-width:0}',
-      '.mm-switch{position:relative;flex:none;width:36px;height:20px;padding:0;border-radius:999px;border:1px solid var(--dsw-alias-border-l2);background:var(--dsw-alias-bg-layer-2);cursor:pointer}',
-      '.mm-switch-on{background:var(--dsw-alias-brand-primary);border-color:var(--dsw-alias-brand-primary)}',
-      '.mm-switch-thumb{position:absolute;top:2px;left:2px;width:14px;height:14px;border-radius:50%;background:var(--dsw-alias-bg-base);transition:transform .15s ease}',
-      '.mm-switch-on .mm-switch-thumb{transform:translateX(16px)}',
-      '.mm-switch:disabled{opacity:.45;cursor:default}',
-      '.mm-backdrop{position:fixed;inset:0;z-index:1000;display:flex;align-items:center;justify-content:center;padding:16px;background:transparent}',
-      '.mm-code-fill{flex:1 1 auto;min-height:0;max-height:none;overflow:visible}',
-      /* The fallback matches the backdrop's 16px padding on both sides: the flex item
-       * must not shrink below its declared size, so at 375px the dialog is 343px. */
-      '.mm-dialog{box-sizing:border-box;display:flex;flex-direction:column;flex:none;width:min(800px,calc(100vw - 32px));height:min(800px,calc(100vh - 32px));border:1px solid var(--dsw-alias-border-l2);border-radius:var(--dsw-radius-sm);background:var(--dsw-alias-bg-layer-1);color:var(--dsw-alias-label-primary);overflow:hidden;box-shadow:0 12px 36px var(--dsw-alias-bg-overlay,var(--dsw-alias-border-l2))}',
-      '.mm-dialog-confirm{width:min(440px,calc(100vw - 48px));height:auto;min-height:200px}',
-      '.mm-dialog-head{flex:none;height:48px;box-sizing:border-box;display:flex;align-items:center;justify-content:space-between;gap:12px;padding:0 16px;border-bottom:1px solid var(--dsw-alias-border-l1)}',
-      '.mm-dialog-title{margin:0;min-width:0;font-size:14px;line-height:22px;font-weight:600;color:var(--dsw-alias-label-primary);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}',
-      '.mm-dialog-body{display:flex;flex-direction:column;gap:10px;padding:12px 16px;flex:1 1 auto;min-height:0;overflow:auto;overscroll-behavior:contain}',
-      '.mm-dialog-text{margin:0;font-size:12px;line-height:19px;color:var(--dsw-alias-label-secondary)}',
-      '.mm-dialog-foot{flex:none;height:56px;box-sizing:border-box;display:flex;align-items:center;justify-content:flex-end;gap:8px;flex-wrap:nowrap;min-width:0;padding:0 16px;border-top:1px solid var(--dsw-alias-border-l1)}',
-      '.mm-dialog-foot > .mm-btn:not(.mm-btn-fixed){flex:none}',
-      '.mm-foot-left{display:flex;align-items:center;flex:0 1 auto;min-width:0;margin-right:auto}',
-      '@media (max-width:480px){.mm-dialog-foot{gap:6px;padding:0 10px}.mm-foot-left{flex:1 1 0}.mm-btn-fixed{flex:1 1 0;min-width:0}}',
-      /* Narrow viewports: the workspace label is redundant with the picker button text,
-       * so reclaim its width for the chips. The picker becomes content-sized and the
-       * chips keep a usable minimum width and stay horizontally scrollable. */
-      '@media (max-width:480px){'
-        + '.mm-dialog-settings{gap:8px;padding:0 12px}'
-        + '.mm-settings-scope{gap:4px}'
-        + '.mm-dialog-settings .mm-seg-btn{padding:0 8px}'
-        + '.mm-ws{gap:4px}'
-        + '.mm-ws-label{display:none}'
-        + '.mm-ws-picker{flex:0 1 auto;max-width:120px}'
-        + '.mm-ws-picker > .mm-btn{width:auto;max-width:120px;padding:0 6px}'
-        + '.mm-ws-chips{flex:1 1 0;min-width:56px}'
-        + '}',
-      /* Narrow host viewports: the Settings panel can leave only ~90px of content
-       * width, less than the two icon buttons plus gaps. Drop the subtitle first,
-       * then the timestamp, and let the title shrink and ellipsize so the header
-       * never wraps or overflows. Desktop (>=721px) keeps the full single row. */
-      '@media (max-width:720px){'
-        + '.mm-head{gap:8px;overflow:hidden}'
-        + '.mm-subtitle{display:none}'
-        + '.mm-title{flex:0 1 auto;min-width:0;overflow:hidden;text-overflow:ellipsis}'
-        + '}',
-      '@media (max-width:520px){'
-        + '.mm-head{gap:4px}'
-        + '.mm-updated{display:none}'
-        + '.mm-head-icon{box-sizing:border-box;width:22px;height:22px}'
-        + '.mm-title{font-size:14px;line-height:20px}'
-        + '}',
+      '.mm-transport-grid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:10px}',
+      '.mm-transport-card{text-align:left;padding:10px;border:1px solid var(--dsw-alias-border-l2);border-radius:9px;background:var(--dsw-alias-bg-layer-2);color:var(--dsw-alias-label-primary);cursor:pointer;font:inherit;transition:border-color .15s ease,background .15s ease}',
+      '.mm-transport-card:hover:not(:disabled){border-color:color-mix(in srgb, var(--dsw-alias-brand-primary) 40%, transparent)}',
+      '.mm-transport-card-active{border-color:var(--dsw-alias-brand-primary);background:color-mix(in srgb, var(--dsw-alias-brand-primary) 10%, transparent)}',
+      '.mm-transport-card-disabled{opacity:.55;cursor:not-allowed}',
+      '.mm-transport-head{display:flex;align-items:center;justify-content:space-between;gap:6px}',
+      '.mm-transport-name{font-size:13px;font-weight:600}',
+      '.mm-transport-badge{font-size:10px;padding:1px 6px;border-radius:4px;background:var(--dsw-alias-bg-base);color:var(--dsw-alias-label-secondary);border:1px solid var(--dsw-alias-border-l1);white-space:nowrap}',
+      '.mm-transport-card-active .mm-transport-badge{color:var(--dsw-alias-brand-primary);border-color:color-mix(in srgb, var(--dsw-alias-brand-primary) 34%, transparent)}',
+      '.mm-transport-desc{margin:6px 0 0;font-size:11px;line-height:16px;color:var(--dsw-alias-label-secondary)}',
+      '.mm-kv-list{display:flex;flex-direction:column;gap:8px}',
+      '.mm-kv-row{display:flex;align-items:center;gap:8px;min-width:0}',
+      '.mm-kv-row .mm-input{flex:1 1 0}',
+      '.mm-kv-row .mm-icon-btn{width:28px;height:28px;border-color:transparent;background:transparent}',
+      '.mm-kv-row .mm-icon-btn:hover:not(:disabled){color:var(--dsw-alias-state-error-primary);background:color-mix(in srgb, var(--dsw-alias-state-error-primary) 12%, transparent)}',
+      '.mm-check{display:inline-flex;align-items:center;gap:6px;font-size:12px;line-height:18px;color:var(--dsw-alias-label-secondary);cursor:pointer;white-space:nowrap}',
+      '.mm-check input{accent-color:var(--dsw-alias-brand-primary);width:14px;height:14px;margin:0}',
+      '.mm-check-label{min-width:0}',
+      '.mm-cap-box{display:flex;align-items:center;gap:12px;min-height:32px;padding:5px 10px;border:1px solid var(--dsw-alias-border-l2);border-radius:8px;background:var(--dsw-alias-bg-layer-2);flex-wrap:wrap}',
+      '.mm-cap-box .mm-check{white-space:normal}',
+      '.mm-oauth{border:1px solid var(--dsw-alias-border-l1);border-radius:10px;background:var(--dsw-alias-bg-layer-1);padding:12px;display:flex;flex-direction:column;gap:10px}',
+      '.mm-oauth-head{display:flex;align-items:flex-start;justify-content:space-between;gap:12px}',
+      '.mm-oauth-head input{accent-color:var(--dsw-alias-brand-primary);width:16px;height:16px;margin-top:2px}',
+      '.mm-oauth-title{font-size:12px;font-weight:500}',
+      '.mm-oauth-hint{font-size:11px;line-height:16px;color:var(--dsw-alias-label-secondary)}',
+      '.mm-oauth-detail{display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:10px;padding-top:10px;border-top:1px solid var(--dsw-alias-border-l1)}',
+      '.mm-json-panel{display:flex;flex-direction:column;gap:10px;min-height:0;flex:1 1 auto}',
+      '.mm-json-toolbar{display:flex;align-items:flex-start;justify-content:space-between;gap:12px;flex-wrap:wrap}',
+      '.mm-json-hint{font-size:12px;line-height:18px;color:var(--dsw-alias-label-secondary);flex:1 1 280px;min-width:0}',
+      '.mm-json-actions{display:flex;align-items:center;gap:6px;flex-wrap:wrap}',
+      '.mm-json-panel .mm-textarea{flex:1 1 auto;min-height:220px;background:var(--dsw-alias-bg-layer-2)}',
+      '.mm-json-feedback{padding:8px 10px;border-radius:8px;font-size:12px;line-height:18px;border:1px solid var(--dsw-alias-border-l2);display:flex;align-items:center;justify-content:space-between;gap:8px;flex-wrap:wrap}',
+      '.mm-json-confirm{display:flex;align-items:center;gap:8px;flex-wrap:wrap;padding:8px 10px;border-radius:8px;font-size:12px;line-height:18px;border:1px solid color-mix(in srgb, var(--dsw-alias-state-warn-primary) 32%, transparent);background:color-mix(in srgb, var(--dsw-alias-state-warn-primary) 8%, transparent);color:var(--dsw-alias-label-secondary)}',
+      '.mm-json-confirm-text{flex:1 1 220px;min-width:0}',
+      '.mm-json-feedback-ok{color:var(--dsw-alias-state-success-primary);background:color-mix(in srgb, var(--dsw-alias-state-success-primary) 10%, transparent);border-color:color-mix(in srgb, var(--dsw-alias-state-success-primary) 26%, transparent)}',
+      '.mm-json-feedback-err{color:var(--dsw-alias-state-error-primary);background:color-mix(in srgb, var(--dsw-alias-state-error-primary) 10%, transparent);border-color:color-mix(in srgb, var(--dsw-alias-state-error-primary) 26%, transparent)}',
+      '.mm-test-text{font-size:11.5px;line-height:16px;color:var(--dsw-alias-label-secondary);min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}',
+      '.mm-test-ok{color:var(--dsw-alias-state-success-primary)}',
+      '.mm-test-err{color:var(--dsw-alias-state-error-primary)}',
+      '.mm-test-warn{color:var(--dsw-alias-state-warn-primary)}',
+      '.mm-manage-target{display:flex;align-items:center;gap:8px;padding:10px 12px;border:1px solid var(--dsw-alias-border-l1);border-radius:9px;background:var(--dsw-alias-bg-layer-1);flex-wrap:wrap}',
+      '.mm-manage-global{display:flex;align-items:flex-start;gap:10px;padding:12px;border:1px solid var(--dsw-alias-border-l2);border-radius:10px;background:var(--dsw-alias-bg-layer-1);cursor:pointer}',
+      '.mm-manage-global input{margin-top:2px;accent-color:var(--dsw-alias-brand-primary)}',
+      '.mm-manage-global-title{display:flex;align-items:center;gap:8px;font-size:13px;font-weight:500;flex-wrap:wrap}',
+      '.mm-manage-global-hint{font-size:11.5px;color:var(--dsw-alias-label-secondary);margin-top:2px}',
+      '.mm-manage-global-locked{font-size:11px;color:var(--dsw-alias-label-tertiary);margin-top:4px}',
+      '.mm-manage-specific{display:flex;flex-direction:column;gap:8px}',
+      '.mm-manage-specific-title{font-size:12px;font-weight:500;color:var(--dsw-alias-label-secondary)}',
+      '.mm-manage-list{display:flex;flex-direction:column;gap:8px}',
+      '.mm-manage-ws{display:flex;align-items:flex-start;gap:10px;padding:10px 12px;border:1px solid var(--dsw-alias-border-l2);border-radius:9px;background:var(--dsw-alias-bg-base);cursor:pointer}',
+      '.mm-manage-ws-active{border-color:color-mix(in srgb, var(--dsw-alias-brand-primary) 55%, transparent);background:color-mix(in srgb, var(--dsw-alias-brand-primary) 8%, transparent)}',
+      '.mm-manage-ws input{margin-top:2px;accent-color:var(--dsw-alias-brand-primary)}',
+      '.mm-manage-ws-body{flex:1 1 auto;min-width:0}',
+      '.mm-manage-ws-title{font-size:12.5px;font-weight:500}',
+      '.mm-manage-ws-path{font-size:10.5px;color:var(--dsw-alias-label-tertiary);word-break:break-all}',
+      '.mm-manage-count{font-size:11px;color:var(--dsw-alias-label-secondary);background:var(--dsw-alias-bg-layer-2);padding:1px 7px;border-radius:999px;white-space:nowrap;flex:none}',
+      '.mm-manage-note{padding:9px 11px;border:1px solid color-mix(in srgb, var(--dsw-alias-brand-primary) 26%, transparent);border-radius:8px;background:color-mix(in srgb, var(--dsw-alias-brand-primary) 8%, transparent);font-size:11.5px;line-height:17px;color:var(--dsw-alias-brand-primary)}',
+      '.mm-delete-head{display:flex;align-items:flex-start;gap:12px}',
+      '.mm-delete-icon{width:36px;height:36px;border-radius:50%;display:inline-flex;align-items:center;justify-content:center;flex:none;color:var(--dsw-alias-state-error-primary);background:color-mix(in srgb, var(--dsw-alias-state-error-primary) 12%, transparent);border:1px solid color-mix(in srgb, var(--dsw-alias-state-error-primary) 28%, transparent)}',
+      '.mm-dialog-confirm .mm-dialog-body{min-height:0}',
+      '.mm-delete-desc{margin:4px 0 0;font-size:12.5px;line-height:19px;color:var(--dsw-alias-label-secondary)}',
+      '.mm-delete-choices{display:flex;flex-direction:column;gap:8px}',
+      '.mm-delete-option{display:flex;align-items:flex-start;gap:10px;padding:10px 12px;border:1px solid var(--dsw-alias-border-l2);border-radius:9px;background:var(--dsw-alias-bg-layer-1);cursor:pointer}',
+      '.mm-delete-option input{margin-top:2px;accent-color:var(--dsw-alias-brand-primary)}',
+      '.mm-delete-option-active{border-color:var(--dsw-alias-brand-primary)}',
+      '.mm-delete-option-danger.mm-delete-option-active{border-color:var(--dsw-alias-state-error-primary)}',
+      '.mm-delete-option-danger input{accent-color:var(--dsw-alias-state-error-primary)}',
+      '.mm-delete-option-title{font-size:12.5px;font-weight:500}',
+      '.mm-delete-option-sub{font-size:11px;line-height:16px;color:var(--dsw-alias-label-secondary);margin-top:1px}',
+      '.mm-danger-text{color:var(--dsw-alias-state-error-primary)}',
+      '.mm-dialog-text{margin:0;font-size:12.5px;line-height:19px;color:var(--dsw-alias-label-secondary)}',
+      '.mm-config-toolbar{display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap}',
+      '.mm-config-path{font-size:11px;color:var(--dsw-alias-brand-primary);word-break:break-all;min-width:0}',
+      '.mm-config-readonly{font-size:11.5px;color:var(--dsw-alias-label-tertiary);margin-right:auto;min-width:0}',
+      '.mm-code{margin:0;padding:14px;border:1px solid var(--dsw-alias-border-l1);border-radius:10px;background:var(--dsw-alias-bg-layer-2);color:var(--dsw-alias-label-primary);font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;font-size:12px;line-height:18px;white-space:pre-wrap;word-break:break-all;overflow:auto}',
+      '.mm-code-fill{flex:1 1 auto;min-height:0}',
+      '.mm-toasts{position:fixed;left:50%;bottom:20px;transform:translateX(-50%);z-index:2100;display:flex;flex-direction:column;align-items:center;gap:8px;pointer-events:none;max-width:min(520px,calc(100vw - 32px))}',
+      '.mm-toast{display:flex;align-items:flex-start;gap:8px;padding:10px 14px;border-radius:10px;border:1px solid var(--dsw-alias-border-l2);background:var(--dsw-alias-bg-layer-1);color:var(--dsw-alias-label-primary);font-size:12.5px;line-height:18px;box-shadow:0 10px 30px color-mix(in srgb, var(--dsw-alias-label-primary) 14%, transparent);animation:mm-toast-in .18s ease}',
+      '.mm-toast-dot{width:8px;height:8px;border-radius:50%;margin-top:5px;flex:none;background:var(--dsw-alias-brand-primary)}',
+      '.mm-toast-success{border-color:color-mix(in srgb, var(--dsw-alias-state-success-primary) 40%, transparent)}',
+      '.mm-toast-success .mm-toast-dot{background:var(--dsw-alias-state-success-primary)}',
+      '.mm-toast-info{border-color:color-mix(in srgb, var(--dsw-alias-brand-primary) 40%, transparent)}',
+      '.mm-toast-info .mm-toast-dot{background:var(--dsw-alias-brand-primary)}',
+      '.mm-toast-warning{border-color:color-mix(in srgb, var(--dsw-alias-state-warn-primary) 40%, transparent)}',
+      '.mm-toast-warning .mm-toast-dot{background:var(--dsw-alias-state-warn-primary)}',
+      '.mm-toast-error{border-color:color-mix(in srgb, var(--dsw-alias-state-error-primary) 40%, transparent)}',
+      '.mm-toast-error .mm-toast-dot{background:var(--dsw-alias-state-error-primary)}',
+      '.mm-toast-text{min-width:0;word-break:break-word}',
+      '.mm-toast-leaving{animation:mm-toast-out .22s ease forwards}',
+      '.mm-tooltip{position:fixed;z-index:2000;max-width:min(320px,calc(100vw - 24px));padding:6px 10px;border-radius:7px;border:1px solid var(--dsw-alias-border-l2);background:var(--dsw-alias-bg-layer-2);color:var(--dsw-alias-label-primary);font-size:12px;line-height:16px;font-weight:500;box-shadow:0 8px 22px color-mix(in srgb, var(--dsw-alias-label-primary) 18%, transparent);pointer-events:none;opacity:0;transform:translateY(2px);transition:opacity .14s ease,transform .14s ease;white-space:nowrap}',
+      '.mm-tooltip-show{opacity:1;transform:translateY(0)}',
+      '@keyframes mm-spin{from{transform:rotate(0deg)}to{transform:rotate(360deg)}}',
+      '@keyframes mm-pulse{0%{transform:scale(.95);opacity:.85}50%{transform:scale(1.15);opacity:.4}100%{transform:scale(.95);opacity:.85}}',
+      '@keyframes mm-toast-in{from{opacity:0;transform:translateY(6px)}to{opacity:1;transform:translateY(0)}}',
+      '@keyframes mm-toast-out{from{opacity:1;transform:translateY(0)}to{opacity:0;transform:translateY(6px)}}',
+      '@media (max-width:720px){.mm-head{flex-wrap:wrap}.mm-subtitle{font-size:12px}.mm-transport-grid{grid-template-columns:1fr}.mm-dialog-head{padding:14px 16px;flex-wrap:wrap}.mm-dialog-head-actions{margin-left:auto}.mm-dialog-body{padding:16px}.mm-dialog-foot{padding:10px 16px}.mm-foot-right{width:100%;justify-content:flex-end}.mm-col-2{grid-column:auto}}',
+      '@media (max-width:520px){.mm-head-actions{width:100%;justify-content:flex-end}.mm-search{flex:1 1 100%}.mm-filter{align-items:stretch}.mm-seg{width:100%}.mm-seg-btn{flex:1 1 auto;justify-content:center}.mm-card-actions{width:100%;justify-content:flex-end}.mm-dialog-editor{height:calc(100vh - 32px)}.mm-backdrop{padding:16px}}',
     ].join('\n')
 
     /* ------------------------------------------------------------------ *
