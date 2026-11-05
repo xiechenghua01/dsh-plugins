@@ -368,6 +368,7 @@ window.__ModuleLoader__.load({
 .ss-icon-accent{fill:var(--dsw-alias-brand-primary);stroke:var(--dsw-alias-brand-primary)}
 .ss-footer-entry{display:flex;align-items:center;gap:8px;width:100%;height:36px;padding:0 10px;margin:0;border:0;border-radius:10px;background:transparent;color:var(--dsw-alias-label-secondary);font:inherit;font-size:13px;line-height:20px;cursor:pointer;transition:background .15s,color .15s}
 .ss-footer-entry:hover{background:var(--dsw-alias-interactive-bg-hover);color:var(--dsw-alias-label-primary)}
+.ss-footer-entry[data-active="true"]{background:var(--dsw-alias-bg-layer-2);color:var(--dsw-alias-label-primary)}
 .ss-footer-entry:focus-visible{outline:2px solid var(--dsw-focus-ring-color,var(--dsw-alias-state-business-primary));outline-offset:-2px}
 .ss-footer-entry[data-collapsed="true"]{width:36px;padding:0;justify-content:center}
 .ss-footer-label{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
@@ -720,24 +721,37 @@ window.__ModuleLoader__.load({
     /**
      * Sidebar-foot entry (`sidebar.footer.action`), rendered directly above the
      * account menu at the bottom of the sidebar. The owner hands it only `wide`;
-     * the panel title and the navigation callback come from the registration.
+     * the panel title and the navigation callbacks come from the registration.
+     * The entry toggles: a second click on the already-open panel returns to the
+     * Conversation (`layout.selectPanel(null)`).
      */
     function FooterEntry(props) {
       const source = props !== null && typeof props === 'object' ? props : {}
       const wide = source.wide === true
       const t = typeof source.t === 'function' ? source.t : (key) => key
       const openPanel = typeof source.openPanel === 'function' ? source.openPanel : () => {}
+      const togglePanel = typeof source.togglePanel === 'function' ? source.togglePanel : null
+      const usePanelInfo = source.usePanelInfo
+      const active = typeof usePanelInfo === 'function'
+        ? usePanelInfo((info) => info !== null && typeof info === 'object' && info.activePanelId === PANEL_ID) === true
+        : false
+      const onClick = () => {
+        if (togglePanel !== null) togglePanel(active)
+        else openPanel()
+      }
       return h(
         'button',
         {
           type: 'button',
           className: 'ss-footer-entry',
           'data-collapsed': wide ? 'false' : 'true',
+          'data-active': active ? 'true' : 'false',
           'aria-label': t('panel.title'),
+          'aria-pressed': active,
           title: wide ? undefined : t('panel.title'),
-          onClick: openPanel,
+          onClick: onClick,
         },
-        h(StatsIcon, { size: 18, active: false }),
+        h(StatsIcon, { size: 18, active: active }),
         wide ? h('span', { className: 'ss-footer-label' }, t('panel.title')) : null,
       )
     }
@@ -2116,6 +2130,8 @@ window.__ModuleLoader__.load({
                   inject: () => ({
                     t: t,
                     openPanel: () => ctx.layout.selectPanel(PANEL_ID),
+                    // `null` returns to the Conversation, so the same entry closes the panel.
+                    togglePanel: (active) => ctx.layout.selectPanel(active ? null : PANEL_ID),
                   }),
                 },
                 FooterEntry,

@@ -341,13 +341,19 @@ ctx.slots.inject('main', () => ctx.slots.register({
 ctx.slots.inject('sidebar.footer.action', () => ctx.slots.register({
   name: 'sidebar.footer.action', id: 'session-stats', order: 10,
   locale: 'session-stats', label: () => t('panel.title'),
-  inject: () => ({ t, openPanel: () => ctx.layout.selectPanel('session-stats') }),
+  inject: () => ({
+    t,
+    openPanel: () => ctx.layout.selectPanel('session-stats'),
+    togglePanel: (active) => ctx.layout.selectPanel(active ? null : 'session-stats'),
+  }),
 }, FooterEntry))
 ```
 The client plugin therefore injects `layout` in addition to `slots` and `locale`.
-`FooterEntry` receives the owner's `{ wide }` plus `{ t, openPanel }`: wide renders the
-icon and the panel title, the 56px rail renders the icon only; clicking selects the main
-panel through `ctx.layout.selectPanel`.
+`FooterEntry` receives the owner's `{ wide }` plus `{ t, openPanel, togglePanel }` and the
+standard `usePanelInfo` hook: wide renders the icon and the panel title, the 56px rail renders
+the icon only. The entry is a toggle — `usePanelInfo((info) => info.activePanelId === 'session-stats')`
+drives `aria-pressed`/`data-active`, and a second click calls `layout.selectPanel(null)` to
+return to the Conversation instead of re-selecting the same panel.
 
 Data loading: `fetch('session-stats/overview?days=' + days)` — **relative** URL, no leading
 slash (the document mount prefix is preserved), `headers: { accept: 'application/json' }`.
