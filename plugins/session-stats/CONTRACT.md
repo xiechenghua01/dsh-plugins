@@ -356,6 +356,10 @@ Poll `system` every 2000 ms while mounted, `overview` every 10000 ms, and expose
 Refresh button that re-requests with `refresh=1` (bypassing the Host response caches).
 Clear every timer in the effect cleanup. Abort in-flight requests on unmount.
 If `response.status === 401` show the localized "not authorized" state instead of a raw error.
+Warm both payloads once in `apply` (before the panel ever mounts) into a module-level map, and
+seed the polled state from that map so the first open paints immediately; the effect still
+refreshes right away. Keep the warm fetch inside a try/catch: the headless renderer has no
+`fetch`.
 
 ### 7.1 Page layout (copy the host page shell)
 

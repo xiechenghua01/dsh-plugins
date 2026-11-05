@@ -276,7 +276,7 @@ window.__ModuleLoader__.load({
 .ss-xlabel-first{transform:translateX(0)}
 .ss-xlabel-last{transform:translateX(-100%)}
 .ss-chart-hint{margin:8px 0 0;color:var(--dsw-alias-label-caption);font-size:11px;line-height:16px}
-.ss-mini-trend{display:block;width:100%;height:28px;margin-top:8px}
+.ss-mini-trend{display:block;width:100%;height:28px;margin-top:auto}
 .ss-mini-area{fill-opacity:.14;stroke:none}
 .ss-mini-line{fill:none;stroke-width:1.5;stroke-linecap:round;stroke-linejoin:round}
 .ss-num-main{display:block}
@@ -598,6 +598,21 @@ window.__ModuleLoader__.load({
       })
     }
 
+    /** Payloads fetched before the panel mounts, so opening it paints immediately. */
+    const warmPayloads = new Map()
+
+    /** Fetch one payload in the background and keep it for the panel's first paint. */
+    function warmPayload(path) {
+      try {
+        fetchJson(path).then(
+          (data) => { warmPayloads.set(path, { data: data, at: Date.now() }) },
+          () => { /* the panel falls back to its loading state */ },
+        )
+      } catch {
+        /* no fetch in this environment (headless renderer): keep the loading state */
+      }
+    }
+
     function readLocaleTag(ctx) {
       try {
         const snapshot = ctx.locale.getSnapshot()
@@ -622,7 +637,15 @@ window.__ModuleLoader__.load({
      * request, so unmount aborts the request and clears the interval.
      */
     function usePolledResource(load, path, intervalMs, refreshToken) {
-      const [state, setState] = useState({ status: 'loading', data: null, error: null, unauthorized: false, updatedAt: 0 })
+      const [state, setState] = useState(() => {
+        // A warmed payload lets the panel paint on its first frame; the effect below
+        // still refreshes it right away, so the visible numbers stay current.
+        const warm = warmPayloads.get(path)
+        if (warm !== undefined) {
+          return { status: 'ready', data: warm.data, error: null, unauthorized: false, updatedAt: warm.at }
+        }
+        return { status: 'loading', data: null, error: null, unauthorized: false, updatedAt: 0 }
+      })
       useEffect(() => {
         let stopped = false
         let controller = null
@@ -2100,6 +2123,11 @@ window.__ModuleLoader__.load({
             ),
           'session-stats: sidebar footer entry',
         )
+
+        // Warm both payloads as soon as the panel's module is live: the first open
+        // then paints from memory instead of waiting for the Host's first build.
+        warmPayload('session-stats/overview?days=' + String(DAYS))
+        warmPayload('session-stats/system')
       },
     }
   },
