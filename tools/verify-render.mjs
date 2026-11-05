@@ -181,6 +181,17 @@ async function main() {
   )
   check('model daily keys match the timeline buckets', overview.models.every((model) => model.daily.every((day, index) => day.key === buckets[index].key)))
 
+  const budget = overview.budget
+  check('budget remaining is never negative', budget.remaining >= 0, `${budget.remaining}`)
+  check('budget amount never falls below used', budget.amount >= budget.used, `${budget.amount} vs ${budget.used}`)
+  check('budget keeps the configured value', budget.configuredAmount === 10, `${budget.configuredAmount}`)
+  if (budget.dynamic) {
+    const drift = Math.abs(budget.amount - (budget.used + budget.remainingDays * budget.dailyAverage))
+    check('dynamic budget equals used + remainingDays * dailyAverage', drift <= 1e-6, `${budget.dailyAverage}/day, ${budget.remainingDays} days left`)
+  } else {
+    check('a machine with recent spend reports a dynamic budget', false, 'budget.dynamic is false')
+  }
+
   const archivedIds = readArchivedIds()
   check(
     'overview flags exactly the workspace archived sessions',
@@ -249,6 +260,8 @@ async function main() {
     check('the retired live dot is gone', (found.classCounts.get('ss-live-dot') || 0) === 0)
     check('log footprint bars rendered', (found.classCounts.get('ss-log-bar') || 0) >= 1)
     check('progress bars (budget/share) rendered', found.roles.includes('progressbar'))
+    check('budget card shows the used/remaining split', found.text.includes('已用') && found.text.includes('剩余'))
+    check('dynamic budget names its estimating basis', !overview.budget.dynamic || found.text.includes('按近 7 天日均'))
 
     // A smoothed path must stay inside its viewBox; unclamped Catmull-Rom control
     // points used to overshoot the plot band (review finding 1).

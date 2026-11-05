@@ -141,11 +141,25 @@ export async function run(report) {
   if (budget.amount > 0) {
     sameNumber(budget.used, budget.withinPeriodCost, 'budget.used equals withinPeriodCost', report)
   }
+  // The budget is a live estimate: used + remainingDays * recentDailyAverage, never
+  // below `used`, so remaining cannot stay negative across days.
+  sameNumber(budget.configuredAmount, 10, 'budget.configuredAmount keeps the config value', report)
+  if (budget.dynamic !== true) report('a corpus with recent spend must produce a dynamic budget')
+  if (!(budget.remaining >= 0)) report('budget.remaining must never be negative')
+  if (!(budget.amount >= budget.used)) report('budget.amount must not fall below budget.used')
+  if (budget.remainingDays === null || budget.remainingDays < 0) report('a monthly budget must report its remaining days')
+  if (budget.dailyAverage <= 0) report('a corpus with recent spend must report a positive daily average')
+  const estimateDrift = Math.abs(budget.amount - (budget.used + budget.remainingDays * budget.dailyAverage))
+  if (estimateDrift > 1e-6) report(`budget.amount must equal used + remainingDays * dailyAverage (drift ${String(estimateDrift)})`)
+  sameNumber(budget.remaining, budget.amount - budget.used, 'budget.remaining equals amount - used', report)
 
   const empty = computeOverview({ records: [], eventsById: new Map(), now, days: 7, config: {} })
   sameNumber(empty.totals.sessions, 0, 'empty corpus sessions', report)
   sameNumber(empty.timeline.buckets.length, 7, 'empty corpus timeline length', report)
   sameNumber(empty.models.length, 0, 'empty corpus models', report)
+  if (empty.budget.dynamic !== false) report('a corpus without history must fall back to the configured budget')
+  sameNumber(empty.budget.amount, 10, 'empty corpus keeps the configured budget', report)
+  sameNumber(empty.budget.remaining, 10, 'empty corpus keeps the configured remaining', report)
 
   // A pre-folded summary (the apply() cache path) must work with and without the
   // per-model-day fold; without it the model still lists its all-time totals.

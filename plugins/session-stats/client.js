@@ -48,7 +48,8 @@ window.__ModuleLoader__.load({
       'summary.costHint': '共 {requests} 次请求',
       'summary.budget': '预算',
       'summary.budgetHint': '周期 {period}',
-      'summary.remaining': '剩余 {amount}',
+      'summary.budgetUsedRemaining': '已用 {used} · 剩余 {remaining}',
+      'summary.budgetDynamic': '按近 7 天日均 {average} 预估',
       'summary.noBudget': '未设置预算',
       'chart.title': '每日 Token 趋势',
       'chart.window': '近 {days} 天',
@@ -131,7 +132,8 @@ window.__ModuleLoader__.load({
       'summary.costHint': '{requests} requests',
       'summary.budget': 'Budget',
       'summary.budgetHint': 'Period {period}',
-      'summary.remaining': '{amount} remaining',
+      'summary.budgetUsedRemaining': 'Used {used} · {remaining} left',
+      'summary.budgetDynamic': 'Estimated from the last 7 days ({average}/day)',
       'summary.noBudget': 'No budget set',
       'chart.title': 'Daily token trend',
       'chart.window': 'Last {days} days',
@@ -801,6 +803,8 @@ window.__ModuleLoader__.load({
       const percent = clamp(ratio * 100, 0, 100)
       const tone = ratio >= 1 ? ' ss-tone-danger' : ratio >= 0.8 ? ' ss-tone-warn' : ''
       const period = toText(budget.periodLabel) !== '' ? budget.periodLabel : toText(budget.period)
+      const dailyAverage = toNumber(budget.dailyAverage)
+      const dynamic = budget.dynamic === true
 
       // The two headline cards carry a small daily sparkline, so a trend is visible
       // without scrolling to the main chart.
@@ -846,14 +850,20 @@ window.__ModuleLoader__.load({
       )
 
       const budgetHint = t('summary.budgetHint', { period: period === '' ? DASH : period })
+      // The budget amount is a live estimate of the period's total, so it is the
+      // headline; the used/remaining split and the estimating basis explain it.
+      const budgetBasis = dynamic
+        ? budgetHint + ' · ' + t('summary.budgetDynamic', { average: fmt.money(dailyAverage) })
+        : budgetHint
       const budgetCard = h(
         SummaryCard,
         {
           key: 'budget',
           label: t('summary.budget'),
-          value: amount > 0 ? fmt.money(used) : t('summary.noBudget'),
-          unit: amount > 0 ? ' / ' + fmt.money(amount) : undefined,
-          hint: amount > 0 ? budgetHint : undefined,
+          value: amount > 0 ? fmt.money(amount) : t('summary.noBudget'),
+          hint: amount > 0
+            ? t('summary.budgetUsedRemaining', { used: fmt.money(used), remaining: fmt.money(remaining) })
+            : undefined,
         },
         amount > 0
           ? [
@@ -870,7 +880,7 @@ window.__ModuleLoader__.load({
                 },
                 h('div', { className: 'ss-progress-fill' + tone, style: { width: percent + '%' } }),
               ),
-              h('p', { key: 'remaining', className: 'ss-summary-hint' }, t('summary.remaining', { amount: fmt.money(remaining) })),
+              h('p', { key: 'basis', className: 'ss-summary-hint' }, budgetBasis),
             ]
           : null,
       )

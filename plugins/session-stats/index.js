@@ -515,6 +515,49 @@ function budgetPeriodOf(now, period) {
   }
 }
 
+/** The end of the current budget period (exclusive), or null for the all-time period. */
+function budgetPeriodEndOf(now, period) {
+  const date = new Date(now)
+  const year = date.getFullYear()
+  const month = date.getMonth()
+  const day = date.getDate()
+  switch (period) {
+    case 'daily':
+      return new Date(year, month, day + 1).getTime()
+    case 'weekly': {
+      const offset = (date.getDay() + 6) % 7 // Monday = 0
+      return new Date(year, month, day - offset + 7).getTime()
+    }
+    case 'total':
+      return null
+    case 'monthly':
+    default:
+      return new Date(year, month + 1, 1).getTime()
+  }
+}
+
+/** Complete days left in the current budget period (0 on its last day); null for `total`. */
+function remainingPeriodDaysOf(now, period) {
+  const end = budgetPeriodEndOf(now, period)
+  if (end === null) return null
+  return Math.max(0, Math.floor((end - now) / DAY_MS))
+}
+
+/** Mean daily cost of the last `window` complete days (today excluded). */
+function recentDailyAverage(buckets, now, window = 7) {
+  const todayKey = dayKeyOf(new Date(now))
+  const completed = []
+  for (const bucket of buckets) {
+    if (bucket.key === todayKey) continue
+    completed.push(bucket)
+  }
+  const recent = completed.slice(-window)
+  if (recent.length === 0) return 0
+  let total = 0
+  for (const bucket of recent) total += num(bucket.cost, 0)
+  return total / recent.length
+}
+
 /** The exact §4 payload shape with every number zeroed (last-resort fallback). */
 function emptyOverview(now, days, config) {
   const currency = config.budget.currency
@@ -552,11 +595,16 @@ function emptyOverview(now, days, config) {
     },
     budget: {
       amount: config.budget.amount,
+      configuredAmount: config.budget.amount,
       currency,
       period: config.budget.period,
       used: 0,
       ratio: 0,
       remaining: config.budget.amount > 0 ? money(config.budget.amount) : 0,
+      estimate: null,
+      dailyAverage: 0,
+      remainingDays: null,
+      dynamic: false,
       periodStart: period.start,
       periodLabel: period.label,
       withinPeriodTokens: emptyTokens(),
@@ -802,11 +850,23 @@ export function computeOverview(input) {
       sessions: bucket.sessionIds.size,
     }))
 
-    const amount = money(config.budget.amount)
+    const configuredAmount = money(config.budget.amount)
     const used = money(withinPeriodCost)
+    // The budget is a live estimate rather than a fixed cap: month-to-date plus the
+    // recent daily pace over the days the period still has. The configured amount is
+    // only the initial fallback (no history yet, or the all-time period, which has no
+    // end to estimate toward). The reported amount never drops below `used`, so the
+    // remaining figure stays non-negative and a stale over-budget state cannot persist.
+    const dailyAverage = money(recentDailyAverage(timelineBuckets, now))
+    const remainingDays = remainingPeriodDaysOf(now, config.budget.period)
+    const estimate = configuredAmount > 0 && remainingDays !== null && dailyAverage > 0
+      ? money(used + remainingDays * dailyAverage)
+      : null
+    const amount = configuredAmount <= 0
+      ? 0
+      : Math.max(estimate !== null ? estimate : configuredAmount, used)
     // Derived from the reported `used`, so ratio === used / amount and
-    // remaining === amount - used hold exactly (over budget stays honest: ratio > 1,
-    // remaining < 0; the client clamps the bar).
+    // remaining === amount - used hold exactly, with remaining never negative.
     const ratio = amount > 0 ? money(used / amount) : 0
     const remaining = amount > 0 ? money(amount - used) : 0
 
@@ -830,11 +890,16 @@ export function computeOverview(input) {
       },
       budget: {
         amount: money(amount),
+        configuredAmount,
         currency,
         period: config.budget.period,
         used,
         ratio,
         remaining,
+        estimate,
+        dailyAverage,
+        remainingDays,
+        dynamic: estimate !== null,
         periodStart: toEpoch(period.start, 0),
         periodLabel: period.label,
         withinPeriodTokens: normalizeTokens(withinPeriodTokens),

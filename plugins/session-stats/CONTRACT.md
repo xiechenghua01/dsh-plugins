@@ -186,8 +186,9 @@ The session-log number comes from `sessionPersistence` (`sizeBytes` sum); the wa
     "cost": 1.234567
   },
   "budget": {
-    "amount": 10, "currency": "USD", "period": "monthly",
+    "amount": 10, "configuredAmount": 10, "currency": "USD", "period": "monthly",
     "used": 1.234567, "ratio": 0.1234567, "remaining": 8.765433,
+    "estimate": 10, "dailyAverage": 0.4, "remainingDays": 20, "dynamic": true,
     "periodStart": 1793462400000, "periodLabel": "2026-11",
     "withinPeriodTokens": { "input": 0, "output": 0, "cacheRead": 0, "cacheWrite": 0,
                             "reasoning": 0, "total": 0 },
@@ -235,6 +236,16 @@ Rules:
 - `budget.used` / `withinPeriod*` count only events inside the budget period
   (`period: 'monthly' | 'weekly' | 'daily' | 'total'`), where `monthly` starts at local
   midnight of the 1st. `ratio = used / amount` (0 when `amount <= 0`).
+- The budget is a **live estimate**, not a fixed cap. `dailyAverage` is the mean cost of the
+  last seven complete days (today excluded; fewer days when the window is short).
+  `remainingDays = floor((periodEnd - now) / DAY_MS)` (0 on the period's last day, `null` for
+  `total`). `estimate = used + remainingDays * dailyAverage` when `configuredAmount > 0`,
+  `remainingDays !== null` and `dailyAverage > 0`; otherwise `null`.
+  `amount = configuredAmount <= 0 ? 0 : max(estimate ?? configuredAmount, used)` — so the
+  reported `remaining = amount - used` is never negative and a stale over-budget state cannot
+  persist; `dynamic` says which branch produced `amount`. `configuredAmount` is the configured
+  value and only acts as the initial fallback (no history yet, or `total`).
+  `budget.amount: 0` still means "no budget" (`ratio: 0`, `remaining: 0`).
 - Round money to 6 decimals, `ratio` to 6 decimals. Never emit `NaN`/`Infinity`/`-0`;
   sanitize every number (`Number.isFinite(x) ? x : 0`).
 - `pricing.models` is the merged effective table (config overrides over defaults), so the
@@ -292,7 +303,9 @@ const DEFAULTS = {
 }
 ```
 Deep-merge `config` over `DEFAULTS` (shallow per sub-object is fine). Accept
-`budget.amount: 0` to mean "no budget" (`ratio: 0`, `remaining: 0`).
+`budget.amount: 0` to mean "no budget" (`ratio: 0`, `remaining: 0`). A positive
+`budget.amount` is only the initial reference for the dynamic estimate (see §4); the reported
+`budget.amount` is recalculated from the period's usage every build.
 
 ## 7. Client half (`client.js`) — required shape
 
@@ -364,9 +377,11 @@ Add `[data-platform=darwin]` top clearance exactly like the host page:
 
 Sections required (each a `section.ss-card` or heading + grid):
 1. **Summary cards** (responsive grid, 4 cards): 总 token / 会话数 / 估算成本 / 预算.
-   Budget card shows `used / amount`, a progress bar (`width: ratio*100%` clamped 0..100),
-   remaining, period label; bar turns `--dsw-alias-state-warn-primary` at ≥80 % and
-   `--dsw-alias-state-error-primary` at ≥100 %.
+   The budget card headlines the **dynamic** `amount` (period-to-date `used` plus the
+   remaining days at the recent daily pace), with a `已用 X · 剩余 Y` hint, a progress bar
+   (`width: used/amount*100%` clamped 0..100), and a basis line `周期 … · 按近 7 天日均 …`
+   while `budget.dynamic` is true. `remaining` is never negative. The bar turns
+   `--dsw-alias-state-warn-primary` at ≥80 %.
 2. **Token timeline**: pure-SVG bar chart, one bar per day (last `days`), stacked
    input/output/cacheRead, `viewBox` sized to the bucket count, `preserveAspectRatio="none"`
    for the plot only (keep text un-stretched by rendering labels as HTML below the SVG).
@@ -409,7 +424,8 @@ panel.title  panel.description  action.refresh  state.loading  state.error
 state.retry  state.unauthorized  state.empty  updated.at  summary.tokens
 summary.tokensHint  summary.tokensSpark  summary.costSpark  summary.sessions
 summary.sessionsHint  summary.cost  summary.costHint  summary.budget
-summary.budgetHint  summary.remaining  summary.noBudget  chart.title  chart.window
+summary.budgetHint  summary.budgetUsedRemaining  summary.budgetDynamic  summary.noBudget
+chart.title  chart.window
 chart.modeModel  chart.modeType  chart.total  chart.other  chart.legend  chart.hint
 chart.empty  chart.allHidden  chart.input  chart.output  chart.cacheRead
 sessions.title  sessions.empty  sessions.showing  sessions.more  sessions.archived
