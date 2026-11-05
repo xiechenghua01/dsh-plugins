@@ -361,6 +361,19 @@
           "engines": {
             "dsh": ">=0.2.1-rc.5 <0.3.0"
           }
+        },
+        {
+          "version": "1.1.11",
+          "publishTimestamp": 1793871387,
+          "source": {
+            "type": "git",
+            "url": "https://github.com/xiechenghua01/dsh-plugins",
+            "commit": "1ef16f382f7607a5464f8f8a7f05c1d631cccd71",
+            "path": "plugins/session-stats"
+          },
+          "engines": {
+            "dsh": ">=0.2.1-rc.5 <0.3.0"
+          }
         }
       ],
       "title": {
