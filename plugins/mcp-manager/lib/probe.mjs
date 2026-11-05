@@ -356,7 +356,13 @@ function collectTools(result, accumulator) {
   accumulator.toolCount += result.tools.length
   for (const tool of result.tools) {
     if (accumulator.toolNames.length >= MAX_TOOL_NAMES) break
-    if (isPlainObject(tool) && isNonEmptyString(tool.name)) accumulator.toolNames.push(tool.name)
+    if (isPlainObject(tool) && isNonEmptyString(tool.name)) {
+      accumulator.toolNames.push(tool.name)
+      accumulator.tools.push({
+        name: tool.name,
+        description: typeof tool.description === 'string' ? tool.description.slice(0, 240) : '',
+      })
+    }
   }
   return isNonEmptyString(result.nextCursor) ? result.nextCursor : undefined
 }
@@ -554,7 +560,7 @@ async function probeStdio(config, control, settings) {
     const summary = summarizeInitialize(initialize.result)
     writeFrame({ jsonrpc: '2.0', method: 'notifications/initialized' })
 
-    const accumulator = { toolCount: 0, toolNames: [] }
+    const accumulator = { toolCount: 0, toolNames: [], tools: [] }
     let cursor
     try {
       for (let page = 0; page < MAX_TOOLS_PAGES; page += 1) {
@@ -568,6 +574,7 @@ async function probeStdio(config, control, settings) {
       if (!(error instanceof ProbeError) || error.code !== -32601) throw error
       accumulator.toolCount = 0
       accumulator.toolNames = []
+      accumulator.tools = []
     }
 
     return { ...summary, ...accumulator }
@@ -790,7 +797,7 @@ async function probeHttp(config, control, settings) {
 
   await postMessage({ jsonrpc: '2.0', method: 'notifications/initialized' }, 'notifications/initialized', true)
 
-  const accumulator = { toolCount: 0, toolNames: [] }
+  const accumulator = { toolCount: 0, toolNames: [], tools: [] }
   let cursor
   try {
     for (let page = 0; page < MAX_TOOLS_PAGES; page += 1) {

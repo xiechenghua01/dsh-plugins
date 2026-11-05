@@ -237,6 +237,20 @@ export function normalizeConfig(input) {
     }
     if (Object.keys(reconnect).length > 0) config.reconnect = reconnect
   }
+  // Editor-owned extras: the DSH MCP client does not read these yet (schemastery strips unknown
+  // keys), but the configuration file must stay faithful to what the user selected.
+  if (isObject(input.oauth)) {
+    const oauth = {}
+    const clientId = text(input.oauth.clientId)
+    if (clientId !== '') oauth.clientId = clientId
+    const scopes = text(input.oauth.scopes)
+    if (scopes !== '') oauth.scopes = scopes
+    if (Object.keys(oauth).length > 0) config.oauth = oauth
+  }
+  const autoApprove = stringList(input.autoApprove).filter((entry) => entry !== '')
+  if (autoApprove.length > 0) config.autoApprove = autoApprove
+  const disabledTools = stringList(input.disabledTools).filter((entry) => entry !== '')
+  if (disabledTools.length > 0) config.disabledTools = disabledTools
   return config
 }
 

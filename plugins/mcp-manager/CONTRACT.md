@@ -404,6 +404,15 @@ layer for the read-only config viewer (comments and other plugins' rows included
 
 ### `probe`
 
+args `{ id?, level?, config?, timeoutMs? }` → `{ ok: true, result: ProbeResult }`.
+`ProbeResult.tools` is `[{ name, description }]` (description truncated to 240 chars) so the editor's
+tool-permission selector can list real tool names without a second round-trip.
+
+> 单层直管：界面不再区分全局/工作区。新增行写入当前 profile 层（`level: 'workspace'`），
+> 编辑/删除沿用行自身的 `level`（home 层里已有的行仍可管理）。
+
+### `probe`
+
 args `{ id?, level?, config?, timeoutMs? }` → `{ ok: true, result: ProbeResult }`. With `config`
 it probes an unsaved draft; otherwise it probes the stored row. The result is cached in memory
 keyed by `${level}:${id}` and returned as `lastProbe` by later `state` calls.

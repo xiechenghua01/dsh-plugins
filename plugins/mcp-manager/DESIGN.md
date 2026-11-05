@@ -1,133 +1,176 @@
-# MCP 服务管理 — 交互与 UI 设计规格（原型驱动版）
+# MCP 服务管理 — 极简终版 UI 与交互规格
 
-本文件是 `client.js` 的 UI 契约。**权威来源**是用户提供的两份材料：
+本文件是 `client.js` 的验收契约。**权威来源**：
 
-1. 交互原型：`/Users/xiechenghua/Downloads/deepseek_harness_mcp.html`（单文件 HTML，含完整布局、样式与交互逻辑）
-2. 设计规范：`/Users/xiechenghua/Downloads/mcp_ui_interaction_spec_for_agent.md`
+1. 交互原型：`/Users/xiechenghua/Downloads/deepseek_harness_mcp.html`（1679 行，极简终版）
+2. 设计规范：`/Users/xiechenghua/Downloads/mcp_ui_interaction_spec_for_agent.md`（56 行，极简终版）
 
-实现必须**1:1 还原原型的布局、组件层级、状态与交互**；只有下面明确列出的差异（DSH 环境约束、主题 token 映射、数据层映射）允许偏离。审核以本文件 + 原型为准。
-
----
-
-## 0. 不可偏离的交互契约
-
-### 0.1 纯图标按钮 + 1000ms 悬停中文 Tooltip
-
-所有以图标代替文字的按钮必须绑定 **1000ms 延迟的自绘 tooltip**（不是原生 `title`）：
-
-- `mouseenter` 起 1000ms 计时，满 1 秒后在按钮上方居中显示中文名称浮层（贴近视口边缘时自动翻转/夹紧）；
-- `mouseleave`、`mousedown`、滚动、切换页面立即清除计时器并隐藏；
-- 同一时刻只显示一个 tooltip；tooltip 元素挂在 body 末尾，`pointer-events: none`；
-- 文案见规范第 2 节表格（测试所有启用的 MCP 服务器 / 停用 MCP 服务器 / 启用 MCP 服务器 / 测试连通性 / 管理生效工作区 / 更新 MCP 服务器配置 / 删除 MCP 服务器 / 关闭配置弹窗 等）。
-
-### 0.2 列表页顶部
-
-- 标题 `MCP 服务器管理` + 绿色胶囊「N 个已启用」+ 副标题。DSH 没有「当前工作区」概念，副标题明确写当前 **profile 名**（`state.scope.profile`），不得用工作区注册表第一项猜代。
-- 右侧：闪电图标按钮（测试所有启用的 MCP 服务器，测试中旋转）+ `新增服务器` 主按钮（白底黑字）。
-- 筛选分段控件 4 个 tab：`当前生效全部` / `全局 (Global)`（紫点）/ `当前工作区`（蓝点）/ `其他工作区已有`（琥珀点），每个带计数；右侧搜索框（占位「搜索服务、工作区或工具...」）。
-
-### 0.3 服务器卡片（严格按原型）
-
-- 圆角 12px 卡片，左侧：状态点 + 等宽字体 server id + 作用域徽章 + transport 徽章 + 状态文字（连通正常 · Nms / 正在测试连通性... / 已停用 / 未在当前工作区应用）。
-- 第二行：描述文字（未填写显示「未填写描述信息」）。
-- 第三行：等宽 endpoint 预览（单行省略 + title）+ 蓝色可点击的「N 个工具 / 参数详情」展开按钮（旋转箭头）。
-- 右侧操作区（图标按钮，1 秒 tooltip）：启用/停用（电源图标）、测试连通性（循环图标，测试中旋转）、管理生效工作区（图层图标）、更新配置（铅笔）、删除（垃圾桶，hover 变玫瑰色）。
-- 未应用到当前工作区的卡片显示蓝色主按钮「应用到当前工作区 (A)」。
-- 展开后显示工具 chips（自动批准 = 绿色，禁用 = 玫瑰色删除线）与参数详情。
-
-### 0.4 弹窗（四个，均按原型）
-
-1. **新增/更新服务器**（max-w 800px，max-h 91vh）：
-   - 头部：标题 + 副标题 + 右侧「结构化配置 / JSON 配置 (支持粘贴分享)」分段切换 + 关闭图标；
-   - 顶部「生效范围（应用目标）」卡片：`指定工作区 (支持多选)` / `全局共享 (所有工作区通用)` 分段 + 工作区多选复选框网格 + 合并写入路径预览（等宽）；全局时显示紫色提示条；
-   - 结构化表单：1. 基础标识（server id、显示名称/备注、传输协议三卡片 stdio / streamable-http / sse）；2. STDIO 参数（command、cwd、args 文本域 + 「填入常用 npx 模板」、env 动态键值行 + 「+ 添加环境变量」）或远程参数（url、headers 动态行 + 「+ 添加 Header」、OAuth 2.1 折叠区）；3. 运行策略（timeout、maxRetries、capabilities 三复选框、autoApprove、disabledTools）；
-   - JSON 模式：大 textarea + 「粘贴社区分享 JSON 示例」「格式化 JSON」「复制配置」+ 解析反馈条；与结构化表单**双向同步**；
-   - 底部：左「保存前测试连通性」+ 结果文字；右侧 `取消`、`保存并应用配置`。DSH 单 profile 下不存在「独立分叉」，因此**不再提供分叉选项**；如需说明，只显示一行小字「DSH 单 profile 下更新即作用于该行」。
-2. **管理生效工作区**（max-w 520px）：工作区复选框列表 + 「设为全局」+ 保存/取消。
-3. **删除确认**：区分「仅从当前工作区移除」与「从所有已应用的工作区中彻底删除」。
-4. **配置文件查看**：等宽代码块展示当前层 patch 的**真实原文**（`configText` op，含注释与其他插件行），只读。
-
-### 0.5 其它
-
-- 全局 toast（成功/警告/错误）出现在底部居中，自动消失。
-- 所有图标为内联 SVG（stroke currentColor），不使用图标库。
-- 危险操作（删除）用玫瑰色语义色。
+实现必须按原型 1:1 还原布局、组件层级、状态与交互；只允许本文列出的 DSH 环境映射差异。审核以本文件 + 原型为准。
 
 ---
 
-## 1. 与 DSH 环境的强制映射（必须遵守）
+## 0. 架构原则（本次最大的变化）
 
-### 1.1 主题 token（不得写死颜色）
+### 0.1 单层直管（Profile 层共享）
 
-原型使用固定深色色值；插件必须映射到 DSH 主题 token，保证浅色/深色主题都可用：
+- 工作区只承载项目路径与会话分组，**不承载 MCP 配置**。
+- 所有服务器都是 `@deepseek-ai/dsh-mcp-client` 行，直接读写**当前 profile** 的 `~/.dsh/profiles/<name>/cordis.patch.yml`。
+- **界面上不出现**：全局/工作区筛选、工作区多选、服务器库、「应用到当前工作区」、「管理生效工作区」、跨工作区导入。
+- 列表页只有搜索 + 全部服务器；一次配置即在该 profile 的所有工作区会话中生效。
+
+### 0.2 非空与非默认值写入（Clean Config）
+
+- 未填写的选填项（`cwd`、`env`、`headers`、`oauth`、`autoApprove`、`disabledTools`）**严禁写入**配置文件。
+- 例外：`args` 数组里的空字符串是**合法的 argv 位置**（占位语义），必须原样保留，不属于「空值不写」的范畴。
+- 有默认值的参数（`timeout` 默认 60000、`maxRetries` 默认 3）在输入框里只用浅色 placeholder 提示；未填写或等于默认值**严禁写入**。
+- JSON 视图与保存走同一套清理逻辑，保证「表单 → JSON → 保存」三条路径产出一致。
+
+### 0.3 原生「打开配置文件」
+
+设置窗口右上角的「打开配置文件」保持 DSH 原生行为（宿主提供），插件不拦截、不加弹窗。
+
+---
+
+## 1. 布局
+
+- 插件渲染在 DSH 设置面板的**右侧内容区**；左侧导航（原型 210px）由宿主提供，插件不自绘模态窗外框与导航。
+- 编辑器弹窗：`max-width: 640px`、`max-height: 88vh`、圆角 16px。
+- 删除确认弹窗：`max-width: 360px`、圆角 14px。
+- Tooltip 浮层：`max-width: 290px`、圆角 7px。
+- 颜色全部映射到 `--dsw-*` token（见 §6），不写字面色值。
+
+---
+
+## 2. 列表页
+
+### 2.1 顶部栏
+
+- 左侧：`MCP 服务` 标题 + `?` 帮助图标（1000ms tooltip：`所有配置写入当前 Profile (cordis.patch.yml)，自动在全部工作区会话中共享生效`）。
+- 右侧：搜索框（占位「搜索服务...」）+ 闪电图标按钮（`测试所有启用的 MCP 服务器`）+ `+ 新增` 主按钮（白底深字）。
+
+### 2.2 列表项（极简单行，底部分割线）
+
+每个服务器一项，上下内边距约 16px，项间 1px 分割线：
+
+- **第一行左侧**：状态圆点（启用正常绿 `#34d399`、测试中琥珀脉冲 `#fbbf24`、连接失败玫瑰 `#f43f5e`、已停用灰 `#585a60`，带 1s tooltip 说明状态）+ `serverName`（等宽字体，带 1s tooltip 显示完整命令/URL）+ 协议标签（`stdio` / `streamable-http` / `sse`）+ 延迟毫秒（仅启用且有值时）+ 「N 工具」按钮（带旋转箭头，点击展开工具徽章）。
+- **第二行**：浅色小字，等宽字体，命令摘要（stdio：`command + args.join(' ')`；远程：`url`），单行截断。
+- **右侧**：4 个纯图标按钮（32×32，圆角 8px）：
+  1. 电源（已启用绿色底/边框，已停用灰；1s tooltip 动态：`停用 MCP 服务器` / `启用 MCP 服务器`）
+  2. 循环刷新（测试中旋转；1s tooltip：`测试连通性`）
+  3. 铅笔（1s tooltip：`更新配置`）
+  4. 垃圾桶（hover 玫瑰；1s tooltip：`删除服务器`）
+- **展开区**（点击「N 工具」）：工具徽章横向排列，每个徽章 1s tooltip 显示「说明 · 状态」：
+  - 自动允许：绿底绿字；
+  - 禁用：玫瑰底、删除线；
+  - 默认：灰底。
+- 空列表：居中一行「暂无匹配的 MCP 服务」（不预留大块空白）。
+
+### 2.3 列表操作
+
+- 启用/停用：立即写配置并刷新。
+- 单条测试：状态变「测试中」，完成后更新延迟与状态。
+- 全部测试：只测已启用的；无启用项时 toast「暂无已启用的 MCP 服务」。
+- 删除：打开确认弹窗（360px），确认后删除。
+
+---
+
+## 3. 1000ms 悬停中文 Tooltip（全局硬性）
+
+- 页面正文不堆砌解释文字；所有纯图标按钮与 `?` 帮助图标绑定 **严格 1000ms** 计时器：移入停留满 1.0 秒才显示，移出/点击立即隐藏。
+- 同一时刻只显示一个浮层；浮层挂 body 末尾，`pointer-events:none`；靠近视口边缘自动夹紧。
+- 文案见规范第 3 节表格（标题 `?`、闪电、电源、循环、铅笔、垃圾桶、JSON 按钮、各字段 `?` 图标）。
+
+---
+
+## 4. 新增 / 更新弹窗
+
+### 4.1 头部
+
+标题（`新增 MCP 服务` / `更新 MCP 服务`）+ 右侧 `表单 | JSON` 切换器（JSON 按钮 1s tooltip：`仅写入非空与非默认字段，支持直接粘贴外部分享的 JSON`）+ 关闭图标。
+
+### 4.2 结构化表单
+
+- **基础**：`serverName`（等宽，占位 `例如: filesystem 或 github`）+ `?`；传输协议下拉（`stdio` / `streamable-http` / `sse`）+ `?`。
+- **stdio 参数**：`command`（占位 `npx`）+ `?`；`args` 文本域（每行一个参数）+ `?`；`env` 动态键值行（`+ 添加`，标题旁 `?`）。
+- **远程参数**（http/sse）：`url`（占位 `https://example.com/mcp`）+ `?`；`headers` 动态键值行（`+ 添加`）。
+- **高级设置（默认折叠）**：
+  - 折叠栏标题「高级设置」+ 箭头；任一高级参数被自定义时，标题旁显示 `已自定义` 徽章。
+  - `stdio` 显示：`工作目录 (cwd)`（占位 `默认当前目录 (不写入配置)`）、`超时 (ms)`（占位 `默认 60000`）、`重连次数`（占位 `默认 3`），各带 `?`。
+  - `streamable-http` / `sse` 隐藏 `cwd`，显示 `OAuth Client ID` 与 `OAuth Scopes`（占位 `选填 (未填不写入)` / `选填，空格分隔`），各带 `?`。
+- **工具权限选择器**（高级设置内）：
+  - 面板右上角「连接获取工具」按钮（探测中禁用并显示进度）。
+  - 探测结果每行：工具名（等宽）+ 简短说明 + 右侧三态胶囊 `默认 | 自动允许 | 禁用`。
+  - 顶部工具条：关键字过滤输入框 + 汇总计数（`自动允许: N · 禁用: M`）+ `全设为自动允许` + `重置默认`。
+  - 三态互斥：`默认` 不写入；`自动允许` 进 `autoApprove`；`禁用` 进 `disabledTools`。
+  - 未探测时显示提示，可点击「连接获取工具」刷新。
+
+### 4.3 JSON 视图
+
+- 大文本域 + `粘贴社区分享 JSON 示例` + `复制配置` 按钮。
+- 支持 `{"mcpServers": {"<name>": {...}}}` 或单节点；解析成功回填表单（含工具权限）。
+- 解析反馈条：成功绿色「✓ JSON 格式正确（已自动省去未填项与默认参数）」；失败红色并**阻止保存**。
+- 表单 → JSON 时自动过滤空值/空数组/空对象/默认值。
+
+### 4.4 底部
+
+左侧 `测试连通性` 按钮 + 结果文字；右侧 `取消` + `保存`（主按钮）。
+
+---
+
+## 5. 删除确认
+
+- 360px 弹窗：标题「删除 MCP 服务」+ 说明「确定要删除 <id> 吗？此操作会从当前 Profile 的 cordis.patch.yml 中移除该行，不可撤销。」+ `取消` / `删除`（玫瑰主按钮）。
+
+---
+
+## 6. DSH 映射（必须遵守）
+
+### 6.1 主题 token
 
 | 原型 | 插件使用 |
 |---|---|
-| `#202123` 模态/侧栏底色 | `var(--dsw-alias-bg-base)` |
-| `#28292c` 卡片 | `var(--dsw-alias-bg-layer-1)` |
-| `#18191b` / `#161719` / `#141517` 输入与代码块 | `var(--dsw-alias-bg-layer-2)` |
-| `#36383d` / `#33353a` / `#2e2f33` 边框 | `var(--dsw-alias-border-l1)` / `var(--dsw-alias-border-l2)` |
+| `#202123` 弹窗底 | `var(--dsw-alias-bg-base)` |
+| `#28292c` / `#2d2e31` 卡片与输入 | `var(--dsw-alias-bg-layer-1)` |
+| `#17181a` / `#161719` 输入与代码块 | `var(--dsw-alias-bg-layer-2)` |
+| `#34363b` / `#2e2f33` 边框与分割线 | `var(--dsw-alias-border-l1)` |
 | `#ececf1` 主文字 | `var(--dsw-alias-label-primary)` |
-| `#8e9096` / `#9ca0a8` 次要文字 | `var(--dsw-alias-label-secondary)` |
-| `#66686e` 弱化文字 | `var(--dsw-alias-label-tertiary)` |
-| `#34d399` 正常 / `#fbbf24` 测试中 / `#f43f5e` 异常 | `var(--dsw-alias-state-success-primary)` / `--dsw-alias-state-warn-primary` / `--dsw-alias-state-error-primary` |
-| `#3b82f6` / `#6366f1` 工作区徽章 | `var(--dsw-alias-brand-primary)` |
-| `#a855f7` 全局徽章 | `var(--dsw-alias-brand-primary)` + 透明度变体 |
+| `#8e9096` / `#9ca0a8` 次文字 | `var(--dsw-alias-label-secondary)` |
+| `#6c6e75` / `#787a80` 弱化文字 | `var(--dsw-alias-label-tertiary)` |
+| 绿 `#34d399` / 琥珀 `#fbbf24` / 玫瑰 `#f43f5e` | `--dsw-alias-state-success-primary` / `--dsw-alias-state-warn-primary` / `--dsw-alias-state-error-primary` |
 | hover 背景 | `var(--dsw-alias-interactive-bg-hover)` |
-| 圆角 | `var(--dsw-radius-sm)` 起，需要更大时用 8/12/16px 固定值 |
-| 字体 | `var(--dsw-font-family)`；等宽部分用 `ui-monospace, SFMono-Regular, Menlo, monospace` |
+| 等宽 | `ui-monospace, SFMono-Regular, Menlo, monospace` |
 
-**不允许字面色值**：需要浅底时用 token + `color-mix(in srgb, var(--dsw-alias-state-success-primary) 12%, transparent)` 这类基于 token 的混合。
+**不允许字面色值**；浅底用 `color-mix(in srgb, var(--dsw-…) 12%, transparent)`。
 
-### 1.2 布局尺寸
+### 6.2 字段映射（原型 → DSH）
 
-- 插件渲染在 DSH 设置面板内容区（面板约 800×800，左侧导航 215px 由宿主提供）。
-- 本插件的列表页占满内容区，**不再自带 1060×740 的外框与左侧导航**（那是原型为了演示宿主而画的，DSH 宿主已提供）。
-- 弹窗尺寸：新增/编辑弹窗 `min(800px, calc(100vw - 48px))` × `min(91vh, 780px)`；管理生效工作区 520px；删除确认 480px；配置文件查看 760px。弹窗均固定外框、内容区滚动。
-
-### 1.3 数据层映射（原型的配置文件模型 → DSH 实际）
-
-原型假设每个工作区有 `<workspace>/.deepseek/config.json`；DSH 没有该文件，实际是两层 Loader patch：
-
-| 原型概念 | DSH 实现 |
+| 原型字段 | DSH 实现 |
 |---|---|
-| 全局配置 | `$DSH_HOME/cordis.patch.yml`（home 层，所有 profile 生效） |
-| 当前工作区配置 | `$DSH_PROFILE_DIR/cordis.patch.yml`（当前 profile 层） |
-| 「指定工作区多选」 | 写入 profile 层 + 把选中的工作区目录存为该服务器的 `workspaces` 元数据（组织/展示/复用用途） |
-| 「其他工作区已有」 | 服务器库中 `origins` 为空（未在当前两层配置）的条目 |
-| 「应用到当前工作区」 | `libraryApply`（复制库条目到 profile 层） |
-| 「管理生效工作区」 | `setWorkspaces`（只改库里的 `workspaces`） |
-| 「从所有工作区彻底删除」 | `remove` + `purge: true`（同时删库条目） |
-| 「仅从当前工作区移除」 | `remove`（保留库条目） |
-| 显示名称/备注 | 库元数据 `description` |
-| OAuth / capabilities / autoApprove / disabledTools / maxRetries | 库元数据 `extra`（**不写入 Loader config**，DSH 客户端不接受这些字段） |
-| timeout | `config.toolCallTimeoutMs` |
-| transport `sse` | **DSH 0.2.x 不支持**：卡片保留但禁用（置灰 + tooltip「DSH 当前版本不支持 SSE，请使用 streamable-http」），不得让用户保存出无法加载的行 |
+| `serverName` | `config.serverName`（必填，`[A-Za-z0-9_-]{1,32}`） |
+| `transport` | `config.transport`；**DSH 只支持 `stdio` 与 `streamable-http`**，`sse` 保存时拦截并提示「DSH 当前版本不支持 SSE」 |
+| `command` / `args` / `env` / `cwd` | 同名 |
+| `url` / `headers` | 同名 |
+| `timeout` | `config.toolCallTimeoutMs` |
+| `maxRetries` | `config.reconnect.maxAttempts`（DSH 默认 10，原型默认 3；只写用户显式填写且 ≠3 的值） |
+| `autoApprove` / `disabledTools` | 按规范写入配置（DSH 0.2.1 的 `dsh-mcp-client` **不读取**这两个字段，schemastery 会忽略未知键；写入是为了未来兼容与配置可读性） |
+| `oauth.clientId` / `oauth.scopes` | 按规范写入 `config.oauth`（同上，当前 DSH 不读取） |
+| 工具探测 | Host `probe` op 返回 `{ ok, tools: [{ name, description }], durationMs, … }` |
 
-> 元数据字段（description / extra / workspaces）由 `create` / `update` / `setWorkspaces` / `libraryApply` 写入服务器库；`state` 会随每行返回它们。详见 CONTRACT §4、§6。
-
-### 1.4 既有已确认行为（不得回退）
-
-- 弹窗遮罩透明（不压暗设置面板）；Escape/遮罩只关最上层（浮层 → 弹窗 → 面板）。
-- 弹窗固定尺寸，切换标签/内容变化不改变外框。
-- 空列表紧凑（不预留大片空白），有数据时内部滚动。
-- 工作目录 chips 单行横向滚动、不撑高、不移动标签与按钮。
-- 列表页筛选/搜索变化不得让卡片内部元素换行导致跳动（卡片高度可以随内容，但同类状态之间要稳定）。
-- 中英文 locale 字典键集一致、值非空、每个键在字典外被 `t('key')` 引用。
-- 只能 `require('react')`；不得出现 `@deepseek-ai/`、绝对 home 路径、字面色值。
+> 这些「不生效字段」必须在 DESIGN/CONTRACT 中如实标注，不得在界面上宣称已生效。
 
 ---
 
-## 2. 验收清单（审核逐条核对）
+## 7. 验收清单（审核逐条核对）
 
-- [ ] 列表页顶部：标题 + 已启用计数胶囊 + 副标题（含工作区名）+ 闪电图标 + 新增服务器按钮，一行布局。
-- [ ] 筛选分段 4 tab（当前生效全部 / 全局 / 当前工作区 / 其他工作区已有）+ 计数 + 搜索框。
-- [ ] 卡片结构：状态点、等宽 id、作用域徽章、transport 徽章、状态文字、描述、endpoint、工具数展开、右侧 5 个图标按钮；未应用时显示「应用到当前工作区」。
-- [ ] 所有图标按钮有 1000ms 延迟自绘中文 tooltip；mouseleave/mousedown 立即消失；文案与规范第 2 节一致。
-- [ ] 新增/编辑弹窗：顶部生效范围（多工作区复选框 / 全局）、合并路径预览、结构化 3 段表单、JSON 双向同步、底部测试 + 同步策略 + 取消/保存。
-- [ ] JSON 模式可粘贴 `{"mcpServers": {...}}` 或单节点并回填表单；切换 tab 不丢数据。
-- [ ] 管理生效工作区弹窗、删除确认弹窗（两种删除范围）、配置文件查看弹窗。
-- [ ] sse 选项禁用并说明原因；保存不会产生 DSH 无法加载的行。
-- [ ] 弹窗固定尺寸、遮罩透明、Escape/遮罩层级正确；空态紧凑；工作目录 chips 不撑高。
-- [ ] 颜色全部来自 `--dsw-*` token（或基于 token 的 color-mix）；无字面色值；无 `@deepseek-ai/`、无绝对 home 路径。
-- [ ] locale 键集一致、非空、全部被引用；`node --check` 与 `scripts/check-plugins.mjs` 通过。
+1. 列表页顶部：标题 + `?` 图标 + 搜索框 + 闪电图标 + `+ 新增`，常规宽度下一行排布；视口 ≤720px 时允许操作区换到第二行（响应式收缩，不得重叠）。
+2. 列表项：状态点（4 种颜色/脉冲）+ 等宽 serverName + 协议标签 + 延迟 + 「N 工具」+ 第二行命令/URL 摘要 + 右侧 4 个图标按钮。
+3. 展开工具徽章：三态颜色正确（默认灰、自动允许绿、禁用玫瑰删除线），徽章有 1s tooltip。
+4. 所有纯图标按钮与 `?` 图标：严格 1000ms 延迟、移出/点击立即隐藏、文案与规范第 3 节一致。
+5. 编辑器弹窗：640px、表单/JSON 切换、基础字段、stdio/远程参数动态显隐、高级设置默认折叠 + `已自定义` 徽章。
+6. 工具权限选择器：连接获取工具、三态切换、过滤、汇总计数、全设为自动允许、重置默认。
+7. JSON 视图：粘贴 `mcpServers`/单节点可回填；表单→JSON 过滤空值与默认值；解析失败阻止保存。
+8. 保存产出的配置：不含空字符串、空数组、空对象、默认 `timeout=60000`、默认 `maxRetries=3`；`sse` 被拦截。
+9. 删除确认弹窗 360px，文案正确，删除后列表刷新。
+10. 无工作区/全局筛选、无服务器库、无「应用到当前工作区」等已移除的入口。
+11. 颜色全部来自 `--dsw-*` token 或基于 token 的 `color-mix`；class 前缀 `mm-`；图标内联 SVG；无 `@deepseek-ai/`、无绝对 home 路径。
+12. locale 字典 zh/en 键集一致、值非空、每个键在字典外被 `t('key')` 引用；`node --check` 与 `node scripts/check-plugins.mjs` 通过。
