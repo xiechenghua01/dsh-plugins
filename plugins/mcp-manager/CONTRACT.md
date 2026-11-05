@@ -479,7 +479,9 @@ phase changes when HMR applies a patch), and refetch immediately after every mut
 
 Page layout (tokens only — no literal colors):
 
-1. Header: title, subtitle, `刷新` and `测试全部启用的` buttons, last-updated text.
+1. Header, one non-wrapping row: `MCP 服务` title, an ellipsized subtitle, the last-updated
+   text, then two icon buttons — refresh and test-all — each an inline SVG with a native `title`
+   and an `aria-label` (`刷新列表` / `测试所有启用的服务器`). No text buttons here.
 2. Toolbar: scope filter (`全部` / `全局` / `工作区`) as a segmented control, a search input
    (matches serverName, target, id), and a `新增服务器` button.
 3. Row list, grouped by scope when the filter is `全部` (a `全局（home 层）` group and a
@@ -488,18 +490,26 @@ Page layout (tokens only — no literal colors):
    (`已加载` / `未加载` / `加载失败`) with the tool count, the one-line target, the workspace
    attachment chips (titles of `row.workspaces`), the last probe result (`未测试` / `连通 · 12 工具 ·
    230 ms` / `失败 · <error message>`), and the actions `编辑`, `JSON`, `测试`, `删除`.
-4. Empty states per filter, plus a warning banner for `warnings`.
+4. Empty states per filter, plus a warning banner for `warnings`. The results area is compact
+   when empty (`height: auto`; no reserved blank space) and scrolls internally up to 360px when
+   rows exist; a change between empty and non-empty may change the page height (the user chose
+   this trade-off over a fixed blank area).
 5. `导入 / 导出` section: a `导出 JSON` button (copies `format: 'mcpServers'`), and an import
    textarea + target-scope select + `导入` button that calls `import` and reports
    added/updated/skipped.
 6. `服务器库` section: every library entry with its origins (`全局`, `工作区: desktop`), and an
-   `添加到…` action that opens a small dialog choosing the target scope (and an optional name
-   override) and calls `libraryApply`.
-7. Editor dialog (create/edit). Its **first row is the tab row**: `结构化` / `JSON` tabs on the
-   left, and on the right the `作用域` segmented choice (`全局` / `工作区`) plus — only while the
-   scope is `工作区` — a `工作目录` multi-select (a button opening a checkbox list built from
+   `添加到…` action that opens a dialog choosing the target scope (and an optional name override)
+   and calls `libraryApply`.
+7. Editor dialog (create/edit). Its **settings row sits above the tab row**: the `作用域`
+   segmented choice (`全局` / `工作区`) on the left, and — only while the scope is `工作区` — the
+   `工作目录` multi-select on the right (a button opening a checkbox list built from
    `state.workspaces`, showing each workspace `title`, with select-all/clear; chosen paths render
-   as removable chips). The dialog writes `workspaces: [...]` on create/update (`[]` for `全局`).
+   as removable chips on one non-wrapping, horizontally scrolling line). Below it the tab row
+   (`结构化` / `JSON`) follows. New servers default to `全局`; an edit shows and locks the row's
+   actual scope. The dialog writes `workspaces: [...]` on create/update (`[]` for `全局`).
+   The editor, JSON-view and library-add dialogs take the exact bounds of the Settings panel they
+   open inside (measured once on open, re-measured on window resize) so they fully cover it;
+   confirmation dialogs stay small (`min(440px, calc(100vw - 48px))`).
    - **结构化**: serverName, transport select, then transport-specific fields — command, args
      (one per line), env (one `key=value` per line), cwd for stdio; url, headers (one
      `key=value` per line) for streamable-http — plus an `高级` block with `toolCallTimeoutMs`,

@@ -17,6 +17,7 @@ window.__ModuleLoader__.load({
     const useMemo = React.useMemo
     const useRef = React.useRef
     const useState = React.useState
+    const useLayoutEffect = React.useLayoutEffect !== undefined ? React.useLayoutEffect : React.useEffect
 
     /** Locale namespace shared by the dictionaries, the page and the Settings entry. */
     const NS = 'mcp-manager'
@@ -35,8 +36,8 @@ window.__ModuleLoader__.load({
     const zh = {
       'section.title': 'MCP 服务',
       'page.subtitle': '管理本机各作用域中的 MCP 服务器：新增、编辑、启停、探测，并在作用域之间复用。',
-      'action.refresh': '刷新',
-      'action.probeAll': '测试全部启用的',
+      'action.refresh': '刷新列表',
+      'action.probeAll': '测试所有启用的服务器',
       'action.add': '新增服务器',
       'action.cancel': '取消',
       'action.save': '保存',
@@ -175,8 +176,8 @@ window.__ModuleLoader__.load({
     const en = {
       'section.title': 'MCP servers',
       'page.subtitle': 'Manage MCP servers in every scope on this machine: add, edit, enable, probe, and reuse them across scopes.',
-      'action.refresh': 'Refresh',
-      'action.probeAll': 'Test all enabled',
+      'action.refresh': 'Refresh list',
+      'action.probeAll': 'Test all enabled servers',
       'action.add': 'Add server',
       'action.cancel': 'Cancel',
       'action.save': 'Save',
@@ -743,6 +744,41 @@ window.__ModuleLoader__.load({
       )
     }
 
+    /**
+     * Square icon button: the glyph is an inline SVG painted with `currentColor`, the
+     * accessible name stays on the button, and the native `title` gives the ~1s tooltip.
+     */
+    function IconButton(props) {
+      return h(
+        'button',
+        {
+          type: 'button',
+          className: 'mm-icon-btn' + (props.className !== undefined && props.className !== '' ? ' ' + props.className : ''),
+          disabled: props.disabled === true,
+          onClick: props.onClick,
+          'aria-label': props.label,
+          title: props.title !== undefined ? props.title : props.label,
+        },
+        h(
+          'svg',
+          {
+            className: 'mm-icon',
+            viewBox: '0 0 24 24',
+            width: 18,
+            height: 18,
+            fill: 'none',
+            stroke: 'currentColor',
+            strokeWidth: 2,
+            strokeLinecap: 'round',
+            strokeLinejoin: 'round',
+            'aria-hidden': 'true',
+            focusable: 'false',
+          },
+          props.children,
+        ),
+      )
+    }
+
     function Chip(props) {
       const className = 'mm-chip' + (props.tone !== undefined && props.tone !== '' ? ' mm-chip-' + props.tone : '')
       return h('span', { className: className, title: props.title }, props.children)
@@ -1007,6 +1043,39 @@ window.__ModuleLoader__.load({
       const onCloseRef = useRef(props.onClose)
       onCloseRef.current = props.onClose
       const stackToken = useRef({})
+      /* Non-confirm dialogs are sized to the nearest Settings panel (the closest
+       * `[role="dialog"]` ancestor) so the panel — title bar and close button included —
+       * is fully covered. Measured when the dialog opens and re-measured on window
+       * resize (the panel is re-centered then, so the saved viewport coordinates go
+       * stale). Later tab/content changes never move or resize the box. Confirm
+       * dialogs stay small and centered: they are neither measured nor observed. */
+      const [panelBox, setPanelBox] = useState(null)
+      useLayoutEffect(() => {
+        if (props.size === 'confirm') return undefined
+        const measure = () => {
+          const node = boxRef.current
+          if (node === null || node === undefined) return
+          const parent = node.parentElement
+          if (parent === null || parent === undefined || typeof parent.closest !== 'function') return
+          const panel = parent.closest('[role="dialog"]')
+          if (panel === null || panel === undefined || typeof panel.getBoundingClientRect !== 'function') return
+          const rect = panel.getBoundingClientRect()
+          if (!(rect.width > 0) || !(rect.height > 0)) return
+          setPanelBox({
+            position: 'fixed',
+            left: rect.left + 'px',
+            top: rect.top + 'px',
+            width: rect.width + 'px',
+            height: rect.height + 'px',
+          })
+        }
+        measure()
+        const view = typeof window !== 'undefined' && window !== null ? window : null
+        if (view !== null) view.addEventListener('resize', measure)
+        return () => {
+          if (view !== null) view.removeEventListener('resize', measure)
+        }
+      }, [])
       useEffect(() => {
         const token = stackToken.current
         dialogStack.push(token)
@@ -1168,6 +1237,7 @@ window.__ModuleLoader__.load({
             'aria-modal': 'true',
             'aria-label': props.title,
             ref: boxRef,
+            style: panelBox !== null ? panelBox : undefined,
           },
           h(
             'div',
@@ -2175,18 +2245,34 @@ window.__ModuleLoader__.load({
       const header = h(
         'div',
         { className: 'mm-head' },
+        h('h1', { className: 'mm-title' }, t('section.title')),
+        h('p', { className: 'mm-subtitle' }, t('page.subtitle')),
+        h('span', { className: 'mm-updated' }, view.updatedAt > 0 ? t('updated.at', { time: formatTime(view.updatedAt) }) : t('updated.never')),
         h(
-          'div',
-          { className: 'mm-head-text' },
-          h('h1', { className: 'mm-title' }, t('section.title')),
-          h('p', { className: 'mm-subtitle' }, t('page.subtitle')),
+          IconButton,
+          {
+            className: 'mm-head-icon',
+            label: t('action.refresh'),
+            title: t('action.refresh'),
+            onClick: () => { void loadState() },
+            disabled: busy !== '',
+          },
+          /* Circular arrow: an almost-closed ring plus the arrow head. */
+          h('path', { d: 'M21 12a9 9 0 1 1-9-9c2.52 0 4.93 1 6.74 2.74L21 8' }),
+          h('path', { d: 'M21 3v5h-5' }),
         ),
         h(
-          'div',
-          { className: 'mm-head-actions' },
-          h('span', { className: 'mm-updated' }, view.updatedAt > 0 ? t('updated.at', { time: formatTime(view.updatedAt) }) : t('updated.never')),
-          h(Button, { onClick: () => { void loadState() }, disabled: busy !== '' }, t('action.refresh')),
-          h(Button, { onClick: testAll, disabled: busy !== '' || rows.length === 0 }, t('action.probeAll')),
+          IconButton,
+          {
+            className: 'mm-head-icon',
+            label: t('action.probeAll'),
+            title: t('action.probeAll'),
+            onClick: testAll,
+            disabled: busy !== '' || rows.length === 0,
+          },
+          /* Radar ring with a play glyph: run every enabled server. */
+          h('circle', { cx: 12, cy: 12, r: 9 }),
+          h('path', { d: 'M10 8.5l6 3.5-6 3.5z', fill: 'currentColor', stroke: 'none' }),
         ),
       )
 
@@ -2275,7 +2361,11 @@ window.__ModuleLoader__.load({
         ),
         h('div', { className: 'mm-notice-slot' }, h(Notice, { notice: notice, dismissLabel: t('action.close'), onDismiss: () => setNotice(null) })),
         toolbar,
-        h('div', { className: 'mm-results' }, rowsBody),
+        h(
+          'div',
+          { className: 'mm-results' + (filteredRows.length === 0 ? ' mm-results-empty' : ' mm-results-list') },
+          rowsBody,
+        ),
         h(ImportExportSection, { t: t, onImported: () => { void loadState() } }),
         h(LibrarySection, { t: t, profile: profile, entries: library, onChanged: () => { void loadState() } }),
       )
@@ -2371,12 +2461,12 @@ window.__ModuleLoader__.load({
 
     const CSS = [
       '.mm-page{display:flex;flex-direction:column;gap:16px;width:100%;max-width:880px;color:var(--dsw-alias-label-primary);font-family:var(--dsw-font-family);font-size:13px;line-height:20px}',
-      '.mm-head{display:flex;align-items:flex-start;justify-content:space-between;gap:12px;flex-wrap:wrap}',
-      '.mm-head-text{display:flex;flex-direction:column;gap:2px;min-width:0}',
-      '.mm-title{margin:0;font-size:16px;line-height:24px;font-weight:600;color:var(--dsw-alias-label-primary)}',
-      '.mm-subtitle{margin:0;font-size:12px;line-height:18px;color:var(--dsw-alias-label-secondary)}',
-      '.mm-head-actions{display:flex;align-items:center;gap:8px;flex-wrap:nowrap}',
-      '.mm-updated{flex:none;width:140px;min-width:140px;text-align:right;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;font-variant-numeric:tabular-nums;font-size:11px;line-height:16px;color:var(--dsw-alias-label-tertiary)}',
+      '.mm-head{display:flex;align-items:center;gap:12px;flex-wrap:nowrap;min-width:0}',
+      '.mm-title{flex:none;margin:0;font-size:16px;line-height:24px;font-weight:600;white-space:nowrap;color:var(--dsw-alias-label-primary)}',
+      '.mm-subtitle{flex:1 1 0;min-width:0;margin:0;font-size:12px;line-height:18px;color:var(--dsw-alias-label-secondary);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}',
+      '.mm-updated{flex:none;white-space:nowrap;font-variant-numeric:tabular-nums;font-size:11px;line-height:16px;color:var(--dsw-alias-label-tertiary)}',
+      '.mm-head-icon{width:30px;height:30px}',
+      '.mm-icon{display:block;flex:none}',
       '.mm-btn{font:inherit;font-size:12px;line-height:18px;height:30px;padding:0 11px;display:inline-flex;align-items:center;justify-content:center;gap:6px;white-space:nowrap;cursor:pointer;color:var(--dsw-alias-label-primary);background:transparent;border:1px solid var(--dsw-alias-border-l2);border-radius:var(--dsw-radius-sm)}',
       '.mm-btn:hover:not(:disabled){background:var(--dsw-alias-interactive-bg-hover)}',
       '.mm-btn:disabled{opacity:.45;cursor:default}',
@@ -2385,7 +2475,8 @@ window.__ModuleLoader__.load({
       '.mm-btn-primary:hover:not(:disabled){background:var(--dsw-alias-brand-primary)}',
       '.mm-btn-danger{color:var(--dsw-alias-state-error-primary);border-color:var(--dsw-alias-state-error-primary)}',
       '.mm-icon-btn{width:26px;height:26px;display:inline-flex;align-items:center;justify-content:center;border:1px solid transparent;border-radius:var(--dsw-radius-sm);background:transparent;color:var(--dsw-alias-label-secondary);font-size:16px;line-height:1;cursor:pointer;flex:none}',
-      '.mm-icon-btn:hover{background:var(--dsw-alias-interactive-bg-hover)}',
+      '.mm-icon-btn:hover:not(:disabled){background:var(--dsw-alias-interactive-bg-hover)}',
+      '.mm-icon-btn:disabled{opacity:.45;cursor:default}',
       '.mm-chip{display:inline-flex;align-items:center;height:20px;padding:0 8px;border-radius:999px;border:1px solid var(--dsw-alias-border-l2);font-size:11px;line-height:18px;white-space:nowrap;color:var(--dsw-alias-label-secondary);background:transparent}',
       '.mm-chip-brand{color:var(--dsw-alias-brand-primary);border-color:var(--dsw-alias-brand-primary)}',
       '.mm-chip-ok{color:var(--dsw-alias-state-success-primary);border-color:var(--dsw-alias-state-success-primary)}',
@@ -2420,8 +2511,9 @@ window.__ModuleLoader__.load({
       '.mm-form-body{display:flex;flex-direction:column;gap:10px;min-width:0}',
       '.mm-json-body{display:flex;flex-direction:column;gap:8px;flex:1 1 auto;min-height:0}',
       '.mm-mono{font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;font-size:11px;line-height:17px}',
-      '.mm-results{flex:none;display:flex;flex-direction:column;height:360px;overflow:auto;overscroll-behavior:contain;scrollbar-gutter:stable}',
-      '.mm-results>.mm-empty{flex:1 1 auto;min-height:0}',
+      '.mm-results{flex:none;display:flex;flex-direction:column;overscroll-behavior:contain}',
+      '.mm-results-empty{height:auto;overflow:visible}',
+      '.mm-results-list{max-height:360px;overflow:auto;scrollbar-gutter:stable}',
       '.mm-groups{display:flex;flex-direction:column;gap:16px}',
       '.mm-group{display:flex;flex-direction:column;gap:8px}',
       '.mm-group-title{margin:0;font-size:12px;line-height:18px;font-weight:600;color:var(--dsw-alias-label-secondary);padding-bottom:4px;border-bottom:1px solid var(--dsw-alias-border-l1)}',
@@ -2498,7 +2590,9 @@ window.__ModuleLoader__.load({
       '.mm-switch:disabled{opacity:.45;cursor:default}',
       '.mm-backdrop{position:fixed;inset:0;z-index:1000;display:flex;align-items:center;justify-content:center;padding:16px;background:transparent}',
       '.mm-code-fill{flex:1 1 auto;min-height:0;max-height:none;overflow:visible}',
-      '.mm-dialog{display:flex;flex-direction:column;width:min(680px,calc(100vw - 48px));height:min(720px,86vh);border:1px solid var(--dsw-alias-border-l2);border-radius:var(--dsw-radius-sm);background:var(--dsw-alias-bg-layer-1);color:var(--dsw-alias-label-primary);overflow:hidden;box-shadow:0 12px 36px var(--dsw-alias-bg-overlay,var(--dsw-alias-border-l2))}',
+      /* The fallback matches the backdrop's 16px padding on both sides: the flex item
+       * must not shrink below its declared size, so at 375px the dialog is 343px. */
+      '.mm-dialog{box-sizing:border-box;display:flex;flex-direction:column;flex:none;width:min(800px,calc(100vw - 32px));height:min(800px,calc(100vh - 32px));border:1px solid var(--dsw-alias-border-l2);border-radius:var(--dsw-radius-sm);background:var(--dsw-alias-bg-layer-1);color:var(--dsw-alias-label-primary);overflow:hidden;box-shadow:0 12px 36px var(--dsw-alias-bg-overlay,var(--dsw-alias-border-l2))}',
       '.mm-dialog-confirm{width:min(440px,calc(100vw - 48px));height:auto;min-height:200px}',
       '.mm-dialog-head{flex:none;height:48px;box-sizing:border-box;display:flex;align-items:center;justify-content:space-between;gap:12px;padding:0 16px;border-bottom:1px solid var(--dsw-alias-border-l1)}',
       '.mm-dialog-title{margin:0;min-width:0;font-size:14px;line-height:22px;font-weight:600;color:var(--dsw-alias-label-primary);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}',
@@ -2520,6 +2614,21 @@ window.__ModuleLoader__.load({
         + '.mm-ws-picker{flex:0 1 auto;max-width:120px}'
         + '.mm-ws-picker > .mm-btn{width:auto;max-width:120px;padding:0 6px}'
         + '.mm-ws-chips{flex:1 1 0;min-width:56px}'
+        + '}',
+      /* Narrow host viewports: the Settings panel can leave only ~90px of content
+       * width, less than the two icon buttons plus gaps. Drop the subtitle first,
+       * then the timestamp, and let the title shrink and ellipsize so the header
+       * never wraps or overflows. Desktop (>=721px) keeps the full single row. */
+      '@media (max-width:720px){'
+        + '.mm-head{gap:8px;overflow:hidden}'
+        + '.mm-subtitle{display:none}'
+        + '.mm-title{flex:0 1 auto;min-width:0;overflow:hidden;text-overflow:ellipsis}'
+        + '}',
+      '@media (max-width:520px){'
+        + '.mm-head{gap:4px}'
+        + '.mm-updated{display:none}'
+        + '.mm-head-icon{box-sizing:border-box;width:22px;height:22px}'
+        + '.mm-title{font-size:14px;line-height:20px}'
         + '}',
     ].join('\n')
 
