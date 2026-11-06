@@ -77,6 +77,18 @@
           "en": "Servers",
           "zh": "服务器"
         }
+      },
+      "skills": {
+        "title": {
+          "en": "Skills",
+          "zh": "技能"
+        }
+      },
+      "management": {
+        "title": {
+          "en": "Management",
+          "zh": "管理"
+        }
       }
     }
   },
@@ -580,6 +592,59 @@
         "zh": "基于本机真实会话日志的统计面板：token 消耗、会话数量、按用量估算的成本与预算、按模型的每日 Token 趋势、各会话用量、CPU/内存运行状态与日志占用。"
       },
       "icon": "plugins/session-stats/icon.svg"
+    },
+    {
+      "name": "@xiechenghua01/dsh-skill-manager",
+      "author": "xiechenghua01",
+      "homepage": "https://github.com/xiechenghua01/dsh-plugins/tree/main/plugins/skill-manager",
+      "repository": {
+        "url": "https://github.com/xiechenghua01/dsh-plugins",
+        "directory": "plugins/skill-manager"
+      },
+      "metadata": {
+        "category": "integrations",
+        "keywords": [
+          "skills",
+          "skill",
+          "skill manager",
+          "market",
+          "skill market",
+          "agents",
+          "prompt",
+          "技能",
+          "技能管理",
+          "技能市场"
+        ],
+        "labels": [
+          "skills",
+          "management",
+          "ui-panel"
+        ]
+      },
+      "versions": [
+        {
+          "version": "0.1.0",
+          "publishTimestamp": 1793972478,
+          "source": {
+            "type": "git",
+            "url": "https://github.com/xiechenghua01/dsh-plugins",
+            "commit": "029cf5de1a2535677ade4b4eb72325798f05c7e3",
+            "path": "plugins/skill-manager"
+          },
+          "engines": {
+            "dsh": ">=0.2.1-rc.5 <0.3.0"
+          }
+        }
+      ],
+      "title": {
+        "en": "Skills Manager",
+        "zh": "技能管理"
+      },
+      "description": {
+        "en": "A sidebar panel that lists skills by install location (project, user, shared, bundled), edits and disables them, diagnoses skills that exist on disk but never reach agents, and installs skills from market indexes.",
+        "zh": "侧栏技能面板：按安装位置（项目、用户、共享、内置）分组列出技能，支持编辑与停用，诊断「文件存在但未生效」的技能，并可从市场索引安装技能。"
+      },
+      "icon": "plugins/skill-manager/icon.svg"
     }
   ]
 }
