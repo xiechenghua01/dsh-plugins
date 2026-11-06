@@ -14,6 +14,7 @@ window.__ModuleLoader__.load({
     const Fragment = React.Fragment
     const useCallback = React.useCallback
     const useEffect = React.useEffect
+    const useLayoutEffect = React.useLayoutEffect
     const useRef = React.useRef
     const useState = React.useState
 
@@ -1109,6 +1110,27 @@ window.__ModuleLoader__.load({
         }
       }, [])
 
+      // The prototype dialog covers the layer beneath: size it to the enclosing settings panel.
+      const [hostBox, setHostBox] = useState(null)
+      useLayoutEffect(() => {
+        if (props.size === 'confirm') return undefined
+        const measure = () => {
+          const node = boxRef.current
+          if (node === null || node.parentElement === null) return
+          const host = node.parentElement.closest('[role="dialog"]')
+          if (host === null) return
+          const rect = host.getBoundingClientRect()
+          const width = Math.round(Math.min(rect.width, window.innerWidth - 32))
+          const height = Math.round(Math.min(rect.height, window.innerHeight - 32))
+          if (width > 0 && height > 0) setHostBox({ width: width, height: height })
+        }
+        measure()
+        window.addEventListener('resize', measure)
+        return () => {
+          window.removeEventListener('resize', measure)
+        }
+      }, [])
+
       return h(
         'div',
         {
@@ -1129,6 +1151,7 @@ window.__ModuleLoader__.load({
             'aria-modal': 'true',
             'aria-label': props.title,
             ref: boxRef,
+            style: hostBox === null ? undefined : { width: hostBox.width + 'px', height: hostBox.height + 'px', maxWidth: 'none', maxHeight: 'none' },
           },
           h(
             'div',
@@ -2474,7 +2497,7 @@ window.__ModuleLoader__.load({
       '.mm-state-title{margin:0;font-size:13px;color:var(--dsw-alias-label-secondary)}',
       '.mm-state-hint{margin:0;font-size:12px;color:var(--dsw-alias-label-tertiary)}',
       '.mm-backdrop{position:fixed;inset:0;z-index:1200;display:flex;align-items:center;justify-content:center;padding:16px;background:transparent}',
-      '.mm-dialog{width:100%;max-width:640px;max-height:88vh;display:flex;flex-direction:column;background:var(--dsw-alias-bg-base);border:1px solid var(--dsw-alias-border-l2);border-radius:16px;box-shadow:0 24px 70px color-mix(in srgb,var(--dsw-alias-label-primary) 20%,transparent);overflow:hidden}',
+      '.mm-dialog{width:100%;max-width:640px;max-height:88vh;display:flex;flex-direction:column;background:var(--dsw-static-neutral-bluish-850,var(--dsw-alias-bg-layer-1));border:1px solid var(--dsw-alias-border-l2);border-radius:16px;box-shadow:0 24px 70px color-mix(in srgb,var(--dsw-alias-label-primary) 20%,transparent);overflow:hidden}',
       '.mm-dialog-confirm{max-width:360px;max-height:none;border-radius:14px}',
       '.mm-dialog-head{display:flex;align-items:center;justify-content:space-between;gap:12px;padding:16px 24px;border-bottom:1px solid var(--dsw-alias-border-l1);flex:none}',
       '.mm-dialog-title{margin:0;font-size:15px;font-weight:600}',

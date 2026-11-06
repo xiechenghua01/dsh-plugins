@@ -900,6 +900,7 @@ export async function probeServer(config, options = {}) {
       instructions: fields.instructions,
       toolCount: fields.toolCount,
       toolNames: fields.toolNames,
+      tools: Array.isArray(fields.tools) ? fields.tools : [],
       error: null,
     }
   } catch (error) {
