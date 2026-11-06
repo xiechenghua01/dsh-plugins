@@ -19,6 +19,7 @@ window.__ModuleLoader__.load({
     const useState = React.useState
 
     const NS = 'mcp-manager'
+    const PANEL_ID = 'mcp-manager'
     const API_PATH = 'mcp-manager/api'
     const POLL_MS = 4000
     const DEFAULT_TIMEOUT_MS = 60000
@@ -38,6 +39,7 @@ window.__ModuleLoader__.load({
     const ICON_POWER = 'M12 3v9m6.364-5.364a9 9 0 11-12.728 0'
     const ICON_REFRESH = 'M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15'
     const ICON_EDIT = 'M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z'
+    const ICON_LAYERS = 'M12 3l9 5-9 5-9-5 9-5zM3 12l9 5 9-5M3 17l9 5 9-5'
     const ICON_TRASH = 'M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16'
     const ICON_CHEVRON = 'M19 9l-7 7-7-7'
     const ICON_X = 'M6 18L18 6M6 6l12 12'
@@ -1076,6 +1078,34 @@ window.__ModuleLoader__.load({
      * Fixed-size modal with a transparent backdrop. The body scrolls; the frame never changes
      * size. Escape, the close icon and a backdrop click all dismiss the topmost dialog.
      */
+    function FooterEntry(props) {
+      const source = isObject(props) ? props : {}
+      const wide = source.wide === true
+      const t = typeof source.t === 'function' ? source.t : (key) => key
+      const togglePanel = typeof source.togglePanel === 'function' ? source.togglePanel : null
+      const usePanelInfo = source.usePanelInfo
+      const active = typeof usePanelInfo === 'function'
+        ? usePanelInfo((info) => isObject(info) && info.activePanelId === PANEL_ID) === true
+        : false
+      return h(
+        'button',
+        {
+          type: 'button',
+          className: 'mm-footer-entry',
+          'data-collapsed': wide ? 'false' : 'true',
+          'data-active': active ? 'true' : 'false',
+          'aria-label': t('section.title'),
+          'aria-pressed': active,
+          title: wide ? undefined : t('section.title'),
+          onClick: () => {
+            if (togglePanel !== null) togglePanel(active)
+          },
+        },
+        h(Svg, { d: ICON_LAYERS, size: 16 }),
+        wide ? h('span', { className: 'mm-footer-label' }, t('section.title')) : null,
+      )
+    }
+
     function Dialog(props) {
       const boxRef = useRef(null)
       const stackToken = useRef({})
@@ -1121,7 +1151,7 @@ window.__ModuleLoader__.load({
         const measure = () => {
           const node = boxRef.current
           if (node === null || node.parentElement === null) return
-          const host = node.parentElement.closest('[role="dialog"]')
+          const host = node.parentElement.closest('.mm-root') ?? node.parentElement.closest('[role="dialog"]')
           if (host === null) return
           const rect = host.getBoundingClientRect()
           const width = Math.round(Math.min(rect.width, window.innerWidth - 32))
@@ -2448,8 +2478,13 @@ window.__ModuleLoader__.load({
 
     const CSS = [
       '.mm-root,.mm-root *,.mm-root *::before,.mm-root *::after{box-sizing:border-box}',
-      '.mm-root{display:flex;flex-direction:column;width:100%;height:100%;min-height:0;color:var(--dsw-alias-label-primary);font-family:var(--dsw-font-family,-apple-system,BlinkMacSystemFont,"PingFang SC","Microsoft YaHei",sans-serif);font-size:13px;line-height:20px}',
+      '.mm-root{display:flex;flex-direction:column;width:100%;height:100%;min-height:0;padding:20px 24px;color:var(--dsw-alias-label-primary);font-family:var(--dsw-font-family,-apple-system,BlinkMacSystemFont,"PingFang SC","Microsoft YaHei",sans-serif);font-size:13px;line-height:20px}',
       '.mm-mono{font-family:ui-monospace,SFMono-Regular,Menlo,monospace}',
+      '.mm-footer-entry{display:flex;align-items:center;gap:8px;width:100%;height:32px;padding:0 8px;border:none;border-radius:6px;background:transparent;color:var(--dsw-alias-label-secondary);font-size:12px;cursor:pointer;text-align:left}',
+      '.mm-footer-entry:hover{background:var(--dsw-alias-interactive-bg-hover);color:var(--dsw-alias-label-primary)}',
+      '.mm-footer-entry[data-active="true"]{background:var(--dsw-alias-interactive-bg-hover);color:var(--dsw-alias-label-primary)}',
+      '.mm-footer-entry[data-collapsed="true"]{justify-content:center;padding:0}',
+      '.mm-footer-label{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}',
       '.mm-muted{color:var(--dsw-alias-label-tertiary)}',
       '.mm-icon{display:block;flex:none}',
       '.mm-head{display:flex;align-items:center;justify-content:space-between;gap:16px;padding-bottom:18px;border-bottom:1px solid var(--dsw-alias-border-l1);flex:none}',
@@ -2634,7 +2669,7 @@ window.__ModuleLoader__.load({
      * ------------------------------------------------------------------ */
 
     return {
-      inject: ['slots', 'locale'],
+      inject: ['slots', 'locale', 'layout'],
       apply(ctx) {
         const t = ctx.locale.bind(NS)
         activeT = t
@@ -2663,13 +2698,25 @@ window.__ModuleLoader__.load({
           tooltip.node = null
         }, 'mcp-manager: tooltip')
 
-        ctx.effect(() => ctx.slots.inject('settings.section', () => ctx.slots.register({
-          name: 'settings.section',
-          id: 'mcp-manager',
-          order: 16,
-          label: () => t('section.title'),
+        ctx.effect(() => ctx.slots.inject('main', () => ctx.slots.register({
+          name: 'main',
+          key: PANEL_ID,
           locale: NS,
-        }, McpPage)), 'mcp-manager: settings section')
+          inject: () => ({ t }),
+        }, McpPage)), 'mcp-manager: main panel')
+
+        ctx.effect(() => ctx.slots.inject('sidebar.footer.action', () => ctx.slots.register({
+          name: 'sidebar.footer.action',
+          id: PANEL_ID,
+          order: 12,
+          locale: NS,
+          label: () => t('section.title'),
+          inject: () => ({
+            t,
+            openPanel: () => ctx.layout.selectPanel(PANEL_ID),
+            togglePanel: (active) => ctx.layout.selectPanel(active ? null : PANEL_ID),
+          }),
+        }, FooterEntry)), 'mcp-manager: sidebar footer entry')
       },
     }
   },
