@@ -1078,25 +1078,37 @@ window.__ModuleLoader__.load({
      * Fixed-size modal with a transparent backdrop. The body scrolls; the frame never changes
      * size. Escape, the close icon and a backdrop click all dismiss the topmost dialog.
      */
+    /**
+     * The host renders the whole nav row (`button` + label) and treats this slot's component as
+     * the 16px glyph inside it, so render just the icon and borrow the row's click: a nested
+     * button would be invalid markup and would only cover the glyph.
+     */
     function RailEntry(props) {
       const source = isObject(props) ? props : {}
       const t = typeof source.t === 'function' ? source.t : (key) => key
       const [open, setOpen] = useState(false)
+      const iconRef = useRef(null)
+
+      useEffect(() => {
+        const node = iconRef.current
+        if (node === null || typeof node.closest !== 'function') return undefined
+        const row = node.closest('button')
+        if (row === null) return undefined
+        const onClick = (event) => {
+          if (typeof event.preventDefault === 'function') event.preventDefault()
+          event.stopPropagation()
+          setOpen((value) => value !== true)
+        }
+        row.addEventListener('click', onClick, true)
+        return () => {
+          row.removeEventListener('click', onClick, true)
+        }
+      }, [])
+
       return h(
         Fragment,
         null,
-        h(
-          'button',
-          {
-            type: 'button',
-            className: 'mm-rail-entry',
-            'aria-label': t('section.title'),
-            'aria-pressed': open ? 'true' : 'false',
-            title: t('section.title'),
-            onClick: () => setOpen((value) => value !== true),
-          },
-          h(Svg, { d: ICON_LAYERS, size: 18 }),
-        ),
+        h('span', { ref: iconRef, className: 'mm-rail-icon' }, h(Svg, { d: ICON_LAYERS, size: 16 })),
         open === true
           ? h(
               Dialog,
@@ -2491,9 +2503,7 @@ window.__ModuleLoader__.load({
       '.mm-root,.mm-root *,.mm-root *::before,.mm-root *::after{box-sizing:border-box}',
       '.mm-root{display:flex;flex-direction:column;width:100%;height:100%;min-height:0;padding:20px 24px;color:var(--dsw-alias-label-primary);font-family:var(--dsw-font-family,-apple-system,BlinkMacSystemFont,"PingFang SC","Microsoft YaHei",sans-serif);font-size:13px;line-height:20px}',
       '.mm-mono{font-family:ui-monospace,SFMono-Regular,Menlo,monospace}',
-      '.mm-rail-entry{display:flex;align-items:center;justify-content:center;width:100%;height:32px;border:none;border-radius:8px;background:transparent;color:var(--dsw-alias-label-secondary);cursor:pointer}',
-      '.mm-rail-entry:hover{background:var(--dsw-alias-interactive-bg-hover);color:var(--dsw-alias-label-primary)}',
-      '.mm-rail-entry[aria-pressed="true"]{background:var(--dsw-alias-interactive-bg-hover);color:var(--dsw-alias-label-primary)}',
+      '.mm-rail-icon{display:flex;align-items:center;justify-content:center;width:16px;height:16px;color:inherit}',
       '.mm-muted{color:var(--dsw-alias-label-tertiary)}',
       '.mm-icon{display:block;flex:none}',
       '.mm-head{display:flex;align-items:center;justify-content:space-between;gap:16px;padding-bottom:18px;border-bottom:1px solid var(--dsw-alias-border-l1);flex:none}',
