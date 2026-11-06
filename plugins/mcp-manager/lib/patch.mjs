@@ -109,8 +109,16 @@ function parseSequence(nodes, start, indent) {
       i += child.next
       continue
     }
-    items.push(parseScalar(rest))
-    i += 1
+    let folded = rest
+    let next = i + 1
+    while (next < nodes.length && nodes[next].indent > indent
+      && !isSequenceLine(nodes[next].content)
+      && !MAP_ENTRY.test(nodes[next].content)) {
+      folded += ' ' + nodes[next].content
+      next += 1
+    }
+    items.push(parseScalar(folded))
+    i = next
   }
   return { value: items, next: i }
 }
@@ -136,8 +144,18 @@ function parseMapping(nodes, start, indent) {
       }
       continue
     }
-    out[key] = parseInlineValue(inline, node.line)
-    i += 1
+    // A plain scalar may continue on more-indented lines (YAML folded style); join them with
+    // spaces so a long token split across lines still reads back as one value.
+    let folded = inline
+    let next = i + 1
+    while (next < nodes.length && nodes[next].indent > indent
+      && !isSequenceLine(nodes[next].content)
+      && !MAP_ENTRY.test(nodes[next].content)) {
+      folded += ' ' + nodes[next].content
+      next += 1
+    }
+    out[key] = parseInlineValue(folded, node.line)
+    i = next
   }
   return { value: out, next: i }
 }

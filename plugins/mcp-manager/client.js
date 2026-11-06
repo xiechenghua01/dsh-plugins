@@ -173,6 +173,7 @@ window.__ModuleLoader__.load({
       'editor.toolsIdle': '未获取工具列表',
       'editor.toolsProbing': '正在连接服务获取工具...',
       'editor.toolsProbed': '已连接获取 {count} 个工具',
+      'editor.toolsProbedTotal': '已连接获取 {count} 个工具（服务器共报告 {total} 个）',
       'editor.toolsFailed': '获取失败：{message}',
       'editor.filterTools': '过滤工具名或说明...',
       'editor.toolSummary': '自动允许: {auto} · 禁用: {disabled}',
@@ -319,6 +320,7 @@ window.__ModuleLoader__.load({
       'editor.toolsIdle': 'Tool list not fetched',
       'editor.toolsProbing': 'Connecting to fetch tools...',
       'editor.toolsProbed': 'Connected; fetched {count} tools',
+      'editor.toolsProbedTotal': 'Connected; fetched {count} tools ({total} reported by the server)',
       'editor.toolsFailed': 'Fetch failed: {message}',
       'editor.filterTools': 'Filter tools by name or description...',
       'editor.toolSummary': 'Auto-allow: {auto} · Disabled: {disabled}',
@@ -1479,6 +1481,13 @@ window.__ModuleLoader__.load({
         if (parseJsonText(text)) pushToast('ok', t('toast.jsonSample'))
       }
 
+      /** Report fetched tools, noting the server-reported total when it differs. */
+      function probeMessage(count) {
+        const known = isObject(props.row) && Number.isFinite(props.row.toolCount) ? props.row.toolCount : null
+        if (known !== null && known > count) return t('editor.toolsProbedTotal', { count: count, total: known })
+        return t('editor.toolsProbed', { count: count })
+      }
+
       async function runProbe(silent) {
         const values = draftValues(draft, policy)
         let validation = ''
@@ -1506,7 +1515,7 @@ window.__ModuleLoader__.load({
           if (isObject(live) && live.connected === true && Array.isArray(live.tools) && live.tools.length > 0) {
             const mergedLive = mergeTools(live.tools, [], policyRef.current)
             setProbedTools(mergedLive)
-            setProbeState({ phase: 'ok', message: t('editor.toolsProbed', { count: mergedLive.length }) })
+            setProbeState({ phase: 'ok', message: probeMessage(mergedLive.length) })
             if (silent !== true) pushToast('ok', t('toast.probeOk', { count: mergedLive.length }))
             return { ok: true, tools: live.tools, toolCount: live.tools.length }
           }
@@ -1521,7 +1530,7 @@ window.__ModuleLoader__.load({
             // returned this time survive (same rule as the prototype).
             const merged = mergeTools(tools, [], policyRef.current)
             setProbedTools(merged)
-            setProbeState({ phase: 'ok', message: t('editor.toolsProbed', { count: merged.length }) })
+            setProbeState({ phase: 'ok', message: probeMessage(merged.length) })
             if (silent !== true) pushToast('ok', t('toast.probeOk', { count: merged.length }))
             return result
           }
