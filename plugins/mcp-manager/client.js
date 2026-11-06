@@ -553,6 +553,13 @@ window.__ModuleLoader__.load({
       node.style.left = '0px'
       node.style.top = '0px'
       node.style.visibility = 'hidden'
+      // The tooltip lives on <body>, outside the page's --mm-fs scope; copy the current scale
+      // so its size keeps stepping with the Settings font size.
+      const root = document.querySelector('.mm-root')
+      if (root !== null) {
+        const scale = getComputedStyle(root).getPropertyValue('--mm-fs').trim()
+        if (scale !== '') node.style.setProperty('--mm-fs', scale)
+      }
       document.body.appendChild(node)
       tooltip.node = node
       return node
@@ -2615,7 +2622,7 @@ window.__ModuleLoader__.load({
       '.mm-test-err{color:var(--dsw-alias-state-error-primary)}',
       '.mm-delete-desc{margin:0;font-size:calc(var(--mm-fs) - 1px);line-height:1.7;color:var(--dsw-alias-label-secondary)}',
       '.mm-delete-name{color:var(--dsw-alias-label-primary)}',
-      '.mm-tooltip{position:fixed;z-index:2000;max-width:290px;padding:6px 10px;border-radius:7px;border:1px solid var(--dsw-alias-border-l2);background:var(--dsw-alias-bg-layer-2);color:var(--dsw-alias-label-primary);font-size:calc(var(--mm-fs) - 2px);line-height:16px;box-shadow:none;pointer-events:none;opacity:0;transform:translateY(2px);transition:opacity .14s ease,transform .14s ease;white-space:normal}',
+      '.mm-tooltip{position:fixed;z-index:2000;max-width:290px;padding:6px 10px;border-radius:7px;border:1px solid var(--dsw-alias-border-l2);background:var(--dsw-alias-bg-layer-2);color:var(--dsw-alias-label-secondary);font-size:calc(var(--mm-fs) - 4px);line-height:16px;box-shadow:none;pointer-events:none;opacity:0;transform:translateY(2px);transition:opacity .14s ease,transform .14s ease;white-space:normal}',
       '.mm-tooltip-show{opacity:1;transform:translateY(0)}',
       '.mm-toasts{position:fixed;right:20px;bottom:20px;z-index:2100;display:flex;flex-direction:column;gap:8px;pointer-events:none;max-width:min(420px,calc(100vw - 32px))}',
       '.mm-toast{display:flex;align-items:flex-start;gap:8px;padding:10px 14px;border-radius:9px;border:1px solid var(--dsw-alias-border-l2);background:var(--dsw-alias-bg-layer-1);color:var(--dsw-alias-label-primary);font-size:calc(var(--mm-fs) - 1.5px);line-height:18px;box-shadow:0 10px 30px color-mix(in srgb,var(--dsw-alias-label-primary) 14%,transparent);animation:mm-toast-in .18s ease;pointer-events:auto}',
