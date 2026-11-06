@@ -1095,6 +1095,11 @@ window.__ModuleLoader__.load({
         const row = node.closest('button')
         if (row === null) return undefined
         const onClick = (event) => {
+          // The dialog renders inside this row's DOM subtree. Clicks there must behave normally
+          // (React's synthetic handlers sit above this capture listener), so fully pass them
+          // through; only clicks on the row itself are claimed for the panel toggle.
+          const target = event.target
+          if (target !== null && typeof target.closest === 'function' && target.closest('.mm-dialog') !== null) return
           if (typeof event.preventDefault === 'function') event.preventDefault()
           event.stopPropagation()
           setOpen((value) => value !== true)
@@ -1170,7 +1175,8 @@ window.__ModuleLoader__.load({
         const measure = () => {
           const node = boxRef.current
           if (node === null || node.parentElement === null) return
-          const host = node.parentElement.closest('.mm-root') ?? node.parentElement.closest('[role="dialog"]')
+          // Nested dialogs sit inside the panel dialog; match that panel first, then the page root.
+          const host = node.parentElement.closest('.mm-dialog') ?? node.parentElement.closest('.mm-root') ?? node.parentElement.closest('[role="dialog"]')
           if (host === null) return
           const rect = host.getBoundingClientRect()
           const width = Math.round(Math.min(rect.width, window.innerWidth - 32))
@@ -2464,7 +2470,7 @@ window.__ModuleLoader__.load({
 
       return h(
         'div',
-        { className: 'mm-root' },
+        { className: 'mm-root' + (props.embedded === true ? ' mm-root-embedded' : '') },
         header,
         warningsBanner,
         errorBanner,
@@ -2508,6 +2514,8 @@ window.__ModuleLoader__.load({
       '.mm-icon{display:block;flex:none}',
       '.mm-head{display:flex;align-items:center;justify-content:space-between;gap:16px;padding-bottom:18px;border-bottom:1px solid var(--dsw-alias-border-l1);flex:none}',
       '.mm-head-embedded{justify-content:flex-end;padding-top:0}',
+      '.mm-root-embedded{padding:16px 20px;align-items:stretch}',
+      '.mm-root-embedded .mm-list,.mm-root-embedded .mm-head{width:100%;max-width:640px;margin-left:auto;margin-right:auto}',
       '.mm-head-left{display:flex;align-items:center;gap:8px;min-width:0}',
       '.mm-title{margin:0;font-size:16px;font-weight:500;letter-spacing:-0.01em}',
       '.mm-head-actions{display:flex;align-items:center;justify-content:flex-end;gap:10px;flex:1 1 auto;min-width:0}',
@@ -2578,7 +2586,7 @@ window.__ModuleLoader__.load({
       '.mm-state-title{margin:0;font-size:13px;color:var(--dsw-alias-label-secondary)}',
       '.mm-state-hint{margin:0;font-size:12px;color:var(--dsw-alias-label-tertiary)}',
       '.mm-backdrop{position:fixed;inset:0;z-index:1200;display:flex;align-items:center;justify-content:center;padding:16px;background:transparent}',
-      '.mm-dialog{width:100%;max-width:640px;max-height:88vh;display:flex;flex-direction:column;background:var(--dsw-static-neutral-bluish-850,var(--dsw-alias-bg-layer-1));border:1px solid var(--dsw-alias-border-l2);border-radius:16px;box-shadow:0 24px 70px color-mix(in srgb,var(--dsw-alias-label-primary) 20%,transparent);overflow:hidden}',
+      '.mm-dialog{width:100%;max-width:640px;max-height:88vh;display:flex;flex-direction:column;background:var(--dsw-static-neutral-bluish-850,var(--dsw-alias-bg-layer-1));border:1px solid var(--dsw-alias-border-l2);border-radius:16px;box-shadow:none;overflow:hidden}',
       '.mm-dialog-confirm{max-width:360px;max-height:none;border-radius:14px}',
       '.mm-dialog-head{display:flex;align-items:center;justify-content:space-between;gap:12px;padding:16px 24px;border-bottom:1px solid var(--dsw-alias-border-l1);flex:none}',
       '.mm-dialog-title{margin:0;font-size:15px;font-weight:600}',
