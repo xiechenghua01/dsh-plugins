@@ -23,6 +23,7 @@ import { access, readFile } from 'node:fs/promises'
 import {
   MCP_CLIENT_NAME,
   insertRows,
+  parseYamlSubset,
   readPatchFile,
   removeInsert,
   setInsertDisabled,
@@ -627,6 +628,32 @@ export function apply(ctx, config) {
     }
   }
 
+  /**
+   * The UI font size the user picked in Settings: `ui-theme` declares `fontSize` in the patch
+   * layer, which is the only place a plugin can read it (the client variable is scoped to the
+   * conversation view). The profile layer overrides the home layer.
+   */
+  async function themeFontSize() {
+    const paths = await resolvePaths()
+    for (const file of [paths.profilePatch, paths.homePatch]) {
+      let content
+      try {
+        content = await readPatchFile(file)
+      } catch {
+        continue
+      }
+      if (content.trim() === '') continue
+      // The patch carries values this YAML subset cannot parse (flow mappings such as
+      // `{{SECRET_x}}`), so locate the ui-theme override textually instead of parsing it.
+      const match = /(?:^|\n)\s*-\s+id:\s*['"]?ui-theme['"]?[\s\S]{0,800}?\bfontSize:\s*(\d{1,2})/u.exec(content)
+      if (match !== null) {
+        const size = Number(match[1])
+        if (Number.isFinite(size) && size >= 10 && size <= 40) return Math.round(size)
+      }
+    }
+    return null
+  }
+
   /** Registered workspace directories, as the client's 工作目录 multi-select shows them. */
   function workspaceList() {
     const registry = ctx.get('workspaceRegistry')
@@ -660,6 +687,7 @@ export function apply(ctx, config) {
     } catch (error) {
       warnings.push(`library: ${message(error)}`)
     }
+    const fontSize = await themeFontSize()
     // Workspace attachments live in the catalog, not in the Loader config: the MCP row is
     // profile-scoped, so the attachment organizes and filters servers instead of scoping them.
     for (const row of rows) {
@@ -681,6 +709,7 @@ export function apply(ctx, config) {
         libraryFile: paths.libraryFile,
       },
       workspaces: workspaceList(),
+      fontSize,
       rows,
       library: listServers(synced),
       warnings,
