@@ -539,7 +539,7 @@ window.__ModuleLoader__.load({
     }
 
     /* ------------------------------------------------------------------ *
-     * 1000ms delayed tooltip engine.                                     *
+     * 300ms delayed tooltip engine, also available on click.                                     *
      * ------------------------------------------------------------------ */
 
     const tooltip = { timer: null, target: null, label: '', node: null }
@@ -599,7 +599,9 @@ window.__ModuleLoader__.load({
       node.style.visibility = 'visible'
     }
 
-    function scheduleTooltip(label, target) {
+    const TOOLTIP_DELAY_MS = 300
+
+    function scheduleTooltip(label, target, delay) {
       hideTooltip()
       const text = textOf(label)
       if (text === '' || target === null || target === undefined) return
@@ -608,7 +610,7 @@ window.__ModuleLoader__.load({
       tooltip.timer = setTimeout(() => {
         tooltip.timer = null
         placeTooltip()
-      }, 1000)
+      }, typeof delay === 'number' ? delay : TOOLTIP_DELAY_MS)
     }
 
     function tooltipHandlers(label) {
@@ -620,6 +622,11 @@ window.__ModuleLoader__.load({
         },
         onMouseLeave: () => {
           hideTooltip()
+        },
+        // Capture phase so it never replaces the handler merged after it (Object.assign later
+        // wins), and so the explanation appears even though the button then does its own work.
+        onClickCapture: (event) => {
+          scheduleTooltip(text, event.currentTarget, 0)
         },
         onMouseDown: () => {
           hideTooltip()
@@ -1155,7 +1162,9 @@ window.__ModuleLoader__.load({
             'aria-modal': 'true',
             'aria-label': props.title,
             ref: boxRef,
-            style: hostBox === null ? undefined : { width: hostBox.width + 'px', height: hostBox.height + 'px', maxWidth: 'none', maxHeight: 'none' },
+            style: hostBox === null
+              ? { boxShadow: 'none' }
+              : { width: hostBox.width + 'px', height: hostBox.height + 'px', maxWidth: 'none', maxHeight: 'none', boxShadow: 'none' },
           },
           h(
             'div',
@@ -2523,7 +2532,7 @@ window.__ModuleLoader__.load({
       '.mm-state-title{margin:0;font-size:13px;color:var(--dsw-alias-label-secondary)}',
       '.mm-state-hint{margin:0;font-size:12px;color:var(--dsw-alias-label-tertiary)}',
       '.mm-backdrop{position:fixed;inset:0;z-index:1200;display:flex;align-items:center;justify-content:center;padding:16px;background:transparent}',
-      '.mm-dialog{width:100%;max-width:640px;max-height:88vh;display:flex;flex-direction:column;background:var(--dsw-static-neutral-bluish-850,var(--dsw-alias-bg-layer-1));border:1px solid var(--dsw-alias-border-l2);border-radius:16px;box-shadow:0 24px 70px color-mix(in srgb,var(--dsw-alias-label-primary) 20%,transparent);overflow:hidden}',
+      '.mm-dialog{width:100%;max-width:640px;max-height:88vh;display:flex;flex-direction:column;background:var(--dsw-static-neutral-bluish-850,var(--dsw-alias-bg-layer-1));border:1px solid var(--dsw-alias-border-l2);border-radius:16px;box-shadow:none;overflow:hidden}',
       '.mm-dialog-confirm{max-width:360px;max-height:none;border-radius:14px}',
       '.mm-dialog-head{display:flex;align-items:center;justify-content:space-between;gap:12px;padding:16px 24px;border-bottom:1px solid var(--dsw-alias-border-l1);flex:none}',
       '.mm-dialog-title{margin:0;font-size:15px;font-weight:600}',
