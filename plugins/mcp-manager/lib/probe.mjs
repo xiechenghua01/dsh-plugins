@@ -31,7 +31,7 @@ const CLIENT_NAME = 'dsh-mcp-manager'
 const CLIENT_VERSION = '0.1.0'
 
 /** ProbeResult caps (CONTRACT §5). */
-const MAX_TOOL_NAMES = 50
+const MAX_TOOL_NAMES = 400
 const MAX_INSTRUCTIONS = 500
 
 /** Defensive caps so a misbehaving server cannot grow the probe's memory forever. */
