@@ -19,7 +19,6 @@ window.__ModuleLoader__.load({
     const useState = React.useState
 
     const NS = 'mcp-manager'
-    const PANEL_ID = 'mcp-manager'
     const API_PATH = 'mcp-manager/api'
     const POLL_MS = 4000
     const DEFAULT_TIMEOUT_MS = 60000
@@ -39,7 +38,6 @@ window.__ModuleLoader__.load({
     const ICON_POWER = 'M12 3v9m6.364-5.364a9 9 0 11-12.728 0'
     const ICON_REFRESH = 'M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15'
     const ICON_EDIT = 'M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z'
-    const ICON_LAYERS = 'M12 3l9 5-9 5-9-5 9-5zM3 12l9 5 9-5M3 17l9 5 9-5'
     const ICON_TRASH = 'M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16'
     const ICON_CHEVRON = 'M19 9l-7 7-7-7'
     const ICON_X = 'M6 18L18 6M6 6l12 12'
@@ -1078,58 +1076,6 @@ window.__ModuleLoader__.load({
      * Fixed-size modal with a transparent backdrop. The body scrolls; the frame never changes
      * size. Escape, the close icon and a backdrop click all dismiss the topmost dialog.
      */
-    /**
-     * The host renders the whole nav row (`button` + label) and treats this slot's component as
-     * the 16px glyph inside it, so render just the icon and borrow the row's click: a nested
-     * button would be invalid markup and would only cover the glyph.
-     */
-    function RailEntry(props) {
-      const source = isObject(props) ? props : {}
-      const t = typeof source.t === 'function' ? source.t : (key) => key
-      const [open, setOpen] = useState(false)
-      const iconRef = useRef(null)
-
-      useEffect(() => {
-        const node = iconRef.current
-        if (node === null || typeof node.closest !== 'function') return undefined
-        const row = node.closest('button')
-        if (row === null) return undefined
-        const onClick = (event) => {
-          // The dialog renders inside this row's DOM subtree. Clicks there must behave normally
-          // (React's synthetic handlers sit above this capture listener), so fully pass them
-          // through; only clicks on the row itself are claimed for the panel toggle.
-          const target = event.target
-          if (target !== null && typeof target.closest === 'function' && target.closest('.mm-dialog') !== null) return
-          if (typeof event.preventDefault === 'function') event.preventDefault()
-          event.stopPropagation()
-          setOpen((value) => value !== true)
-        }
-        row.addEventListener('click', onClick, true)
-        return () => {
-          row.removeEventListener('click', onClick, true)
-        }
-      }, [])
-
-      return h(
-        Fragment,
-        null,
-        h('span', { ref: iconRef, className: 'mm-rail-icon' }, h(Svg, { d: ICON_LAYERS, size: 16 })),
-        open === true
-          ? h(
-              Dialog,
-              {
-                size: 'panel',
-                title: t('section.title'),
-                closeLabel: t('action.close'),
-                closeTooltip: t('action.close'),
-                onClose: () => setOpen(false),
-              },
-              h(McpPage, { t: t, embedded: true }),
-            )
-          : null,
-      )
-    }
-
     function Dialog(props) {
       const boxRef = useRef(null)
       const stackToken = useRef({})
@@ -1171,12 +1117,11 @@ window.__ModuleLoader__.load({
       // The prototype dialog covers the layer beneath: size it to the enclosing settings panel.
       const [hostBox, setHostBox] = useState(null)
       useLayoutEffect(() => {
-        if (props.size === 'confirm' || props.size === 'panel') return undefined
+        if (props.size === 'confirm') return undefined
         const measure = () => {
           const node = boxRef.current
           if (node === null || node.parentElement === null) return
-          // Nested dialogs sit inside the panel dialog; match that panel first, then the page root.
-          const host = node.parentElement.closest('.mm-dialog') ?? node.parentElement.closest('.mm-root') ?? node.parentElement.closest('[role="dialog"]')
+          const host = node.parentElement.closest('[role="dialog"]')
           if (host === null) return
           const rect = host.getBoundingClientRect()
           const width = Math.round(Math.min(rect.width, window.innerWidth - 32))
@@ -1210,9 +1155,7 @@ window.__ModuleLoader__.load({
             'aria-modal': 'true',
             'aria-label': props.title,
             ref: boxRef,
-            style: props.size === 'panel'
-              ? { width: 'min(800px, calc(100vw - 32px))', height: 'min(800px, calc(100vh - 32px))', maxWidth: 'none', maxHeight: 'none' }
-              : hostBox === null ? undefined : { width: hostBox.width + 'px', height: hostBox.height + 'px', maxWidth: 'none', maxHeight: 'none' },
+            style: hostBox === null ? undefined : { width: hostBox.width + 'px', height: hostBox.height + 'px', maxWidth: 'none', maxHeight: 'none' },
           },
           h(
             'div',
@@ -2382,15 +2325,13 @@ window.__ModuleLoader__.load({
 
       const header = h(
         'div',
-        { className: 'mm-head' + (props.embedded === true ? ' mm-head-embedded' : '') },
-        props.embedded === true
-          ? null
-          : h(
-            'div',
-            { className: 'mm-head-left' },
-            h('h2', { className: 'mm-title' }, t('page.title')),
-            h(HelpDot, { tip: t('page.help') }),
-          ),
+        { className: 'mm-head' },
+        h(
+          'div',
+          { className: 'mm-head-left' },
+          h('h2', { className: 'mm-title' }, t('page.title')),
+          h(HelpDot, { tip: t('page.help') }),
+        ),
         h(
           'div',
           { className: 'mm-head-actions' },
@@ -2470,7 +2411,7 @@ window.__ModuleLoader__.load({
 
       return h(
         'div',
-        { className: 'mm-root' + (props.embedded === true ? ' mm-root-embedded' : '') },
+        { className: 'mm-root' },
         header,
         warningsBanner,
         errorBanner,
@@ -2507,15 +2448,11 @@ window.__ModuleLoader__.load({
 
     const CSS = [
       '.mm-root,.mm-root *,.mm-root *::before,.mm-root *::after{box-sizing:border-box}',
-      '.mm-root{display:flex;flex-direction:column;width:100%;height:100%;min-height:0;padding:20px 24px;color:var(--dsw-alias-label-primary);font-family:var(--dsw-font-family,-apple-system,BlinkMacSystemFont,"PingFang SC","Microsoft YaHei",sans-serif);font-size:13px;line-height:20px}',
+      '.mm-root{display:flex;flex-direction:column;width:100%;height:100%;min-height:0;color:var(--dsw-alias-label-primary);font-family:var(--dsw-font-family,-apple-system,BlinkMacSystemFont,"PingFang SC","Microsoft YaHei",sans-serif);font-size:13px;line-height:20px}',
       '.mm-mono{font-family:ui-monospace,SFMono-Regular,Menlo,monospace}',
-      '.mm-rail-icon{display:flex;align-items:center;justify-content:center;width:16px;height:16px;color:inherit}',
       '.mm-muted{color:var(--dsw-alias-label-tertiary)}',
       '.mm-icon{display:block;flex:none}',
       '.mm-head{display:flex;align-items:center;justify-content:space-between;gap:16px;padding-bottom:18px;border-bottom:1px solid var(--dsw-alias-border-l1);flex:none}',
-      '.mm-head-embedded{justify-content:flex-end;padding-top:0}',
-      '.mm-root-embedded{padding:16px 20px;align-items:stretch}',
-      '.mm-root-embedded .mm-list,.mm-root-embedded .mm-head{width:100%;max-width:640px;margin-left:auto;margin-right:auto}',
       '.mm-head-left{display:flex;align-items:center;gap:8px;min-width:0}',
       '.mm-title{margin:0;font-size:16px;font-weight:500;letter-spacing:-0.01em}',
       '.mm-head-actions{display:flex;align-items:center;justify-content:flex-end;gap:10px;flex:1 1 auto;min-width:0}',
@@ -2586,7 +2523,7 @@ window.__ModuleLoader__.load({
       '.mm-state-title{margin:0;font-size:13px;color:var(--dsw-alias-label-secondary)}',
       '.mm-state-hint{margin:0;font-size:12px;color:var(--dsw-alias-label-tertiary)}',
       '.mm-backdrop{position:fixed;inset:0;z-index:1200;display:flex;align-items:center;justify-content:center;padding:16px;background:transparent}',
-      '.mm-dialog{width:100%;max-width:640px;max-height:88vh;display:flex;flex-direction:column;background:var(--dsw-static-neutral-bluish-850,var(--dsw-alias-bg-layer-1));border:1px solid var(--dsw-alias-border-l2);border-radius:16px;box-shadow:none;overflow:hidden}',
+      '.mm-dialog{width:100%;max-width:640px;max-height:88vh;display:flex;flex-direction:column;background:var(--dsw-static-neutral-bluish-850,var(--dsw-alias-bg-layer-1));border:1px solid var(--dsw-alias-border-l2);border-radius:16px;box-shadow:0 24px 70px color-mix(in srgb,var(--dsw-alias-label-primary) 20%,transparent);overflow:hidden}',
       '.mm-dialog-confirm{max-width:360px;max-height:none;border-radius:14px}',
       '.mm-dialog-head{display:flex;align-items:center;justify-content:space-between;gap:12px;padding:16px 24px;border-bottom:1px solid var(--dsw-alias-border-l1);flex:none}',
       '.mm-dialog-title{margin:0;font-size:15px;font-weight:600}',
@@ -2697,7 +2634,7 @@ window.__ModuleLoader__.load({
      * ------------------------------------------------------------------ */
 
     return {
-      inject: ['slots', 'locale', 'layout'],
+      inject: ['slots', 'locale'],
       apply(ctx) {
         const t = ctx.locale.bind(NS)
         activeT = t
@@ -2726,14 +2663,13 @@ window.__ModuleLoader__.load({
           tooltip.node = null
         }, 'mcp-manager: tooltip')
 
-        ctx.effect(() => ctx.slots.inject('sidebar.panellist', () => ctx.slots.register({
-          name: 'sidebar.panellist',
-          id: PANEL_ID,
-          order: 11,
-          locale: NS,
+        ctx.effect(() => ctx.slots.inject('settings.section', () => ctx.slots.register({
+          name: 'settings.section',
+          id: 'mcp-manager',
+          order: 16,
           label: () => t('section.title'),
-          inject: () => ({ t }),
-        }, RailEntry)), 'mcp-manager: sidebar entry')
+          locale: NS,
+        }, McpPage)), 'mcp-manager: settings section')
       },
     }
   },
