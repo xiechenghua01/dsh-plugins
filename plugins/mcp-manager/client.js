@@ -498,7 +498,9 @@ window.__ModuleLoader__.load({
       if (isObject(row) && typeof row.toolCount === 'number' && Number.isFinite(row.toolCount)) return row.toolCount
       const probe = isObject(row) ? row.lastProbe : null
       if (isObject(probe) && typeof probe.toolCount === 'number' && Number.isFinite(probe.toolCount)) return probe.toolCount
-      return toolNamesOf(row).length
+      // Unknown (disabled or never connected) stays unknown instead of claiming zero tools.
+      const names = toolNamesOf(row)
+      return names.length > 0 ? names.length : null
     }
 
     function statusOf(t, row, testing) {
@@ -1252,7 +1254,7 @@ window.__ModuleLoader__.load({
                   'aria-expanded': props.expanded === true ? 'true' : 'false',
                   onClick: props.onToggleExpand,
                 }, tooltipHandlers(t('list.toolsTip'))),
-                h('span', null, t('list.tools', { count: count })),
+                h('span', null, t('list.tools', { count: count === null ? DASH : String(count) })),
                 h(Svg, { d: ICON_CHEVRON, size: 12, className: 'mm-chevron' + (props.expanded === true ? ' mm-chevron-open' : '') }),
               ),
             ),
