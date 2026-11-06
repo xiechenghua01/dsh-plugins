@@ -1495,6 +1495,21 @@ window.__ModuleLoader__.load({
         const name = values.serverName !== '' ? values.serverName : 'probe-server'
         setProbeState({ phase: 'probing', message: '' })
         try {
+          // Prefer the harness's own live connection: some MCP servers (searxng among them)
+          // allow a single concurrent session and answer a second one with 503 "Server busy".
+          let live = null
+          try {
+            live = await callApi('connectedTools', { serverName: name })
+          } catch {
+            live = null
+          }
+          if (isObject(live) && live.connected === true && Array.isArray(live.tools) && live.tools.length > 0) {
+            const mergedLive = mergeTools(live.tools, [], policyRef.current)
+            setProbedTools(mergedLive)
+            setProbeState({ phase: 'ok', message: t('editor.toolsProbed', { count: mergedLive.length }) })
+            if (silent !== true) pushToast('ok', t('toast.probeOk', { count: mergedLive.length }))
+            return { ok: true, tools: live.tools, toolCount: live.tools.length }
+          }
           const config = cleanHostConfig(values)
           config.serverName = name
           const payload = await callApi('probe', { config: config })

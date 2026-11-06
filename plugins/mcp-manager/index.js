@@ -970,6 +970,35 @@ export function apply(ctx, config) {
     return { ok: true, level, path: file, exists: (await exists(file)) && document.trim() !== '', text: document }
   }
 
+  /**
+   * Tools the harness already registers for one server: reading them reuses the single live
+   * connection instead of opening a second one (some MCP servers reject concurrent sessions
+   * with 503 "Server busy").
+   */
+  async function opConnectedTools(args) {
+    const serverName = text(args.serverName)
+    if (serverName === '') throw apiError('invalid', 'serverName is required')
+    const tools = ctx.get('tools') ?? ctx.tools
+    let schemas = []
+    if (tools !== null && tools !== undefined && typeof tools.schemas === 'function') {
+      try {
+        schemas = tools.schemas() ?? []
+      } catch {
+        schemas = []
+      }
+    }
+    const prefix = `mcp__${serverName}__`
+    const entries = []
+    for (const schema of Array.isArray(schemas) ? schemas : []) {
+      if (!isObject(schema) || typeof schema.name !== 'string' || !schema.name.startsWith(prefix)) continue
+      entries.push({
+        name: schema.name.slice(prefix.length),
+        description: typeof schema.description === 'string' ? schema.description.slice(0, 240) : '',
+      })
+    }
+    return { ok: true, connected: entries.length > 0, tools: entries }
+  }
+
   async function opProbe(args) {
     let config
     let key = null
@@ -1113,6 +1142,7 @@ export function apply(ctx, config) {
     setWorkspaces: opSetWorkspaces,
     configText: opConfigText,
     moveLevel: opMoveLevel,
+    connectedTools: opConnectedTools,
     probe: opProbe,
     probeAll: opProbeAll,
     import: opImport,
