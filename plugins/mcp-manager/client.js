@@ -623,11 +623,6 @@ window.__ModuleLoader__.load({
         onMouseLeave: () => {
           hideTooltip()
         },
-        // Capture phase so it never replaces the handler merged after it (Object.assign later
-        // wins), and so the explanation appears even though the button then does its own work.
-        onClickCapture: (event) => {
-          scheduleTooltip(text, event.currentTarget, 0)
-        },
         onMouseDown: () => {
           hideTooltip()
         },
@@ -2532,7 +2527,7 @@ window.__ModuleLoader__.load({
       '.mm-state-title{margin:0;font-size:13px;color:var(--dsw-alias-label-secondary)}',
       '.mm-state-hint{margin:0;font-size:12px;color:var(--dsw-alias-label-tertiary)}',
       '.mm-backdrop{position:fixed;inset:0;z-index:1200;display:flex;align-items:center;justify-content:center;padding:16px;background:transparent}',
-      '.mm-dialog{width:100%;max-width:640px;max-height:88vh;display:flex;flex-direction:column;background:var(--dsw-static-neutral-bluish-850,var(--dsw-alias-bg-layer-1));border:1px solid var(--dsw-alias-border-l2);border-radius:16px;box-shadow:none;overflow:hidden}',
+      '.mm-dialog{width:100%;max-width:640px;max-height:88vh;display:flex;flex-direction:column;font-size:14px;background:var(--dsw-static-neutral-bluish-850,var(--dsw-alias-bg-layer-1));border:1px solid var(--dsw-alias-border-l2);border-radius:16px;box-shadow:none;overflow:hidden}',
       '.mm-dialog-confirm{max-width:360px;max-height:none;border-radius:14px}',
       '.mm-dialog-head{display:flex;align-items:center;justify-content:space-between;gap:12px;padding:16px 24px;border-bottom:1px solid var(--dsw-alias-border-l1);flex:none}',
       '.mm-dialog-title{margin:0;font-size:15px;font-weight:600}',
@@ -2547,10 +2542,10 @@ window.__ModuleLoader__.load({
       '.mm-form{display:flex;flex-direction:column;gap:16px}',
       '.mm-grid-name{display:grid;grid-template-columns:minmax(0,2fr) minmax(0,1fr);gap:12px}',
       '.mm-field{display:flex;flex-direction:column;gap:6px;min-width:0}',
-      '.mm-field-label{display:flex;align-items:center;gap:6px;font-size:13px;color:var(--dsw-alias-label-secondary);line-height:18px}',
+      '.mm-field-label{display:flex;align-items:center;gap:6px;font-size:14px;color:var(--dsw-alias-label-secondary);line-height:20px}',
       '.mm-field-sm .mm-field-label{font-size:12px}',
       '.mm-required{color:var(--dsw-alias-state-error-primary);font-size:12px;cursor:help}',
-      '.mm-input{width:100%;height:36px;padding:0 12px;border-radius:8px;border:1px solid var(--dsw-alias-border-l1);background:var(--dsw-alias-bg-layer-2);color:var(--dsw-alias-label-primary);font-size:13px;font-family:inherit;outline:none;transition:border-color .15s ease}',
+      '.mm-input{width:100%;height:36px;padding:0 12px;border-radius:8px;border:1px solid var(--dsw-alias-border-l1);background:var(--dsw-alias-bg-layer-2);color:var(--dsw-alias-label-primary);font-size:14px;font-family:inherit;outline:none;transition:border-color .15s ease}',
       '.mm-input::placeholder{color:var(--dsw-alias-label-tertiary)}',
       '.mm-input:focus{border-color:var(--dsw-alias-border-l2)}',
       '.mm-input.mm-mono,.mm-select.mm-mono{font-family:ui-monospace,SFMono-Regular,Menlo,monospace}',
@@ -2619,7 +2614,7 @@ window.__ModuleLoader__.load({
       '.mm-test-err{color:var(--dsw-alias-state-error-primary)}',
       '.mm-delete-desc{margin:0;font-size:13px;line-height:1.7;color:var(--dsw-alias-label-secondary)}',
       '.mm-delete-name{color:var(--dsw-alias-label-primary)}',
-      '.mm-tooltip{position:fixed;z-index:2000;max-width:290px;padding:6px 10px;border-radius:7px;border:1px solid var(--dsw-alias-border-l2);background:var(--dsw-alias-bg-layer-2);color:var(--dsw-alias-label-primary);font-size:12px;line-height:16px;box-shadow:0 8px 22px color-mix(in srgb,var(--dsw-alias-label-primary) 18%,transparent);pointer-events:none;opacity:0;transform:translateY(2px);transition:opacity .14s ease,transform .14s ease;white-space:normal}',
+      '.mm-tooltip{position:fixed;z-index:2000;max-width:290px;padding:6px 10px;border-radius:7px;border:1px solid var(--dsw-alias-border-l2);background:var(--dsw-alias-bg-layer-2);color:var(--dsw-alias-label-primary);font-size:12px;line-height:16px;box-shadow:none;pointer-events:none;opacity:0;transform:translateY(2px);transition:opacity .14s ease,transform .14s ease;white-space:normal}',
       '.mm-tooltip-show{opacity:1;transform:translateY(0)}',
       '.mm-toasts{position:fixed;right:20px;bottom:20px;z-index:2100;display:flex;flex-direction:column;gap:8px;pointer-events:none;max-width:min(420px,calc(100vw - 32px))}',
       '.mm-toast{display:flex;align-items:flex-start;gap:8px;padding:10px 14px;border-radius:9px;border:1px solid var(--dsw-alias-border-l2);background:var(--dsw-alias-bg-layer-1);color:var(--dsw-alias-label-primary);font-size:12.5px;line-height:18px;box-shadow:0 10px 30px color-mix(in srgb,var(--dsw-alias-label-primary) 14%,transparent);animation:mm-toast-in .18s ease;pointer-events:auto}',
