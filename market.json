@@ -79,6 +79,18 @@
         "en": "Servers",
         "zh": "服务器"
       }
+    },
+    "skills": {
+      "title": {
+        "en": "Skills",
+        "zh": "技能"
+      }
+    },
+    "management": {
+      "title": {
+        "en": "Management",
+        "zh": "管理"
+      }
     }
   }
 }

@@ -1,0 +1,121 @@
+{
+  "$schema": "https://raw.githubusercontent.com/xiechenghua01/dsh-plugins/main/docs/plugins/skill-manager/product/skill-market-index.schema.json",
+  "format": 1,
+  "title": { "en": "Acme Skills", "zh": "Acme 技能库" },
+  "description": {
+    "en": "Curated skills for code review, release notes, and documentation.",
+    "zh": "精选的代码审查、发布说明与文档技能。"
+  },
+  "homepage": "https://github.com/acme/skills",
+  "repository": "https://github.com/acme/skills",
+  "author": "acme",
+  "icon": "https://raw.githubusercontent.com/acme/skills/0123456789abcdef0123456789abcdef01234567/assets/icon.png",
+  "metadata": {
+    "categories": {
+      "coding": { "title": { "en": "Coding", "zh": "编码" } },
+      "writing": { "title": { "en": "Writing", "zh": "写作" } }
+    },
+    "labels": {
+      "review": { "title": { "en": "Review", "zh": "审查" } },
+      "release": { "title": { "en": "Release", "zh": "发布" } },
+      "official": { "title": { "en": "Official", "zh": "官方" } }
+    },
+    "sortKeys": {
+      "stars": { "title": { "en": "Stars", "zh": "星标" }, "order": "desc" }
+    }
+  },
+  "skills": [
+    {
+      "name": "code-review",
+      "title": { "en": "Code Review", "zh": "代码审查" },
+      "description": {
+        "en": "Review a diff and propose actionable changes.",
+        "zh": "审查代码变更并给出可执行的修改建议。"
+      },
+      "author": "acme",
+      "license": "MIT",
+      "homepage": "https://github.com/acme/skills/tree/main/skills/code-review",
+      "repository": "https://github.com/acme/skills",
+      "metadata": {
+        "category": "coding",
+        "keywords": ["review", "diff"],
+        "labels": ["review"],
+        "sortKeys": { "stars": 128 }
+      },
+      "versions": [
+        {
+          "version": "1.2.0",
+          "publishTimestamp": 1762300000,
+          "engines": { "dsh": ">=0.2.1-rc.5 <0.3.0" },
+          "source": {
+            "type": "git",
+            "url": "https://github.com/acme/skills",
+            "commit": "0123456789abcdef0123456789abcdef01234567",
+            "path": "skills/code-review"
+          },
+          "files": [
+            {
+              "path": "SKILL.md",
+              "url": "https://raw.githubusercontent.com/acme/skills/0123456789abcdef0123456789abcdef01234567/skills/code-review/SKILL.md",
+              "sha256": "9f86d081884c7d659a2feaa0c55ad015a3bf4f1b2b0b822cd15d6c15b0f00a08",
+              "size": 2314
+            },
+            {
+              "path": "references/checklist.md",
+              "url": "https://raw.githubusercontent.com/acme/skills/0123456789abcdef0123456789abcdef01234567/skills/code-review/references/checklist.md",
+              "sha256": "2c26b46b68ffc68ff99b453c1d30413413422d706483bfa0f98a5e886266e7ae",
+              "size": 1024
+            }
+          ]
+        },
+        {
+          "version": "1.1.0",
+          "publishTimestamp": 1761000000,
+          "engines": { "dsh": ">=0.2.1-rc.5 <0.3.0" },
+          "yanked": true,
+          "files": [
+            {
+              "path": "SKILL.md",
+              "url": "https://raw.githubusercontent.com/acme/skills/0fedcba9876543210fedcba9876543210fedcba/skills/code-review/SKILL.md",
+              "sha256": "3f79bb7b435b05321651daefd374cdc681dc06faa65e374e38337b88ca046dea",
+              "size": 2100
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "release-notes",
+      "title": { "en": "Release Notes", "zh": "发布说明" },
+      "description": {
+        "en": "Generate user-facing release notes from commits.",
+        "zh": "从提交记录生成面向用户的发布说明。"
+      },
+      "author": "acme",
+      "license": "MIT",
+      "homepage": "https://github.com/acme/skills/tree/main/skills/release-notes",
+      "repository": "https://github.com/acme/skills",
+      "metadata": {
+        "category": "writing",
+        "keywords": ["changelog", "release"],
+        "labels": ["release", "official"],
+        "sortKeys": { "stars": 64 }
+      },
+      "versions": [
+        {
+          "version": "2.0.0",
+          "publishTimestamp": 1762200000,
+          "engines": { "dsh": ">=0.2.1-rc.5 <0.3.0" },
+          "files": [
+            {
+              "path": "SKILL.md",
+              "url": "https://raw.githubusercontent.com/acme/skills/0123456789abcdef0123456789abcdef01234567/skills/release-notes/SKILL.md",
+              "sha256": "559aead08264d5795d3909718cdd05abd49572e84fe55590eef31a88a08fdffd",
+              "size": 1800
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}

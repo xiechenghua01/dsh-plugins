@@ -1,0 +1,1623 @@
+<!doctype html>
+<html lang="zh-CN" data-theme="dark">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=1440, initial-scale=1">
+<title>技能 · DeepSeek Harness</title>
+<style>
+/* ============================================================
+   技能管理 — 高保真静态原型
+   几何与 token 取自 docs/plugins/skill-manager/research/ui-patterns.md 实测值
+   结构：左侧栏（280 展开 / 56 折叠）+ 中央全局面板
+   ============================================================ */
+
+*,*::before,*::after{box-sizing:border-box}
+html,body{height:100%}
+html[data-theme="dark"]{color-scheme:dark;--font:-apple-system,BlinkMacSystemFont,"Segoe UI","PingFang SC","Microsoft YaHei",sans-serif;--mono:ui-monospace,SFMono-Regular,Menlo,monospace;
+  --bg-base:#151517;--sidebar-fill:#1b1b1c;--layer-1:#232324;--layer-2:#2c2c2e;--layer-3:#353638;
+  --label-1:#f9fafb;--label-2:#cfd3d6;--label-3:#adb2b8;--label-4:#81858c;
+  --border-l1:#ffffff0f;--border-l2:#ffffff1f;--border-l3:#ffffff29;
+  --hover:#ffffff14;--hover-strong:#ffffff24;--nav-active:#43454a;--button-elevated:#43454a;--panel-active:#ffffff14;
+  --primary-fill:#f9fafb;--primary-fg:#0f1115;
+  --success:#22c55e;--success-text:#22c55e;--error:#f25a5a;--error-text:#f25a5a;
+  --warn:#f59e0b;--warn-text:#f59e0b;--link:#7aaaff;--link-text:#7aaaff;
+  --skeleton:#ffffff14;--field-bg:#232324;--chip-bg:#2c2c2e;--tab-active-bg:#232324;
+  --switch-off:#ffffff29;--knob:#f9fafb;
+  --badge-bg:rgba(255,255,255,.06);--badge-project-bg:rgba(122,170,255,.14);
+  --badge-success-bg:rgba(34,197,94,.13);--badge-warn-bg:rgba(245,158,11,.14);--badge-error-bg:rgba(242,90,90,.14);
+  --scrim:rgba(0,0,0,.4);--tooltip-bg:#43454a;--tooltip-fg:#f9fafb;
+  --shadow-panel:0 0 0 .5px rgba(255,255,255,.2),0 3px 8px rgba(0,0,0,.03),0 0 16px rgba(0,0,0,.02);
+  --shadow-prominent:0 0 0 .5px rgba(255,255,255,.2),0 3px 8px rgba(0,0,0,.04),0 0 20px rgba(0,0,0,.05);
+  --sidebar-w:280px}
+html[data-theme="light"]{color-scheme:light;--font:-apple-system,BlinkMacSystemFont,"Segoe UI","PingFang SC","Microsoft YaHei",sans-serif;--mono:ui-monospace,SFMono-Regular,Menlo,monospace;
+  --bg-base:#fff;--sidebar-fill:#f9fafb;--layer-1:#f7f7f8;--layer-2:#fff;--layer-3:#f0f0f2;
+  --label-1:#0f1115;--label-2:#61666b;--label-3:#81858c;--label-4:#adb2b8;
+  --border-l1:#0000000a;--border-l2:#0000001a;--border-l3:#00000029;
+  --hover:#2631480f;--hover-strong:#2631481f;--nav-active:#ebeef2;--button-elevated:#fff;--panel-active:#ebeef2;
+  --primary-fill:#0f1115;--primary-fg:#f9fafb;
+  --success:#22c55e;--success-text:#15803d;--error:#dc2626;--error-text:#dc2626;
+  --warn:#f59e0b;--warn-text:#b45309;--link:#4176e6;--link-text:#4176e6;
+  --skeleton:#0000000a;--field-bg:#fff;--chip-bg:#f1f2f4;--tab-active-bg:#fff;
+  --switch-off:#00000029;--knob:#fff;
+  --badge-bg:rgba(15,17,21,.05);--badge-project-bg:rgba(65,118,230,.10);
+  --badge-success-bg:rgba(21,128,61,.10);--badge-warn-bg:rgba(180,83,9,.10);--badge-error-bg:rgba(220,38,38,.10);
+  --scrim:rgba(15,17,21,.3);--tooltip-bg:#353638;--tooltip-fg:#f9fafb;
+  --shadow-panel:0 0 0 .5px rgba(15,17,21,.10),0 3px 8px rgba(15,17,21,.05),0 0 16px rgba(15,17,21,.03);
+  --shadow-prominent:0 0 0 .5px rgba(15,17,21,.10),0 4px 12px rgba(15,17,21,.07),0 0 20px rgba(15,17,21,.04);
+  --sidebar-w:280px}
+
+body{margin:0;font-family:var(--font);background:var(--bg-base);color:var(--label-1);-webkit-font-smoothing:antialiased;text-rendering:optimizeLegibility;overflow:hidden}
+button{font-family:inherit;font-size:inherit;color:inherit;background:none;border:0;padding:0;cursor:pointer;text-align:inherit}
+input,textarea{font-family:inherit;font-size:inherit;color:inherit;background:none;border:0;outline:0}
+svg{display:block}
+ul{margin:0;padding:0;list-style:none}
+p{margin:0}
+h1,h2,h3{margin:0}
+kbd{font-family:var(--font)}
+
+/* ---------- 图标 ---------- */
+.ic{width:16px;height:16px;flex:none;fill:none;stroke:currentColor;stroke-width:1.7;stroke-linecap:round;stroke-linejoin:round}
+.ic-14{width:14px;height:14px}
+.ic-18{width:18px;height:18px}
+.ic-20{width:20px;height:20px}
+.ic-36{width:36px;height:36px;stroke-width:1.4}
+.ic-48{width:48px;height:48px;stroke-width:1.25}
+.ic-fill{fill:currentColor;stroke:none}
+.symbols{position:absolute;width:0;height:0;overflow:hidden}
+
+/* ---------- 应用骨架 ---------- */
+.app{display:grid;grid-template-columns:var(--sidebar-w) minmax(0,1fr);height:100vh}
+body.rail{--sidebar-w:56px}
+
+/* ============================================================
+   左侧栏
+   ============================================================ */
+.sidebar{position:relative;display:flex;flex-direction:column;height:100vh;min-height:0;padding:6px 8px;background:var(--sidebar-fill);border-right:.5px solid var(--border-l2);overflow:visible;z-index:5}
+
+.brandRow{display:flex;align-items:center;height:60px;padding:8px 0 8px 8px;flex:none}
+.brandBtn{display:flex;align-items:center;gap:8px;height:36px;border-radius:10px;min-width:0}
+.brandMark{width:22px;height:22px;flex:none;color:var(--label-1)}
+.brandName{display:flex;align-items:center;gap:6px;font-size:15px;line-height:20px;font-weight:600;letter-spacing:-.015em;color:var(--label-1);white-space:nowrap}
+.brandTag{font-size:8.5px;line-height:13px;font-weight:600;letter-spacing:.08em;padding:0 4px;border:.5px solid var(--border-l3);border-radius:4px;color:var(--label-2);transform:translateY(-1px)}
+.sidebar .toggle{margin-left:auto;width:28px;height:28px;flex:none;border-radius:8px;display:grid;place-items:center;color:var(--label-3)}
+.sidebar .toggle:hover{background:var(--hover);color:var(--label-1)}
+
+.newSession{position:relative;display:flex;align-items:center;justify-content:center;gap:7px;height:38px;margin:0 4px;flex:none;border-radius:12px;background:var(--button-elevated);color:var(--label-1);font-size:14px;line-height:22px;font-weight:500;box-shadow:inset 0 0 0 .5px var(--border-l2)}
+.newSession:hover{background:var(--hover-strong)}
+.newSession kbd{position:absolute;right:12px;top:50%;transform:translateY(-50%);font-size:12px;line-height:16px;color:var(--label-3);letter-spacing:.02em}
+
+.panelList{display:flex;flex-direction:column;gap:2px;margin-top:10px;flex:none}
+.panelRow{position:relative;display:flex;align-items:center;gap:6px;height:36px;padding:7px 9px;border-radius:12px;color:var(--label-2);font-size:14px;line-height:22px;white-space:nowrap}
+.panelRow:hover{background:var(--panel-active);color:var(--label-1)}
+.panelRow.active{background:var(--panel-active);color:var(--label-1)}
+.panelRow .ic{color:currentColor}
+.panelRow .railTip{display:none}
+
+.wsArea{display:flex;flex-direction:column;min-height:0;margin-top:10px;flex:1}
+.wsHeader{display:flex;align-items:center;gap:2px;height:36px;padding:0 1px 0 12px;flex:none;border-radius:12px;color:var(--label-3);font-size:14px;line-height:20px}
+.wsHeader .wsTitle{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis}
+.wsHeader .iconBtn28{width:28px;height:28px;flex:none;border-radius:8px;display:grid;place-items:center;color:var(--label-3)}
+.wsHeader .iconBtn28:hover{background:var(--hover);color:var(--label-1)}
+.ic-14ws{width:14px;height:14px}
+
+.tree{display:flex;flex-direction:column;gap:1px;padding:4px 1px 12px 4px;overflow:hidden}
+.wsRow{display:flex;align-items:center;gap:6px;height:34px;padding:0 8px 0 9px;border-radius:12px;border-left:3px solid transparent;color:var(--label-2);font-size:14px;line-height:20px}
+.wsRow:hover{background:var(--hover)}
+.wsRow .chev{width:12px;height:12px;color:var(--label-3);flex:none}
+.wsRow .ic{width:15px;height:15px;color:var(--label-3)}
+.wsRow .wsName{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.sessionRow{display:flex;align-items:center;gap:8px;height:32px;padding:0 8px 0 13px;border-radius:12px;border-left:3px solid transparent;color:var(--label-2);font-size:13.5px;line-height:20px}
+.sessionRow:hover{background:var(--hover)}
+.sessionRow .ring{width:13px;height:13px;flex:none;color:var(--label-4)}
+.sessionRow.running .ring{color:var(--success)}
+.sessionRow .sTitle{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.sessionRow time{flex:none;font-size:10px;line-height:16px;color:var(--label-3)}
+
+.footArea{display:flex;flex-direction:column;gap:8px;margin-top:auto;flex:none;padding-top:8px}
+.footPlugins{display:flex;gap:8px}
+.footEntry{display:flex;align-items:center;gap:8px;height:36px;padding:0 10px;border-radius:10px;color:var(--label-2);font-size:13px;line-height:20px;white-space:nowrap}
+.footEntry:hover{background:var(--hover);color:var(--label-1)}
+.footEntry.mcp{height:32px;padding:0 8px;border-radius:6px;font-size:12px;align-self:center}
+.accountRow{display:flex;align-items:center;gap:8px;height:44px;padding:6px;border-radius:12px}
+.accountRow:hover{background:var(--hover)}
+.avatar{width:32px;height:32px;flex:none;border-radius:50%;background:#4c5566;color:#fff;display:grid;place-items:center;font-size:12.5px;font-weight:500;letter-spacing:.02em}
+.accountName{font-size:14px;line-height:20px;color:var(--label-1);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+
+/* ---------- 折叠态 rail 56px ---------- */
+body.rail .sidebar{padding:18px 10px 6px;align-items:center;height:100vh}
+body.rail .brandRow{height:36px;padding:0;justify-content:center;width:100%}
+body.rail .brandBtn{width:36px;height:36px;justify-content:center;border-radius:12px;gap:0}
+body.rail .brandBtn:hover{background:var(--hover)}
+body.rail .brandName,body.rail .brandTag,body.rail .sidebar .toggle{display:none}
+body.rail .brandMark{width:24px;height:18px}
+body.rail .newSession{width:36px;height:36px;margin:12px 0 0;padding:0;border-radius:50%;justify-content:center}
+body.rail .newSession span,body.rail .newSession kbd{display:none}
+body.rail .newSession .ic{width:16px;height:16px}
+body.rail .panelList{margin-top:12px;gap:12px;align-items:center;width:100%}
+body.rail .panelRow{width:36px;height:36px;padding:0;justify-content:center;border-radius:12px}
+body.rail .panelRow .lbl{display:none}
+body.rail .panelRow .ic{width:18px;height:18px}
+body.rail .wsArea{margin-top:12px;align-items:center;width:100%}
+body.rail .wsHeader{width:36px;height:auto;padding:0;justify-content:flex-start;gap:12px;flex-direction:column;flex:none;align-items:center;border-radius:0;background:none}
+body.rail .wsHeader .wsTitle,body.rail .wsHeader .btnViewOptions{display:none}
+body.rail .wsHeader .iconBtn28{width:36px;height:36px;border-radius:12px}
+body.rail .wsHeader .iconBtn28 .ic{width:18px;height:18px}
+body.rail .tree{display:none}
+body.rail .footArea{gap:12px;width:100%;align-items:center}
+body.rail .footPlugins{flex-direction:column;gap:12px;align-items:center}
+body.rail .footEntry{width:36px;height:36px;padding:0;justify-content:center;border-radius:10px}
+body.rail .footEntry .lbl{display:none}
+body.rail .accountRow{width:32px;height:32px;padding:0;justify-content:center}
+body.rail .accountName{display:none}
+body.rail .avatar{width:32px;height:32px}
+
+/* rail tooltip */
+.railTip{position:absolute;left:calc(100% + 18px);top:50%;transform:translateY(-50%);padding:3px 7px;border-radius:8px;background:var(--tooltip-bg);color:var(--tooltip-fg);font-size:13px;line-height:20px;font-weight:400;white-space:nowrap;z-index:100;pointer-events:none;box-shadow:0 2px 8px rgba(0,0,0,.18)}
+body.rail .panelRow:hover .railTip{display:block}
+body.rail[data-view="rail"] .panelRow[data-panel="skills"] .railTip{display:block}
+
+/* ============================================================
+   中央内容区 / 页面骨架
+   ============================================================ */
+.center{position:relative;height:100vh;overflow-y:auto;overflow-x:hidden;background:var(--bg-base)}
+.center::-webkit-scrollbar{width:8px;height:8px}
+.center::-webkit-scrollbar-thumb{background:var(--skeleton);border-radius:4px}
+.center::-webkit-scrollbar-track{background:transparent}
+
+.page{min-height:100%;padding:0 48px 48px}
+.pageHead{padding-top:28px}
+.headRow{display:flex;align-items:flex-start;justify-content:space-between;gap:24px}
+.heading{min-width:0}
+.heading h1{font-size:20px;line-height:28px;font-weight:500;letter-spacing:-.005em;color:var(--label-1)}
+.heading p{margin-top:4px;font-size:13px;line-height:20px;color:var(--label-2)}
+
+.toolbar{display:flex;align-items:center;gap:8px;flex:none;padding-top:1px}
+.searchBox{display:flex;align-items:center;gap:7px;width:248px;height:32px;padding:0 9px;border-radius:12px;background:var(--field-bg);border:.5px solid var(--border-l2);color:var(--label-4)}
+.searchBox:focus-within{border-color:var(--label-3)}
+.searchBox .ic{width:15px;height:15px;flex:none;color:var(--label-4)}
+.searchBox input{flex:1;min-width:0;font-size:13px;line-height:20px;color:var(--label-1);padding:1px 0}
+.searchBox input::placeholder{color:var(--label-4)}
+.iconBtn32{width:32px;height:32px;flex:none;border-radius:12px;display:grid;place-items:center;color:var(--label-2);border:.5px solid var(--border-l2)}
+.iconBtn32:hover{background:var(--hover);color:var(--label-1)}
+.btnPrimary{display:inline-flex;align-items:center;gap:5px;height:32px;padding:0 12px;border-radius:12px;background:var(--primary-fill);color:var(--primary-fg);font-size:13px;line-height:20px;font-weight:500;white-space:nowrap}
+.btnPrimary:hover{opacity:.9}
+.btnPrimary .ic{width:14px;height:14px;stroke-width:2}
+.btnPrimary[disabled]{opacity:.35;cursor:not-allowed}
+
+.tabs{display:inline-flex;align-items:center;height:34px;margin-top:16px;padding:2px;gap:2px;border-radius:14px;background:var(--layer-3)}
+.tab{display:inline-flex;align-items:center;gap:6px;height:30px;padding:0 14px;border-radius:12px;font-size:14px;line-height:20px;color:var(--label-2);white-space:nowrap}
+.tab:hover{color:var(--label-1)}
+.tab.active{background:var(--tab-active-bg);color:var(--label-1);font-weight:500;box-shadow:inset 0 0 0 .5px var(--border-l2)}
+.tab .tabCount{font-size:11px;line-height:17px;font-weight:500;padding:0 5px;border-radius:999px;background:var(--badge-bg);color:var(--label-3)}
+.tab.active .tabCount{background:var(--hover-strong);color:var(--label-1)}
+
+.content{margin-top:32px}
+.tabPanel{display:none}
+.tabPanel.active{display:block}
+
+/* ---------- 问题横幅 ---------- */
+.banner{display:flex;align-items:center;gap:10px;height:40px;padding:0 14px;border-radius:14px;background:var(--badge-warn-bg);border:.5px solid rgba(245,158,11,.3);color:var(--label-2)}
+.banner>.ic{color:var(--warn-text);flex:none}
+.banner .bText{flex:1;min-width:0;font-size:13px;line-height:20px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.banner .bText b{font-weight:500;color:var(--label-1)}
+.banner .bLink{display:inline-flex;align-items:center;gap:4px;flex:none;font-size:13px;line-height:20px;font-weight:500;color:var(--warn-text)}
+.banner .bLink .ic{width:14px;height:14px}
+.banner .bLink:hover{text-decoration:underline}
+
+/* ---------- 筛选 chips ---------- */
+.filterRow{display:flex;align-items:center;gap:12px;height:24px;margin-top:32px}
+.chips{display:flex;align-items:center;gap:6px}
+.chip{height:24px;padding:0 9px;border-radius:999px;background:var(--chip-bg);color:var(--label-2);font-size:12px;line-height:18px;white-space:nowrap}
+.chip:hover{color:var(--label-1)}
+.chip.active{background:var(--nav-active);color:var(--label-1);font-weight:500}
+.filterRight{margin-left:auto;display:flex;align-items:center;gap:8px}
+.sortBtn{display:inline-flex;align-items:center;gap:4px;height:24px;padding:0 6px;border-radius:8px;color:var(--label-3);font-size:12px;line-height:18px}
+.sortBtn:hover{background:var(--hover);color:var(--label-1)}
+.sortBtn .ic{width:12px;height:12px}
+
+/* ---------- 分组 ---------- */
+.group{margin-top:32px}
+.groupHead{display:flex;align-items:center;gap:10px;height:22px}
+.groupName{font-size:14px;line-height:22px;font-weight:500;color:var(--label-1);white-space:nowrap}
+.groupSep{width:1px;height:11px;background:var(--border-l3);flex:none}
+.groupPath{font-family:var(--mono);font-size:12px;line-height:18px;color:var(--label-3);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.groupCount{font-size:12px;line-height:18px;color:var(--label-3);white-space:nowrap}
+.groupRank{font-family:var(--mono);font-size:11px;line-height:17px;color:var(--label-4);padding:0 5px;border-radius:5px;border:.5px solid var(--border-l2);white-space:nowrap}
+.groupRight{margin-left:auto;display:flex;align-items:center;gap:8px;flex:none}
+.groupHead .ghostBtn{height:26px}
+.groupNote{font-size:12px;line-height:18px;color:var(--label-4);white-space:nowrap}
+
+.ghostBtn{display:inline-flex;align-items:center;gap:5px;height:28px;padding:0 9px;border-radius:8px;color:var(--label-2);font-size:12px;line-height:18px;white-space:nowrap}
+.ghostBtn:hover{background:var(--hover);color:var(--label-1)}
+.ghostBtn .ic{width:14px;height:14px;color:var(--label-3)}
+.ghostBtn:hover .ic{color:var(--label-1)}
+
+.btnOutline{display:inline-flex;align-items:center;gap:5px;height:28px;padding:0 10px;border-radius:8px;font-size:12px;line-height:18px;color:var(--label-1);box-shadow:inset 0 0 0 .5px var(--border-l3)}
+.btnOutline:hover{background:var(--hover)}
+.btnOutline .ic{width:13px;height:13px}
+.btnOutline.sm{height:26px;padding:0 8px;font-size:12px}
+
+/* ---------- 技能列表 ---------- */
+.skillList{display:flex;flex-direction:column;gap:2px;margin-top:8px}
+.skillRow{position:relative;display:flex;align-items:center;gap:14px;height:65px;padding:8px;border-radius:20px;cursor:pointer}
+.skillRow:hover{background:var(--hover)}
+.skillRow:focus-visible{outline:2px solid var(--label-2);outline-offset:-2px}
+.skillIcon{position:relative;width:49px;height:49px;flex:none;border-radius:16px;border:.5px solid var(--border-l2);display:grid;place-items:center;color:var(--label-2)}
+.skillIcon .ic{width:36px;height:36px;stroke-width:1.4}
+.skillIcon .dot{position:absolute;left:-1px;bottom:-1px;width:10px;height:10px;border-radius:50%;background:var(--success);box-shadow:0 0 0 2px var(--bg-base)}
+.skillIcon .dot.off{background:var(--label-4)}
+.skillIcon .dot.err{background:var(--error)}
+.skillMain{flex:1;min-width:0;display:flex;flex-direction:column;gap:2px}
+.skillTitleRow{display:flex;align-items:center;gap:7px;min-width:0}
+.skillName{font-size:14px;line-height:20px;font-weight:500;color:var(--label-1);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;flex:none;max-width:280px}
+.skillDesc{font-size:13px;line-height:18px;color:var(--label-3);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.skillActions{display:flex;align-items:center;gap:10px;flex:none;padding:0 4px 0 8px}
+.badge{display:inline-flex;align-items:center;height:18px;padding:0 7px;border-radius:999px;background:var(--badge-bg);color:var(--label-2);font-size:11px;line-height:17px;font-weight:500;white-space:nowrap;flex:none}
+.badge.project{background:var(--badge-project-bg);color:var(--link-text)}
+.badge.model{background:var(--badge-success-bg);color:var(--success-text)}
+.badge.warn{background:var(--badge-warn-bg);color:var(--warn-text)}
+.badge.err{background:var(--badge-error-bg);color:var(--error-text)}
+.badge.plain{background:transparent;color:var(--label-3)}
+.builtinMark{font-size:12px;line-height:18px;color:var(--label-3);padding:0 4px;white-space:nowrap}
+
+.moreBtn{width:32px;height:32px;flex:none;border-radius:8px;display:grid;place-items:center;color:var(--label-3)}
+.moreBtn:hover{background:var(--hover-strong);color:var(--label-1)}
+.moreBtn .ic{width:18px;height:18px}
+
+/* switch */
+.switch{position:relative;width:36px;height:20px;flex:none;border-radius:999px;background:var(--switch-off);transition:background .15s ease}
+.switch .knob{position:absolute;top:2px;left:2px;width:16px;height:16px;border-radius:50%;background:var(--knob);transition:transform .15s ease,background .15s ease}
+.switch.on{background:var(--label-1)}
+.switch.on .knob{transform:translateX(16px);background:var(--bg-base)}
+.switch:focus-visible{outline:2px solid var(--label-2);outline-offset:2px}
+
+/* 已停用折叠 */
+.disabledWrap{margin-top:16px}
+.disabledToggle{display:flex;align-items:center;gap:6px;height:28px;padding:0 8px;border-radius:8px;color:var(--label-3);font-size:13px;line-height:20px}
+.disabledToggle:hover{background:var(--hover);color:var(--label-2)}
+.disabledToggle .chev{width:12px;height:12px;transition:transform .15s ease;color:var(--label-4)}
+.disabledToggle[aria-expanded="true"] .chev{transform:rotate(90deg)}
+.disabledToggle .dCount{font-size:12px;color:var(--label-4)}
+.disabledToggle .dNames{margin-left:6px;font-size:12px;line-height:18px;color:var(--label-4);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.disabledList{margin-top:4px}
+.disabledList[hidden]{display:none}
+
+/* ============================================================
+   来源 tab
+   ============================================================ */
+.srcList{display:flex;flex-direction:column;gap:2px;margin-top:8px}
+.srcRow{display:flex;align-items:center;gap:10px;height:46px;padding:0 10px 0 8px;border-radius:14px;cursor:default}
+.srcRow:hover{background:var(--hover)}
+.srcIcon{position:relative;width:28px;height:28px;flex:none;border-radius:9px;display:grid;place-items:center;color:var(--label-3)}
+.srcIcon .ic{width:17px;height:17px}
+.srcDot{width:7px;height:7px;flex:none;border-radius:50%;background:var(--success);box-shadow:0 0 0 2px var(--bg-base)}
+.srcDot.off{background:var(--label-4)}
+.srcDot.warn{background:var(--warn)}
+.srcMain{flex:1;min-width:0;display:flex;flex-direction:column;gap:0}
+.srcTitle{display:flex;align-items:center;gap:8px;font-size:14px;line-height:20px;font-weight:500;color:var(--label-1);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.srcPath{font-family:var(--mono);font-size:11.5px;line-height:17px;color:var(--label-3);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.srcMeta{flex:none;display:flex;align-items:center;gap:10px;font-size:12px;line-height:18px;color:var(--label-3);white-space:nowrap}
+.srcMeta .rank{font-family:var(--mono);font-size:11px;line-height:17px;color:var(--label-4);padding:0 5px;border-radius:5px;border:.5px solid var(--border-l2)}
+.srcMeta .mono{font-family:var(--mono);font-size:11.5px}
+.srcRow .ghostBtn,.srcRow .btnOutline{opacity:.95}
+
+.presetRow{display:flex;align-items:center;gap:10px;height:46px;padding:0 10px 0 8px;border-radius:14px}
+.presetRow:hover{background:var(--hover)}
+.presetName{font-family:var(--mono);font-size:13.5px;line-height:20px;color:var(--label-1);width:82px;flex:none}
+.presetState{display:flex;align-items:center;gap:7px;font-size:13px;line-height:20px;color:var(--label-2);flex:none;width:150px}
+.presetState .st{color:var(--label-3)}
+.presetDesc{flex:1;min-width:0;font-size:12.5px;line-height:18px;color:var(--label-3);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.presetRow .tail{flex:none;display:flex;align-items:center;gap:10px;font-size:12px;line-height:18px;color:var(--label-3)}
+
+.provRow{display:flex;align-items:center;gap:10px;height:46px;padding:0 10px 0 8px;border-radius:14px}
+.provRow:hover{background:var(--hover)}
+.provIcon{width:28px;height:28px;flex:none;border-radius:9px;display:grid;place-items:center;color:var(--label-3)}
+.provIcon .ic{width:17px;height:17px}
+.provMain{flex:1;min-width:0;display:flex;flex-direction:column;gap:0}
+.provTitle{font-size:13.5px;line-height:20px;font-weight:500;color:var(--label-1);display:flex;align-items:center;gap:8px}
+.provPkg{font-family:var(--mono);font-size:11.5px;line-height:17px;color:var(--label-3)}
+.provMeta{flex:none;display:flex;align-items:center;gap:12px;font-size:12px;line-height:18px;color:var(--label-3)}
+.tabPanel[data-panel="sources"] .group{margin-top:28px}
+
+.mechNote{display:flex;align-items:center;gap:6px;margin-top:16px;font-size:12.5px;line-height:18px;color:var(--label-3)}
+.mechNote .ic{width:14px;height:14px;color:var(--label-4)}
+.mechNote .link{margin-left:auto;display:inline-flex;align-items:center;gap:4px;color:var(--link-text);font-size:12.5px}
+.mechNote .link .ic{width:12px;height:12px;color:currentColor}
+
+/* ============================================================
+   诊断 tab
+   ============================================================ */
+.diagSummary{display:flex;align-items:center;gap:14px;height:44px;padding:0 14px;border-radius:14px;background:var(--layer-2);border:.5px solid var(--border-l2)}
+.diagSummary .stat{display:flex;align-items:center;gap:6px;font-size:13px;line-height:20px;color:var(--label-2);white-space:nowrap}
+.diagSummary .stat .ic{width:15px;height:15px}
+.diagSummary .stat b{font-weight:500;color:var(--label-1)}
+.diagSummary .stat.err .ic{color:var(--error-text)}
+.diagSummary .stat.warn .ic{color:var(--warn-text)}
+.diagSummary .sep{width:1px;height:14px;background:var(--border-l3)}
+.diagSummary .checked{font-size:12px;line-height:18px;color:var(--label-4)}
+.diagSummary .btnOutline{margin-left:auto}
+
+.issueList{display:flex;flex-direction:column;gap:8px;margin-top:24px}
+.issueCard{display:flex;align-items:flex-start;gap:12px;padding:14px 16px;border-radius:16px;background:var(--layer-2);border:.5px solid var(--border-l2)}
+.issueIcon{width:34px;height:34px;flex:none;border-radius:11px;display:grid;place-items:center;background:var(--badge-error-bg);color:var(--error-text)}
+.issueIcon.warn{background:var(--badge-warn-bg);color:var(--warn-text)}
+.issueIcon .ic{width:18px;height:18px}
+.issueBody{flex:1;min-width:0;display:flex;flex-direction:column;gap:4px}
+.issueTitle{display:flex;align-items:center;gap:9px;min-width:0}
+.issueType{font-size:12px;line-height:18px;font-weight:500;color:var(--error-text);white-space:nowrap}
+.issueType.warn{color:var(--warn-text)}
+.issueName{font-family:var(--mono);font-size:13.5px;line-height:20px;color:var(--label-1);font-weight:500;white-space:nowrap}
+.issuePath{font-family:var(--mono);font-size:11.5px;line-height:17px;color:var(--label-4);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.issueDesc{font-size:12.5px;line-height:19px;color:var(--label-3)}
+.issueDesc code{font-family:var(--mono);font-size:11.5px;color:var(--label-2)}
+.issueCard .btnOutline{flex:none;margin-top:2px;align-self:center}
+
+.rangeCard{margin-top:24px;border-radius:16px;background:var(--layer-2);border:.5px solid var(--border-l2);padding:12px 16px}
+.rangeHead{display:flex;align-items:center;gap:8px;font-size:12.5px;line-height:18px;color:var(--label-3)}
+.rangeHead .ic{width:14px;height:14px;color:var(--label-4)}
+.rangeGrid{display:grid;grid-template-columns:repeat(4,1fr);gap:10px;margin-top:10px}
+.rangeItem{display:flex;flex-direction:column;gap:2px}
+.rangeItem .k{font-size:11.5px;line-height:17px;color:var(--label-4)}
+.rangeItem .v{font-size:13px;line-height:20px;color:var(--label-2)}
+.rangeItem .v .mono{font-family:var(--mono);font-size:12px}
+.diagExplain{margin-top:24px;display:flex;gap:8px;font-size:12.5px;line-height:19px;color:var(--label-3);max-width:900px}
+.diagExplain .ic{width:15px;height:15px;margin-top:2px;color:var(--label-4)}
+
+/* ============================================================
+   空状态
+   ============================================================ */
+.emptyState{display:flex;flex-direction:column;align-items:center;text-align:center;padding:48px 0 0}
+.emptyArt{width:120px;height:120px;border-radius:32px;background:var(--skeleton);display:grid;place-items:center;color:var(--label-3)}
+.emptyArt .ic{width:48px;height:48px;stroke-width:1.35}
+.emptyState h2{margin-top:20px;font-size:16px;line-height:24px;font-weight:500;color:var(--label-1)}
+.emptyState p{margin-top:4px;font-size:13px;line-height:20px;color:var(--label-3);max-width:460px}
+.emptyState p code{font-family:var(--mono);font-size:12px;color:var(--label-2);background:var(--badge-bg);padding:1px 5px;border-radius:5px}
+.emptyActions{display:flex;align-items:center;gap:8px;margin-top:16px}
+.emptyActions .btnText{display:inline-flex;align-items:center;gap:4px;height:32px;padding:0 8px;font-size:13px;line-height:20px;color:var(--label-3)}
+.emptyActions .btnText:hover{color:var(--label-1);text-decoration:underline}
+.emptyActions .btnText .ic{width:13px;height:13px}
+body.isEmpty .libNormal{display:none}
+body.isEmpty .libEmpty{display:flex}
+.libEmpty{display:none;flex-direction:column}
+.libEmpty .group{margin-top:36px}
+
+/* ============================================================
+   遮罩 / 抽屉 / 模态
+   ============================================================ */
+.scrim{position:fixed;top:0;right:0;bottom:0;left:var(--sidebar-w);background:var(--scrim);opacity:0;pointer-events:none;transition:opacity .2s ease;z-index:40}
+body.drawerOpen .scrim{opacity:1;pointer-events:auto}
+
+.drawer{position:fixed;top:0;right:0;bottom:0;width:560px;display:flex;flex-direction:column;background:var(--layer-2);border-left:.5px solid var(--border-l2);border-radius:20px 0 0 20px;box-shadow:-16px 0 48px rgba(0,0,0,.26),var(--shadow-prominent);z-index:50;transform:translateX(102%);visibility:hidden;transition:transform .22s cubic-bezier(.32,.72,0,1),visibility .22s}
+body.drawerOpen .drawer{transform:none;visibility:visible}
+body:not(.drawerOpen) .drawer{pointer-events:none}
+
+.drawerHead{display:flex;align-items:flex-start;gap:12px;padding:24px 24px 0;flex:none}
+.drawerIcon{width:32px;height:32px;flex:none;border-radius:11px;border:.5px solid var(--border-l2);display:grid;place-items:center;color:var(--label-2)}
+.drawerIcon .ic{width:19px;height:19px;stroke-width:1.5}
+.drawerHeadMain{flex:1;min-width:0}
+.drawerName{font-family:var(--mono);font-size:20px;line-height:28px;font-weight:500;color:var(--label-1);letter-spacing:-.01em;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.drawerBadges{display:flex;align-items:center;gap:6px;margin-top:7px;flex-wrap:wrap}
+.drawerClose{width:28px;height:28px;flex:none;border-radius:8px;display:grid;place-items:center;color:var(--label-3);margin-top:1px}
+.drawerClose:hover{background:var(--hover);color:var(--label-1)}
+.drawerClose .ic{width:16px;height:16px}
+
+.drawerTabs{margin:18px 24px 0;flex:none;align-self:flex-start}
+
+.drawerBody{flex:1;min-height:0;overflow-y:auto;padding:20px 24px 24px;display:flex;flex-direction:column;gap:20px}
+.dPanel{display:none;flex-direction:column;gap:20px}
+.dPanel.active{display:flex}
+.codeBox{background:var(--layer-1);border:.5px solid var(--border-l2);border-radius:14px;padding:12px 0;overflow:hidden}
+.codeLine{display:flex;gap:14px;padding:0 14px;font-family:var(--mono);font-size:12px;line-height:20px;color:var(--label-2);white-space:pre}
+.codeLine .ln{width:18px;flex:none;text-align:right;color:var(--label-4);user-select:none}
+.codeLine .fm{color:var(--link-text)}
+.codeLine .h{color:var(--label-1);font-weight:500}
+.codeLine.blank{height:12px;padding:0}
+.codeFoot{display:flex;align-items:center;gap:8px;font-size:12px;line-height:18px;color:var(--label-4)}
+.codeFoot .btnOutline{margin-left:auto}
+.assetRow{display:flex;align-items:center;gap:10px;padding:10px 0;border-bottom:.5px solid var(--border-l1);font-size:13px;line-height:20px;color:var(--label-2)}
+.assetRow:last-child{border-bottom:0}
+.assetRow .ic{width:16px;height:16px;color:var(--label-3);flex:none}
+.assetRow .name{font-family:var(--mono);font-size:12.5px;color:var(--label-1);flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.assetRow .size{font-size:11.5px;color:var(--label-4);flex:none}
+.drawerBody::-webkit-scrollbar{width:8px}
+.drawerBody::-webkit-scrollbar-thumb{background:var(--skeleton);border-radius:4px}
+.drawerDesc{font-size:13.5px;line-height:21px;color:var(--label-2)}
+.dSec{display:flex;flex-direction:column;gap:6px}
+.dSec>h3{font-size:12.5px;line-height:18px;font-weight:400;color:var(--label-4);letter-spacing:.01em}
+.dSec>p{font-size:13px;line-height:20px;color:var(--label-2)}
+
+.dCard{background:var(--layer-1);border:.5px solid var(--border-l2);border-radius:14px;padding:4px 14px}
+.dRow{display:flex;align-items:flex-start;justify-content:space-between;gap:16px;padding:8px 0;border-bottom:.5px solid var(--border-l1);font-size:12.5px;line-height:20px}
+.dRow:last-child{border-bottom:0}
+.dRow .k{color:var(--label-3);flex:none}
+.dRow .v{color:var(--label-2);text-align:right;word-break:break-all;display:flex;align-items:center;gap:6px;justify-content:flex-end;flex-wrap:wrap}
+.dRow .v.mono{font-family:var(--mono);font-size:11.5px;line-height:19px}
+.dRow .v .badge{transform:translateY(-1px)}
+
+.invokeRow{display:flex;align-items:center;gap:8px;height:28px;font-size:13px;line-height:20px;color:var(--label-2)}
+.invokeRow .ic{width:15px;height:15px;color:var(--success-text)}
+.invokeRow .ic.muted{color:var(--label-3)}
+.invokeRow .hint{color:var(--label-4);font-size:12px;line-height:18px}
+.invokeRow code{margin-left:auto;font-family:var(--mono);font-size:12px;line-height:18px;color:var(--label-2);background:var(--badge-bg);padding:1px 6px;border-radius:6px}
+
+.scopeChips{display:flex;align-items:center;gap:6px;flex-wrap:wrap}
+.scopeChip{display:inline-flex;align-items:center;height:22px;padding:0 8px;border-radius:7px;background:var(--badge-bg);font-family:var(--mono);font-size:11.5px;line-height:18px;color:var(--label-2)}
+
+.drawerFoot{display:flex;align-items:center;gap:8px;flex:none;padding:12px 24px;border-top:.5px solid var(--border-l1);background:var(--layer-2)}
+.drawerFoot .btnOutline{height:32px;font-size:13px;padding:0 12px;border-radius:12px}
+.drawerFoot .btnOutline .ic{width:14px;height:14px}
+.drawerFoot .btnPrimary{height:32px;margin-left:auto}
+.drawerFoot .moreBtn{border:.5px solid var(--border-l2)}
+
+/* 模态 */
+.modalScrim{position:fixed;inset:0;background:var(--scrim);opacity:0;pointer-events:none;transition:opacity .18s ease;z-index:55}
+body.modalOpen .modalScrim{opacity:1;pointer-events:auto}
+.modal{position:fixed;top:50%;left:50%;width:560px;max-height:calc(100vh - 88px);display:flex;flex-direction:column;transform:translate(-50%,-50%) scale(.985);opacity:0;visibility:hidden;pointer-events:none;background:var(--layer-2);border:.5px solid var(--border-l2);border-radius:20px;box-shadow:var(--shadow-prominent);z-index:60;transition:opacity .18s ease,transform .18s ease,visibility .18s}
+body.modalOpen .modal{opacity:1;visibility:visible;pointer-events:auto;transform:translate(-50%,-50%) scale(1)}
+
+.modalHead{display:flex;align-items:center;gap:12px;padding:20px 24px 0;flex:none}
+.modalHead h2{flex:1;font-size:18px;line-height:26px;font-weight:500;color:var(--label-1)}
+.modalHead .iconBtn28{width:28px;height:28px;border-radius:8px;display:grid;place-items:center;color:var(--label-3)}
+.modalHead .iconBtn28:hover{background:var(--hover);color:var(--label-1)}
+.modalTabs{margin:16px 24px 0;align-self:flex-start;flex:none}
+
+.modalBody{flex:1;min-height:0;overflow-y:auto;padding:20px 24px;display:flex;flex-direction:column;gap:14px}
+.modalBody::-webkit-scrollbar{width:8px}
+.modalBody::-webkit-scrollbar-thumb{background:var(--skeleton);border-radius:4px}
+.mPanel{display:none;flex-direction:column;gap:14px}
+.mPanel.active{display:flex}
+.field{display:flex;flex-direction:column;gap:6px}
+.fieldLabel{display:flex;align-items:center;gap:4px;font-size:12.5px;line-height:18px;color:var(--label-2)}
+.fieldLabel .req{color:var(--error-text)}
+.fieldLabel .opt{color:var(--label-4);font-size:11.5px}
+.input{height:36px;width:100%;padding:0 12px;border-radius:12px;background:var(--field-bg);border:.5px solid var(--border-l2);font-size:13px;line-height:20px;color:var(--label-1)}
+.input::placeholder{color:var(--label-4)}
+.input.mono{font-family:var(--mono);font-size:13px}
+.input:focus{border-color:var(--label-3);box-shadow:inset 0 0 0 .5px var(--border-l3)}
+.input.invalid{border-color:var(--error-text);box-shadow:inset 0 0 0 .5px var(--error-text)}
+textarea.input{height:96px;padding:8px 12px;line-height:20px;resize:none;font-family:var(--mono);font-size:12.5px}
+.fieldError{display:flex;align-items:center;gap:5px;font-size:12px;line-height:18px;color:var(--error-text)}
+.fieldError .ic{width:13px;height:13px}
+.fieldHint{font-size:11.5px;line-height:17px;color:var(--label-4)}
+
+.locRow{display:flex;gap:8px;margin-top:2px}
+.locOpt{flex:1;display:flex;align-items:center;gap:9px;padding:8px 11px;border-radius:12px;background:var(--field-bg);border:.5px solid var(--border-l2);cursor:pointer;min-width:0}
+.locOpt .radio{width:14px;height:14px;flex:none;border-radius:50%;border:1.5px solid var(--label-4);position:relative}
+.locOpt.active .radio{border-color:var(--label-1);background:var(--label-1)}
+.locOpt.active .radio::after{content:"";position:absolute;inset:3.5px;border-radius:50%;background:var(--bg-base)}
+.locOpt.active{border-color:var(--label-3);box-shadow:inset 0 0 0 .5px var(--label-3)}
+.locMain{display:flex;flex-direction:column;gap:1px;min-width:0}
+.locTitle{font-size:13px;line-height:19px;color:var(--label-1);font-weight:500}
+.locPath{font-family:var(--mono);font-size:10.5px;line-height:15px;color:var(--label-3);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+
+.modalFoot{display:flex;align-items:center;justify-content:flex-end;gap:8px;flex:none;padding:12px 24px;border-top:.5px solid var(--border-l1)}
+.btnCancel{height:32px;padding:0 14px;border-radius:12px;font-size:13px;line-height:20px;color:var(--label-2);box-shadow:inset 0 0 0 .5px var(--border-l3)}
+.btnCancel:hover{background:var(--hover);color:var(--label-1)}
+
+/* toast */
+.toast{position:fixed;left:50%;bottom:28px;transform:translate(-50%,10px);display:flex;align-items:center;gap:8px;height:38px;padding:0 14px;border-radius:12px;background:var(--layer-3);border:.5px solid var(--border-l2);box-shadow:var(--shadow-panel);font-size:13px;line-height:20px;color:var(--label-1);opacity:0;pointer-events:none;transition:opacity .18s ease,transform .18s ease;z-index:70}
+.toast.show{opacity:1;transform:translate(-50%,0)}
+.toast .ic{width:15px;height:15px;color:var(--success-text)}
+.toast .undo{margin-left:6px;color:var(--link-text);font-size:13px}
+
+/* 原型辅助控件（clean=1 隐藏） */
+.protoBar{position:fixed;right:16px;bottom:16px;display:flex;align-items:center;gap:8px;padding:6px;border-radius:12px;background:var(--layer-2);border:.5px solid var(--border-l2);box-shadow:var(--shadow-prominent);z-index:80;font-size:11.5px;line-height:16px;color:var(--label-3)}
+.protoBar .pbTitle{font-weight:500;color:var(--label-2);padding:0 4px}
+.protoBar .pbGroup{display:flex;gap:2px}
+.protoBar button{height:24px;padding:0 7px;border-radius:7px;font-size:11.5px;color:var(--label-2)}
+.protoBar button:hover{background:var(--hover);color:var(--label-1)}
+.protoBar button.on{background:var(--nav-active);color:var(--label-1)}
+.protoBar .pbTheme{padding:0 9px;box-shadow:inset 0 0 0 .5px var(--border-l2)}
+html[data-clean="1"] .protoBar{display:none}
+</style>
+</head>
+<body data-view="main">
+<svg class="symbols" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
+  <symbol id="i-brand" viewBox="0 0 24 24">
+    <path fill="currentColor" d="M2.3 11.3c0-3.7 3.9-6.7 8.6-6.7 3.4 0 6.4 1.6 7.8 4l1.6-1.1c.6-.4 1.4.2 1.3.9l-.5 2.7c-.1.5-.1 1 0 1.5l.7 1.9c.2.7-.6 1.2-1.1.8l-1.6-1.1c-1.5 2.3-4.5 3.9-8.2 3.9H3.4c-.6 0-1.1-.5-1.1-1.1v-5.8Z"/>
+    <circle cx="8.1" cy="10.1" r="1.25" fill="var(--sidebar-fill)"/>
+  </symbol>
+  <symbol id="i-panel" viewBox="0 0 24 24"><rect x="3.5" y="5" width="17" height="14" rx="3"/><path d="M9.5 5.5v13"/></symbol>
+  <symbol id="i-plus" viewBox="0 0 24 24"><path d="M12 5v14M5 12h14"/></symbol>
+  <symbol id="i-plus-circle" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M12 8v8M8 12h8"/></symbol>
+  <symbol id="i-plug" viewBox="0 0 24 24"><rect x="4" y="4" width="6.4" height="6.4" rx="1.8"/><rect x="13.6" y="4" width="6.4" height="6.4" rx="1.8"/><rect x="4" y="13.6" width="6.4" height="6.4" rx="1.8"/><path d="M16.8 13.6v6.4M13.6 16.8h6.4"/></symbol>
+  <symbol id="i-clock" viewBox="0 0 24 24"><circle cx="12" cy="12" r="8.5"/><path d="M12 7.6V12l3 1.9"/></symbol>
+  <symbol id="i-sparkle" viewBox="0 0 24 24"><path d="M11.4 3.6l1.7 4.6 4.6 1.7-4.6 1.7-1.7 4.6-1.7-4.6L5.1 9.9l4.6-1.7 1.7-4.6Z"/><path d="M17.6 14.4l.9 2.4 2.4.9-2.4.9-.9 2.4-.9-2.4-2.4-.9 2.4-.9.9-2.4Z"/></symbol>
+  <symbol id="i-grid" viewBox="0 0 24 24"><circle cx="7" cy="7" r="1.15" fill="currentColor" stroke="none"/><circle cx="12" cy="7" r="1.15" fill="currentColor" stroke="none"/><circle cx="17" cy="7" r="1.15" fill="currentColor" stroke="none"/><circle cx="7" cy="12" r="1.15" fill="currentColor" stroke="none"/><circle cx="12" cy="12" r="1.15" fill="currentColor" stroke="none"/><circle cx="17" cy="12" r="1.15" fill="currentColor" stroke="none"/><circle cx="7" cy="17" r="1.15" fill="currentColor" stroke="none"/><circle cx="12" cy="17" r="1.15" fill="currentColor" stroke="none"/><circle cx="17" cy="17" r="1.15" fill="currentColor" stroke="none"/></symbol>
+  <symbol id="i-folder" viewBox="0 0 24 24"><path d="M3.6 7.4c0-1 .8-1.8 1.8-1.8h3.1l2.1 2.3h7.7c1 0 1.8.8 1.8 1.8V17c0 1-.8 1.8-1.8 1.8H5.4c-1 0-1.8-.8-1.8-1.8V7.4Z"/></symbol>
+  <symbol id="i-folder-plus" viewBox="0 0 24 24"><path d="M3.6 7.4c0-1 .8-1.8 1.8-1.8h3.1l2.1 2.3h7.7c1 0 1.8.8 1.8 1.8V17c0 1-.8 1.8-1.8 1.8H5.4c-1 0-1.8-.8-1.8-1.8V7.4Z"/><path d="M12 10.6v5M9.5 13.1h5"/></symbol>
+  <symbol id="i-search" viewBox="0 0 24 24"><circle cx="11" cy="11" r="6.4"/><path d="M16 16l4 4"/></symbol>
+  <symbol id="i-sliders" viewBox="0 0 24 24"><path d="M4.5 8h8M16.5 8h3M4.5 16h3M11.5 16h8"/><circle cx="14.5" cy="8" r="1.9"/><circle cx="9.5" cy="16" r="1.9"/></symbol>
+  <symbol id="i-chart" viewBox="0 0 24 24"><path d="M4.5 19V12.5M9.5 19V8M14.5 19V14.5M19.5 19V5"/></symbol>
+  <symbol id="i-server" viewBox="0 0 24 24"><rect x="3.5" y="4.5" width="17" height="6" rx="2.2"/><rect x="3.5" y="13.5" width="17" height="6" rx="2.2"/><path d="M7.4 7.5h.01M7.4 16.5h.01"/></symbol>
+  <symbol id="i-refresh" viewBox="0 0 24 24"><path d="M19.6 12a7.6 7.6 0 1 1-2.3-5.4"/><path d="M19.8 4.6v4.2h-4.2"/></symbol>
+  <symbol id="i-more" viewBox="0 0 24 24"><circle cx="6" cy="12" r="1.35" fill="currentColor" stroke="none"/><circle cx="12" cy="12" r="1.35" fill="currentColor" stroke="none"/><circle cx="18" cy="12" r="1.35" fill="currentColor" stroke="none"/></symbol>
+  <symbol id="i-close" viewBox="0 0 24 24"><path d="M6.6 6.6l10.8 10.8M17.4 6.6L6.6 17.4"/></symbol>
+  <symbol id="i-chevron-down" viewBox="0 0 24 24"><path d="M8 10l4 4 4-4"/></symbol>
+  <symbol id="i-chevron-right" viewBox="0 0 24 24"><path d="M10 8l4 4-4 4"/></symbol>
+  <symbol id="i-arrow-right" viewBox="0 0 24 24"><path d="M4.5 12h14M13.5 7l5 5-5 5"/></symbol>
+  <symbol id="i-external" viewBox="0 0 24 24"><path d="M9.5 14.5l5-5M10.8 9.5h3.7v3.7"/><path d="M18 13.5v4A2.5 2.5 0 0 1 15.5 20h-9A2.5 2.5 0 0 1 4 17.5v-9A2.5 2.5 0 0 1 6.5 6h4"/></symbol>
+  <symbol id="i-warn" viewBox="0 0 24 24"><path d="M12 4.6l8.2 14.2H3.8L12 4.6Z"/><path d="M12 10v4M12 16.6h.01"/></symbol>
+  <symbol id="i-error" viewBox="0 0 24 24"><circle cx="12" cy="12" r="8.5"/><path d="M9.2 9.2l5.6 5.6M14.8 9.2l-5.6 5.6"/></symbol>
+  <symbol id="i-check" viewBox="0 0 24 24"><circle cx="12" cy="12" r="8.5"/><path d="M8.4 12.2l2.4 2.4 4.8-4.8"/></symbol>
+  <symbol id="i-check-plain" viewBox="0 0 24 24"><path d="M5 12.6l4.6 4.6L19 7.6"/></symbol>
+  <symbol id="i-copy" viewBox="0 0 24 24"><rect x="9.5" y="9.5" width="10" height="10" rx="2.4"/><path d="M6.6 14.8H6a2.5 2.5 0 0 1-2.5-2.5v-7A2.5 2.5 0 0 1 6 2.8h7a2.5 2.5 0 0 1 2.5 2.5v.6"/></symbol>
+  <symbol id="i-pencil" viewBox="0 0 24 24"><path d="M4.6 19.4l.9-4.1L16 4.8a2.1 2.1 0 0 1 3 0l.4.4a2.1 2.1 0 0 1 0 3L8.7 18.5l-4.1.9Z"/><path d="M14.6 6.3l3.1 3.1"/></symbol>
+  <symbol id="i-trash" viewBox="0 0 24 24"><path d="M4.5 7h15M9.6 7V5.3c0-.7.6-1.3 1.3-1.3h2.2c.7 0 1.3.6 1.3 1.3V7"/><path d="M6.6 7l.8 11.9c0 .9.8 1.6 1.7 1.6h5.8c.9 0 1.7-.7 1.7-1.6L17.4 7"/><path d="M10.4 10.9v5.5M13.6 10.9v5.5"/></symbol>
+  <symbol id="i-unlink" viewBox="0 0 24 24"><path d="M9.6 14.4l-2 2a3.6 3.6 0 0 1-5.1-5.1l2.6-2.6"/><path d="M14.4 9.6l2-2a3.6 3.6 0 0 1 5.1 5.1l-2.6 2.6"/><path d="M8 16l8-8"/></symbol>
+  <symbol id="i-book" viewBox="0 0 24 24"><path d="M5.4 5.6c0-1.2 1-2.1 2.1-2.1h11.1v15.2H7.5c-1.2 0-2.1.9-2.1 2.1V5.6Z"/><path d="M5.4 18.6c0-1.2.9-2.1 2.1-2.1h11.1"/></symbol>
+  <symbol id="i-code" viewBox="0 0 24 24"><path d="M8.8 8.2L4.6 12l4.2 3.8M15.2 8.2L19.4 12l-4.2 3.8"/></symbol>
+  <symbol id="i-doc" viewBox="0 0 24 24"><path d="M13.4 3.6H7A1.6 1.6 0 0 0 5.4 5.2v13.6A1.6 1.6 0 0 0 7 20.4h10a1.6 1.6 0 0 0 1.6-1.6V8.6l-5.2-5Z"/><path d="M13.4 3.6v5h5.2"/><path d="M8.8 12.6h6.4M8.8 16h4.4"/></symbol>
+  <symbol id="i-repo" viewBox="0 0 24 24"><path d="M4.2 5.6c0-1 .8-1.8 1.8-1.8h12c1 0 1.8.8 1.8 1.8v12.8c0 1-.8 1.8-1.8 1.8H6c-1 0-1.8-.8-1.8-1.8V5.6Z"/><path d="M8.2 3.8v16.4M12.4 8.6h4.2"/></symbol>
+  <symbol id="i-api" viewBox="0 0 24 24"><path d="M9 4.4v5.2M15 4.4v5.2"/><rect x="6.2" y="9.6" width="11.6" height="5" rx="2.2"/><path d="M12 14.6v5"/></symbol>
+  <symbol id="i-browser" viewBox="0 0 24 24"><rect x="3.4" y="5" width="17.2" height="14" rx="2.6"/><path d="M3.6 9.4h16.8M6.7 7.2h.01M9.4 7.2h.01"/></symbol>
+  <symbol id="i-layout" viewBox="0 0 24 24"><rect x="3.8" y="4.4" width="16.4" height="15.2" rx="2.6"/><path d="M3.9 9.4h16.2M9.6 9.5v10"/></symbol>
+  <symbol id="i-cube" viewBox="0 0 24 24"><path d="M12 3.4l8 4.4v8.4l-8 4.4-8-4.4V7.8l8-4.4Z"/><path d="M4.2 7.9l7.8 4.3 7.8-4.3M12 12.2v8.4"/></symbol>
+  <symbol id="i-terminal" viewBox="0 0 24 24"><path d="M7 8.4l4 3.6-4 3.6M13.4 16h4"/></symbol>
+  <symbol id="i-ring" viewBox="0 0 24 24"><circle cx="12" cy="12" r="6.6"/></symbol>
+  <symbol id="i-layers" viewBox="0 0 24 24"><path d="M12 3.6l8 4-8 4-8-4 8-4Z"/><path d="M4 12l8 4 8-4"/><path d="M4 16.2l8 4 8-4"/></symbol>
+  <symbol id="i-info" viewBox="0 0 24 24"><circle cx="12" cy="12" r="8.5"/><path d="M12 11v5.2M12 7.9h.01"/></symbol>
+  <symbol id="i-file" viewBox="0 0 24 24"><path d="M13.4 3.6H7A1.6 1.6 0 0 0 5.4 5.2v13.6A1.6 1.6 0 0 0 7 20.4h10a1.6 1.6 0 0 0 1.6-1.6V8.6l-5.2-5Z"/><path d="M13.4 3.6v5h5.2"/></symbol>
+  <symbol id="i-image" viewBox="0 0 24 24"><rect x="3.7" y="4.6" width="16.6" height="14.8" rx="2.6"/><circle cx="9" cy="9.8" r="1.6"/><path d="M4.4 16.6l4.2-4 3.4 3.2 3-2.6 4.6 4.2"/></symbol>
+  <symbol id="i-pin" viewBox="0 0 24 24"><path d="M9.4 3.6h5.2l-.8 5.1 3.6 3.1v1.7h-4.9l-1 6.9-1-6.9H5.6v-1.7l3.6-3.1-.8-5.1Z"/></symbol>
+</svg>
+
+<div class="app">
+  <!-- ======================== 左侧栏 ======================== -->
+  <aside class="sidebar" aria-label="侧边栏">
+    <div class="brandRow">
+      <button class="brandBtn" data-act="expand" aria-label="展开侧边栏">
+        <svg class="brandMark" viewBox="0 0 24 24" aria-hidden="true"><use href="#i-brand"/></svg>
+        <span class="brandName">deepseek<span class="brandTag">HARNESS</span></span>
+      </button>
+      <button class="toggle" data-act="collapse" aria-label="收起侧边栏"><svg class="ic ic-14"><use href="#i-panel"/></svg></button>
+    </div>
+
+    <button class="newSession">
+      <svg class="ic ic-14"><use href="#i-plus-circle"/></svg>
+      <span>新会话</span>
+      <kbd>⌥⌘N</kbd>
+    </button>
+
+    <nav class="panelList" aria-label="全局功能">
+      <button class="panelRow" data-panel="plugins">
+        <svg class="ic"><use href="#i-plug"/></svg><span class="lbl">插件</span>
+        <span class="railTip">插件</span>
+      </button>
+      <button class="panelRow" data-panel="automation">
+        <svg class="ic"><use href="#i-clock"/></svg><span class="lbl">自动化任务</span>
+        <span class="railTip">自动化任务</span>
+      </button>
+      <button class="panelRow active" data-panel="skills" aria-current="page">
+        <svg class="ic"><use href="#i-sparkle"/></svg><span class="lbl">技能</span>
+        <span class="railTip">技能</span>
+      </button>
+    </nav>
+
+    <div class="wsArea">
+      <div class="wsHeader">
+        <span class="wsTitle">工作区</span>
+        <button class="iconBtn28" aria-label="搜索会话"><svg class="ic ic-14ws"><use href="#i-search"/></svg></button>
+        <button class="iconBtn28 btnViewOptions" aria-label="视图选项"><svg class="ic ic-14ws"><use href="#i-sliders"/></svg></button>
+        <button class="iconBtn28" aria-label="添加工作区"><svg class="ic ic-14ws"><use href="#i-folder-plus"/></svg></button>
+      </div>
+      <div class="tree">
+        <div class="wsRow">
+          <svg class="ic"><use href="#i-chevron-down"/></svg><svg class="ic"><use href="#i-folder"/></svg>
+          <span class="wsName">knowledge</span>
+        </div>
+        <div class="sessionRow">
+          <svg class="ic ring"><use href="#i-ring"/></svg>
+          <span class="sTitle">知识库索引重建</span><time>3 分钟</time>
+        </div>
+        <div class="sessionRow">
+          <svg class="ic ring"><use href="#i-ring"/></svg>
+          <span class="sTitle">调研稿校对</span><time>1 小时</time>
+        </div>
+        <div class="wsRow">
+          <svg class="ic"><use href="#i-chevron-down"/></svg><svg class="ic"><use href="#i-folder"/></svg>
+          <span class="wsName">dsh-plugins</span>
+        </div>
+        <div class="sessionRow running">
+          <svg class="ic ring"><use href="#i-ring"/></svg>
+          <span class="sTitle">开发插件：skills 管理</span><time>4 分钟</time>
+        </div>
+        <div class="sessionRow">
+          <svg class="ic ring"><use href="#i-ring"/></svg>
+          <span class="sTitle">开发插件：会话统计</span><time>19 小时</time>
+        </div>
+        <div class="sessionRow">
+          <svg class="ic ring"><use href="#i-ring"/></svg>
+          <span class="sTitle">改进中文提交信息</span><time>13 分钟</time>
+        </div>
+        <div class="wsRow">
+          <svg class="ic"><use href="#i-chevron-down"/></svg><svg class="ic"><use href="#i-folder"/></svg>
+          <span class="wsName">默认工作区</span>
+        </div>
+        <div class="sessionRow">
+          <svg class="ic ring"><use href="#i-ring"/></svg>
+          <span class="sTitle">探索未至之境</span><time>昨天</time>
+        </div>
+      </div>
+    </div>
+
+    <div class="footArea">
+      <div class="footPlugins">
+        <button class="footEntry"><svg class="ic ic-18"><use href="#i-chart"/></svg><span class="lbl">会话统计</span></button>
+        <button class="footEntry mcp"><svg class="ic"><use href="#i-server"/></svg><span class="lbl">MCP 服务</span></button>
+      </div>
+      <button class="accountRow">
+        <span class="avatar">承</span><span class="accountName">承泽·川行致远</span>
+      </button>
+    </div>
+  </aside>
+
+  <!-- ======================== 中央内容区 ======================== -->
+  <main class="center">
+    <section class="page">
+      <header class="pageHead">
+        <div class="headRow">
+          <div class="heading">
+            <h1>技能</h1>
+            <p>管理 Agent 可用的技能：查看来源、调用方式，修复未生效的条目。</p>
+          </div>
+          <div class="toolbar">
+            <label class="searchBox">
+              <svg class="ic"><use href="#i-search"/></svg>
+              <input id="searchInput" type="text" placeholder="搜索技能名称或描述" autocomplete="off" spellcheck="false">
+            </label>
+            <button class="iconBtn32" title="刷新" aria-label="刷新"><svg class="ic"><use href="#i-refresh"/></svg></button>
+            <button class="btnPrimary" id="btnNew"><svg class="ic"><use href="#i-plus"/></svg><span>新建技能</span></button>
+          </div>
+        </div>
+        <div class="tabs" role="tablist" aria-label="技能面板">
+          <button class="tab active" role="tab" aria-selected="true" data-tab="library">技能库</button>
+          <button class="tab" role="tab" aria-selected="false" data-tab="sources">来源</button>
+          <button class="tab" role="tab" aria-selected="false" data-tab="diagnostics">诊断<span class="tabCount">2</span></button>
+        </div>
+      </header>
+
+      <div class="content">
+        <!-- ---------- 技能库 ---------- -->
+        <div class="tabPanel active" data-panel="library">
+          <div class="libNormal">
+            <div class="banner">
+              <svg class="ic"><use href="#i-warn"/></svg>
+              <span class="bText"><b>2 个技能未生效</b>，可能导致 Agent 行为与预期不符。</span>
+              <button class="bLink" data-goto="diagnostics">查看原因<svg class="ic"><use href="#i-arrow-right"/></svg></button>
+            </div>
+
+            <div class="filterRow">
+              <div class="chips">
+                <button class="chip active">全部</button>
+                <button class="chip">项目</button>
+                <button class="chip">用户</button>
+                <button class="chip">插件内置</button>
+                <button class="chip">预设内置</button>
+              </div>
+              <div class="filterRight">
+                <button class="sortBtn">排序：名称<svg class="ic"><use href="#i-chevron-down"/></svg></button>
+              </div>
+            </div>
+
+            <section class="group">
+              <div class="groupHead">
+                <span class="groupName">项目技能</span>
+                <span class="groupSep"></span>
+                <span class="groupPath">~/Codes/xch/dsh-plugins/.dsh/skills</span>
+                <span class="groupRank">rank 100</span>
+                <div class="groupRight">
+                  <span class="groupCount">1 个</span>
+                  <button class="ghostBtn"><svg class="ic"><use href="#i-folder"/></svg>打开目录</button>
+                </div>
+              </div>
+              <ul class="skillList">
+                <li class="skillRow" tabindex="0"
+                    data-name="code-review" data-icon="i-code" data-source="项目技能" data-badge="project"
+                    data-desc="审查代码变更，指出风险点并给出可执行的修改建议"
+                    data-path="~/Codes/xch/dsh-plugins/.dsh/skills/code-review" data-rank="100"
+                    data-mod="2 天前" data-scope="cordis,standard" data-when="当用户要求 review PR、检查 diff 或评估改动风险时使用。">
+                  <span class="skillIcon"><svg class="ic"><use href="#i-code"/></svg><span class="dot"></span></span>
+                  <span class="skillMain">
+                    <span class="skillTitleRow">
+                      <span class="skillName">code-review</span>
+                      <span class="badge project">项目</span>
+                      <span class="badge model">模型可用</span>
+                      <span class="badge">用户可调用</span>
+                    </span>
+                    <span class="skillDesc">审查代码变更，指出风险点并给出可执行的修改建议</span>
+                  </span>
+                  <span class="skillActions">
+                    <button class="switch on" role="switch" aria-checked="true" aria-label="停用 code-review"><span class="knob"></span></button>
+                    <button class="moreBtn" aria-label="code-review 的更多操作"><svg class="ic"><use href="#i-more"/></svg></button>
+                  </span>
+                </li>
+              </ul>
+            </section>
+
+            <section class="group">
+              <div class="groupHead">
+                <span class="groupName">用户技能</span>
+                <span class="groupSep"></span>
+                <span class="groupPath">~/.dsh/skills</span>
+                <span class="groupRank">rank 400</span>
+                <div class="groupRight">
+                  <span class="groupCount">1 个</span>
+                  <button class="ghostBtn"><svg class="ic"><use href="#i-folder"/></svg>打开目录</button>
+                </div>
+              </div>
+              <ul class="skillList">
+                <li class="skillRow" tabindex="0"
+                    data-name="release-notes" data-icon="i-doc" data-source="用户技能" data-badge=""
+                    data-desc="从提交记录生成面向用户的发布说明"
+                    data-path="~/.dsh/skills/release-notes" data-rank="400"
+                    data-mod="5 天前" data-scope="cordis,standard" data-when="在准备发版、需要把提交历史整理成用户可读的更新说明时使用。">
+                  <span class="skillIcon"><svg class="ic"><use href="#i-doc"/></svg><span class="dot"></span></span>
+                  <span class="skillMain">
+                    <span class="skillTitleRow">
+                      <span class="skillName">release-notes</span>
+                      <span class="badge">用户</span>
+                      <span class="badge">仅用户可调用</span>
+                    </span>
+                    <span class="skillDesc">从提交记录生成面向用户的发布说明</span>
+                  </span>
+                  <span class="skillActions">
+                    <button class="switch on" role="switch" aria-checked="true" aria-label="停用 release-notes"><span class="knob"></span></button>
+                    <button class="moreBtn" aria-label="release-notes 的更多操作"><svg class="ic"><use href="#i-more"/></svg></button>
+                  </span>
+                </li>
+              </ul>
+            </section>
+
+            <section class="group">
+              <div class="groupHead">
+                <span class="groupName">用户共享</span>
+                <span class="groupSep"></span>
+                <span class="groupPath">~/.agents/skills</span>
+                <span class="groupRank">rank 500</span>
+                <div class="groupRight">
+                  <span class="groupCount">1 个</span>
+                  <button class="ghostBtn"><svg class="ic"><use href="#i-folder"/></svg>打开目录</button>
+                </div>
+              </div>
+              <ul class="skillList">
+                <li class="skillRow" tabindex="0"
+                    data-name="ego-browser" data-icon="i-browser" data-source="用户共享" data-badge=""
+                    data-desc="用真实浏览器打开网页、操作页面并截图取证"
+                    data-path="~/.agents/skills/ego-browser" data-rank="500"
+                    data-mod="1 周前" data-scope="cordis,standard" data-when="需要打开网页、填表单、点击操作或对页面做视觉取证时使用。">
+                  <span class="skillIcon"><svg class="ic"><use href="#i-browser"/></svg><span class="dot"></span></span>
+                  <span class="skillMain">
+                    <span class="skillTitleRow">
+                      <span class="skillName">ego-browser</span>
+                      <span class="badge">用户共享</span>
+                      <span class="badge model">模型可用</span>
+                      <span class="badge">用户可调用</span>
+                    </span>
+                    <span class="skillDesc">用真实浏览器打开网页、操作页面并截图取证</span>
+                  </span>
+                  <span class="skillActions">
+                    <button class="switch on" role="switch" aria-checked="true" aria-label="停用 ego-browser"><span class="knob"></span></button>
+                    <button class="moreBtn" aria-label="ego-browser 的更多操作"><svg class="ic"><use href="#i-more"/></svg></button>
+                  </span>
+                </li>
+              </ul>
+            </section>
+
+            <section class="group">
+              <div class="groupHead">
+                <span class="groupName">插件内置</span>
+                <span class="groupSep"></span>
+                <span class="groupPath">全局层 · 随插件安装提供</span>
+                <span class="groupRank">rank 600</span>
+                <div class="groupRight">
+                  <span class="groupCount">2 个</span>
+                  <span class="groupNote">只读</span>
+                </div>
+              </div>
+              <ul class="skillList">
+                <li class="skillRow" tabindex="0"
+                    data-name="office-docx" data-icon="i-doc" data-source="插件内置" data-badge=""
+                    data-desc="Create, read, edit, and validate Word documents (.docx)"
+                    data-path="provider: dsh-office" data-rank="600"
+                    data-mod="随插件更新" data-scope="all" data-when="需要读取、创建或校验 Word 文档时使用。">
+                  <span class="skillIcon"><svg class="ic"><use href="#i-doc"/></svg><span class="dot"></span></span>
+                  <span class="skillMain">
+                    <span class="skillTitleRow">
+                      <span class="skillName">office-docx</span>
+                      <span class="badge">插件</span>
+                      <span class="badge model">模型可用</span>
+                      <span class="badge">用户可调用</span>
+                    </span>
+                    <span class="skillDesc">Create, read, edit, and validate Word documents (.docx)</span>
+                  </span>
+                  <span class="skillActions">
+                    <span class="builtinMark">内置</span>
+                    <button class="moreBtn" aria-label="office-docx 的更多操作"><svg class="ic"><use href="#i-more"/></svg></button>
+                  </span>
+                </li>
+                <li class="skillRow" tabindex="0"
+                    data-name="personalized-pages" data-icon="i-layout" data-source="插件内置" data-badge=""
+                    data-desc="为这个 App 规划可留存、可更新的个性化页面"
+                    data-path="provider: dsh-personalized-pages" data-rank="600"
+                    data-mod="随插件更新" data-scope="all" data-when="用户想要一个可以反复查看、持续更新的页面或小工具时使用。">
+                  <span class="skillIcon"><svg class="ic"><use href="#i-layout"/></svg><span class="dot"></span></span>
+                  <span class="skillMain">
+                    <span class="skillTitleRow">
+                      <span class="skillName">personalized-pages</span>
+                      <span class="badge">插件</span>
+                      <span class="badge model">模型可用</span>
+                      <span class="badge">用户可调用</span>
+                    </span>
+                    <span class="skillDesc">为这个 App 规划可留存、可更新的个性化页面</span>
+                  </span>
+                  <span class="skillActions">
+                    <span class="builtinMark">内置</span>
+                    <button class="moreBtn" aria-label="personalized-pages 的更多操作"><svg class="ic"><use href="#i-more"/></svg></button>
+                  </span>
+                </li>
+              </ul>
+            </section>
+
+            <div class="disabledWrap">
+              <button class="disabledToggle" id="disabledToggle" aria-expanded="false">
+                <svg class="ic chev"><use href="#i-chevron-right"/></svg>
+                <span>已停用</span><span class="dCount">2</span>
+                <span class="dNames">api-design、session-digest 已移入 .disabled/</span>
+              </button>
+              <ul class="skillList disabledList" id="disabledList" hidden>
+                <li class="skillRow" tabindex="0"
+                    data-name="api-design" data-icon="i-api" data-source="用户技能" data-badge=""
+                    data-desc="接口设计约定：命名、错误码与版本化策略"
+                    data-path="~/.dsh/skills/.disabled/api-design" data-rank="400"
+                    data-mod="3 周前" data-scope="cordis" data-when="新增或修改对外接口、评审 API 设计时使用。">
+                  <span class="skillIcon"><svg class="ic"><use href="#i-api"/></svg><span class="dot off"></span></span>
+                  <span class="skillMain">
+                    <span class="skillTitleRow">
+                      <span class="skillName">api-design</span>
+                      <span class="badge plain">已停用</span>
+                    </span>
+                    <span class="skillDesc">接口设计约定：命名、错误码与版本化策略</span>
+                  </span>
+                  <span class="skillActions">
+                    <button class="switch" role="switch" aria-checked="false" aria-label="启用 api-design"><span class="knob"></span></button>
+                    <button class="moreBtn" aria-label="api-design 的更多操作"><svg class="ic"><use href="#i-more"/></svg></button>
+                  </span>
+                </li>
+                <li class="skillRow" tabindex="0"
+                    data-name="session-digest" data-icon="i-doc" data-source="用户技能" data-badge=""
+                    data-desc="汇总会话要点并生成周报草稿"
+                    data-path="~/.dsh/skills/.disabled/session-digest" data-rank="400"
+                    data-mod="2 周前" data-scope="cordis,standard" data-when="需要把一段时间的会话整理成周报时使用。">
+                  <span class="skillIcon"><svg class="ic"><use href="#i-doc"/></svg><span class="dot off"></span></span>
+                  <span class="skillMain">
+                    <span class="skillTitleRow">
+                      <span class="skillName">session-digest</span>
+                      <span class="badge plain">已停用</span>
+                    </span>
+                    <span class="skillDesc">汇总会话要点并生成周报草稿</span>
+                  </span>
+                  <span class="skillActions">
+                    <button class="switch" role="switch" aria-checked="false" aria-label="启用 session-digest"><span class="knob"></span></button>
+                    <button class="moreBtn" aria-label="session-digest 的更多操作"><svg class="ic"><use href="#i-more"/></svg></button>
+                  </span>
+                </li>
+              </ul>
+            </div>
+          </div>
+
+          <!-- 空状态 -->
+          <div class="libEmpty">
+            <div class="emptyState">
+              <div class="emptyArt"><svg class="ic ic-48"><use href="#i-sparkle"/></svg></div>
+              <h2>还没有可管理的技能</h2>
+              <p>把 <code>SKILL.md</code> 放进技能目录，或在这里新建一个。</p>
+              <div class="emptyActions">
+                <button class="btnPrimary" id="btnNewEmpty"><svg class="ic"><use href="#i-plus"/></svg>新建技能</button>
+                <button class="btnOutline" style="height:32px;font-size:13px;padding:0 12px">导入技能</button>
+                <button class="btnText">查看内置技能<svg class="ic"><use href="#i-arrow-right"/></svg></button>
+              </div>
+            </div>
+            <section class="group">
+              <div class="groupHead">
+                <span class="groupName">全局层技能</span>
+                <span class="groupSep"></span>
+                <span class="groupPath">所有预设共享</span>
+                <div class="groupRight"><span class="groupCount">2 个</span><span class="groupNote">只读</span></div>
+              </div>
+              <ul class="skillList">
+                <li class="skillRow" tabindex="0"
+                    data-name="office-docx" data-icon="i-doc" data-source="插件内置" data-badge=""
+                    data-desc="Create, read, edit, and validate Word documents (.docx)"
+                    data-path="provider: dsh-office" data-rank="600" data-mod="随插件更新" data-scope="all"
+                    data-when="需要读取、创建或校验 Word 文档时使用。">
+                  <span class="skillIcon"><svg class="ic"><use href="#i-doc"/></svg><span class="dot"></span></span>
+                  <span class="skillMain">
+                    <span class="skillTitleRow">
+                      <span class="skillName">office-docx</span>
+                      <span class="badge">插件</span><span class="badge model">模型可用</span><span class="badge">用户可调用</span>
+                    </span>
+                    <span class="skillDesc">Create, read, edit, and validate Word documents (.docx)</span>
+                  </span>
+                  <span class="skillActions">
+                    <span class="builtinMark">内置</span>
+                    <button class="moreBtn" aria-label="更多操作"><svg class="ic"><use href="#i-more"/></svg></button>
+                  </span>
+                </li>
+                <li class="skillRow" tabindex="0"
+                    data-name="personalized-pages" data-icon="i-layout" data-source="插件内置" data-badge=""
+                    data-desc="为这个 App 规划可留存、可更新的个性化页面"
+                    data-path="provider: dsh-personalized-pages" data-rank="600" data-mod="随插件更新" data-scope="all"
+                    data-when="用户想要一个可以反复查看、持续更新的页面或小工具时使用。">
+                  <span class="skillIcon"><svg class="ic"><use href="#i-layout"/></svg><span class="dot"></span></span>
+                  <span class="skillMain">
+                    <span class="skillTitleRow">
+                      <span class="skillName">personalized-pages</span>
+                      <span class="badge">插件</span><span class="badge model">模型可用</span><span class="badge">用户可调用</span>
+                    </span>
+                    <span class="skillDesc">为这个 App 规划可留存、可更新的个性化页面</span>
+                  </span>
+                  <span class="skillActions">
+                    <span class="builtinMark">内置</span>
+                    <button class="moreBtn" aria-label="更多操作"><svg class="ic"><use href="#i-more"/></svg></button>
+                  </span>
+                </li>
+              </ul>
+            </section>
+          </div>
+        </div>
+
+        <!-- ---------- 来源 ---------- -->
+        <div class="tabPanel" data-panel="sources">
+          <section class="group" style="margin-top:0">
+            <div class="groupHead">
+              <span class="groupName">Agent 预设</span>
+              <span class="groupSep"></span>
+              <span class="groupPath">技能按预设分别挂载</span>
+            </div>
+            <div class="srcList">
+              <div class="presetRow">
+                <span class="srcDot"></span>
+                <span class="presetName">cordis</span>
+                <span class="presetState">本地发现：<span style="color:var(--success-text)">已挂载</span></span>
+                <span class="presetDesc">4 个预设技能 + 5 个本地扫描根</span>
+                <span class="tail"><button class="ghostBtn">查看组成</button></span>
+              </div>
+              <div class="presetRow">
+                <span class="srcDot"></span>
+                <span class="presetName">standard</span>
+                <span class="presetState">本地发现：<span style="color:var(--success-text)">已挂载</span></span>
+                <span class="presetDesc">4 个预设技能 + 5 个本地扫描根</span>
+                <span class="tail"><button class="ghostBtn">查看组成</button></span>
+              </div>
+              <div class="presetRow">
+                <span class="srcDot off"></span>
+                <span class="presetName">minimal</span>
+                <span class="presetState">本地发现：<span style="color:var(--label-3)">未挂载</span></span>
+                <span class="presetDesc">该预设的 Agent 没有技能</span>
+                <span class="tail"><span style="color:var(--label-4)">—</span></span>
+              </div>
+            </div>
+          </section>
+
+          <section class="group">
+            <div class="groupHead">
+              <span class="groupName">cordis 预设的本地扫描根</span>
+              <span class="groupSep"></span>
+              <span class="groupPath">改文件即生效</span>
+              <div class="groupRight"><span class="groupNote">rank 由高到低</span></div>
+            </div>
+            <div class="srcList">
+              <div class="srcRow">
+                <span class="srcIcon"><svg class="ic"><use href="#i-folder"/></svg></span>
+                <span class="srcDot"></span>
+                <span class="srcMain">
+                  <span class="srcTitle">项目技能</span>
+                  <span class="srcPath">~/Codes/xch/dsh-plugins/.dsh/skills</span>
+                </span>
+                <span class="srcMeta"><span>1 个技能</span><span class="rank">100</span><button class="ghostBtn"><svg class="ic"><use href="#i-folder"/></svg>打开目录</button></span>
+              </div>
+              <div class="srcRow">
+                <span class="srcIcon"><svg class="ic"><use href="#i-folder"/></svg></span>
+                <span class="srcDot off"></span>
+                <span class="srcMain">
+                  <span class="srcTitle">项目共享</span>
+                  <span class="srcPath">~/Codes/xch/dsh-plugins/.agents/skills</span>
+                </span>
+                <span class="srcMeta"><span>目录不存在</span><span class="rank">200</span><button class="ghostBtn"><svg class="ic"><use href="#i-copy"/></svg>复制路径</button></span>
+              </div>
+              <div class="srcRow">
+                <span class="srcIcon"><svg class="ic"><use href="#i-cube"/></svg></span>
+                <span class="srcDot"></span>
+                <span class="srcMain">
+                  <span class="srcTitle">预设技能</span>
+                  <span class="srcPath">…/dsh-agent-preset/skills</span>
+                </span>
+                <span class="srcMeta"><span>4 个技能</span><span class="rank">300</span><button class="ghostBtn"><svg class="ic"><use href="#i-book"/></svg>查看</button></span>
+              </div>
+              <div class="srcRow">
+                <span class="srcIcon"><svg class="ic"><use href="#i-folder"/></svg></span>
+                <span class="srcDot"></span>
+                <span class="srcMain">
+                  <span class="srcTitle">用户技能</span>
+                  <span class="srcPath">~/.dsh/skills</span>
+                </span>
+                <span class="srcMeta"><span>1 个技能 · 1 个已停用</span><span class="rank">400</span><button class="ghostBtn"><svg class="ic"><use href="#i-folder"/></svg>打开目录</button></span>
+              </div>
+              <div class="srcRow">
+                <span class="srcIcon"><svg class="ic"><use href="#i-folder"/></svg></span>
+                <span class="srcDot warn"></span>
+                <span class="srcMain">
+                  <span class="srcTitle">用户共享</span>
+                  <span class="srcPath">~/.agents/skills</span>
+                </span>
+                <span class="srcMeta"><span>1 个技能 · 1 个无效条目</span><span class="rank">500</span><button class="ghostBtn"><svg class="ic"><use href="#i-folder"/></svg>打开目录</button></span>
+              </div>
+            </div>
+          </section>
+
+          <section class="group">
+            <div class="groupHead">
+              <span class="groupName">全局层技能来源</span>
+              <span class="groupSep"></span>
+              <span class="groupPath">所有预设共享</span>
+              <div class="groupRight"><span class="groupNote">只读</span></div>
+            </div>
+            <div class="srcList">
+              <div class="provRow">
+                <span class="provIcon"><svg class="ic"><use href="#i-cube"/></svg></span>
+                <span class="provMain">
+                  <span class="provTitle">dsh-office</span>
+                  <span class="provPkg">@deepseek-ai/dsh-skill-office</span>
+                </span>
+                <span class="provMeta"><span>7 个技能</span><span class="groupNote">只读</span></span>
+              </div>
+              <div class="provRow">
+                <span class="provIcon"><svg class="ic"><use href="#i-cube"/></svg></span>
+                <span class="provMain">
+                  <span class="provTitle">dsh-badge</span>
+                  <span class="provPkg">@deepseek-ai/dsh-skill-badge</span>
+                </span>
+                <span class="provMeta"><span>1 个技能</span><span class="groupNote">只读</span></span>
+              </div>
+              <div class="provRow">
+                <span class="provIcon"><svg class="ic"><use href="#i-cube"/></svg></span>
+                <span class="provMain">
+                  <span class="provTitle">recommendations</span>
+                  <span class="provPkg">@deepseek-ai/dsh-plugin-recommendations</span>
+                </span>
+                <span class="provMeta"><span>2 个技能</span><span class="groupNote">只读</span></span>
+              </div>
+            </div>
+          </section>
+
+          <p class="mechNote">
+            <svg class="ic"><use href="#i-info"/></svg>
+            <span>同名技能：同一层内 rank 小的赢；预设层覆盖全局层。被覆盖项在「诊断」中列出。</span>
+            <a class="link" href="#" onclick="return false">了解机制<svg class="ic"><use href="#i-external"/></svg></a>
+          </p>
+        </div>
+
+        <!-- ---------- 诊断 ---------- -->
+        <div class="tabPanel" data-panel="diagnostics">
+          <div class="diagSummary">
+            <span class="stat err"><svg class="ic"><use href="#i-error"/></svg><b>1</b> 个错误</span>
+            <span class="sep"></span>
+            <span class="stat warn"><svg class="ic"><use href="#i-warn"/></svg><b>1</b> 个警告</span>
+            <span class="sep"></span>
+            <span class="checked">上次检查 10:42 · 覆盖 cordis / standard 与全局层</span>
+            <button class="btnOutline sm"><svg class="ic"><use href="#i-refresh"/></svg>重新检查</button>
+          </div>
+
+          <div class="issueList">
+            <div class="issueCard">
+              <span class="issueIcon"><svg class="ic"><use href="#i-unlink"/></svg></span>
+              <div class="issueBody">
+                <div class="issueTitle">
+                  <span class="issueType">断链</span>
+                  <span class="issueName">tabbit</span>
+                  <span class="issuePath">~/.agents/skills/tabbit</span>
+                  <span class="badge">用户共享 · rank 500</span>
+                </div>
+                <p class="issueDesc">目录指向的目标不存在，技能无法读取。该根下的 provider 会静默跳过，条目不会进入模型目录。</p>
+              </div>
+              <button class="btnOutline sm">移除链接</button>
+            </div>
+            <div class="issueCard">
+              <span class="issueIcon warn"><svg class="ic"><use href="#i-warn"/></svg></span>
+              <div class="issueBody">
+                <div class="issueTitle">
+                  <span class="issueType warn">同层覆盖（rank）</span>
+                  <span class="issueName">code-review</span>
+                  <span class="issuePath">~/Codes/xch/dsh-plugins/.dsh/skills/code-review</span>
+                  <span class="badge">项目根 · rank 100</span>
+                </div>
+                <p class="issueDesc">同一预设层内，项目根（rank 100）优先于用户根（rank 400）；<code>~/.dsh/skills/code-review</code> 不会进入目录。切换预设后可能改变。</p>
+              </div>
+              <button class="btnOutline sm">查看生效项</button>
+            </div>
+          </div>
+
+          <div class="rangeCard">
+            <div class="rangeHead"><svg class="ic"><use href="#i-layers"/></svg><span>本次检查覆盖</span><span class="checked" style="margin-left:auto;color:var(--label-4);font-size:12px">耗时 42 ms</span></div>
+            <div class="rangeGrid">
+              <div class="rangeItem"><span class="k">本地扫描根</span><span class="v"><span class="mono">5</span> 个 · 4 个可读</span></div>
+              <div class="rangeItem"><span class="k">预设技能</span><span class="v"><span class="mono">4</span> 个 · 全部通过</span></div>
+              <div class="rangeItem"><span class="k">全局 provider</span><span class="v"><span class="mono">3</span> 个 · 已加载</span></div>
+              <div class="rangeItem"><span class="k">未挂载预设</span><span class="v"><span class="mono">minimal</span> · 无技能</span></div>
+            </div>
+          </div>
+
+          <p class="diagExplain">
+            <svg class="ic"><use href="#i-info"/></svg>
+            <span>格式不合法的技能会被静默跳过，不进入模型目录。这里集中列出原因与修复方式；修复后再次检查即可。</span>
+          </p>
+        </div>
+      </div>
+    </section>
+  </main>
+</div>
+
+<!-- ======================== 抽屉 ======================== -->
+<div class="scrim" id="scrim"></div>
+<aside class="drawer" id="drawer" role="dialog" aria-modal="true" aria-label="技能详情">
+  <div class="drawerHead">
+    <span class="drawerIcon" id="drawerIcon"><svg class="ic"><use href="#i-code"/></svg></span>
+    <div class="drawerHeadMain">
+      <div class="drawerName" id="drawerName">code-review</div>
+      <div class="drawerBadges" id="drawerBadges">
+        <span class="badge project">项目</span>
+        <span class="badge model">模型可用</span>
+        <span class="badge">用户可调用</span>
+      </div>
+    </div>
+    <button class="drawerClose" id="drawerClose" aria-label="关闭详情"><svg class="ic"><use href="#i-close"/></svg></button>
+  </div>
+  <div class="tabs drawerTabs" role="tablist">
+    <button class="tab active" role="tab" aria-selected="true">概览</button>
+    <button class="tab" role="tab" aria-selected="false">原文</button>
+    <button class="tab" role="tab" aria-selected="false">资源</button>
+    <button class="tab" role="tab" aria-selected="false">诊断</button>
+  </div>
+  <div class="drawerBody">
+    <div class="dPanel active" data-dpanel="overview">
+      <p class="drawerDesc" id="drawerDesc">审查代码变更，指出风险点并给出可执行的修改建议</p>
+      <section class="dSec">
+        <h3>何时使用</h3>
+        <p id="drawerWhen">当用户要求 review PR、检查 diff 或评估改动风险时使用。</p>
+      </section>
+      <section class="dSec">
+        <h3>来源</h3>
+        <div class="dCard">
+          <div class="dRow"><span class="k">来源类型</span><span class="v" id="drawerSource">项目技能</span></div>
+          <div class="dRow"><span class="k">路径</span><span class="v mono" id="drawerPath">~/Codes/xch/dsh-plugins/.dsh/skills/code-review</span></div>
+          <div class="dRow"><span class="k">rank</span><span class="v mono" id="drawerRank">100</span></div>
+          <div class="dRow"><span class="k">修改时间</span><span class="v" id="drawerMod">2 天前</span></div>
+        </div>
+      </section>
+      <section class="dSec">
+        <h3>调用方式</h3>
+        <div class="invokeRow"><svg class="ic"><use href="#i-check"/></svg><span>模型可用</span><span class="hint">Agent 按描述自动匹配</span></div>
+        <div class="invokeRow"><svg class="ic muted"><use href="#i-terminal"/></svg><span>用户可调用</span><code id="drawerCmd">/code-review</code></div>
+      </section>
+      <section class="dSec">
+        <h3>可见于</h3>
+        <div class="scopeChips" id="drawerScope"><span class="scopeChip">cordis</span><span class="scopeChip">standard</span></div>
+        <p class="dHint" id="drawerScopeNote" style="font-size:12px;line-height:18px;color:var(--label-4)">minimal 未挂载本地发现，看不到该技能。</p>
+      </section>
+      <section class="dSec">
+        <h3>相关诊断</h3>
+        <div class="invokeRow"><svg class="ic"><use href="#i-check"/></svg><span>未发现问题</span><span class="hint">frontmatter、name 与路径均可读</span></div>
+      </section>
+    </div>
+
+    <div class="dPanel" data-dpanel="raw">
+      <div class="codeBox">
+        <div class="codeLine"><span class="ln">1</span><span class="fm">---</span></div>
+        <div class="codeLine"><span class="ln">2</span><span><span class="fm">name:</span> code-review</span></div>
+        <div class="codeLine"><span class="ln">3</span><span><span class="fm">description:</span> 审查代码变更并给出可执行的修改建议</span></div>
+        <div class="codeLine"><span class="ln">4</span><span><span class="fm">whenToUse:</span> 当用户要求 review PR 或检查 diff 时</span></div>
+        <div class="codeLine"><span class="ln">5</span><span class="fm">---</span></div>
+        <div class="codeLine blank"><span class="ln">6</span><span></span></div>
+        <div class="codeLine"><span class="ln">7</span><span class="h"># 代码审查</span></div>
+        <div class="codeLine"><span class="ln">8</span><span></span></div>
+        <div class="codeLine"><span class="ln">9</span><span>依次检查 diff 中的正确性、边界与外溢风险，</span></div>
+        <div class="codeLine"><span class="ln">10</span><span>按严重度列出问题并给出可直接应用的修改建议。</span></div>
+        <div class="codeLine"><span class="ln">11</span><span></span></div>
+        <div class="codeLine"><span class="ln">12</span><span class="h">## 步骤</span></div>
+        <div class="codeLine"><span class="ln">13</span><span>1. 读取变更文件与上下文</span></div>
+        <div class="codeLine"><span class="ln">14</span><span>2. 按风险分级列出问题</span></div>
+        <div class="codeLine"><span class="ln">15</span><span>3. 给出可应用的 patch 建议</span></div>
+      </div>
+      <div class="codeFoot"><span>SKILL.md · 14 行 · 1.8 KB</span><button class="btnOutline sm"><svg class="ic"><use href="#i-pencil"/></svg>编辑原文</button></div>
+    </div>
+
+    <div class="dPanel" data-dpanel="assets">
+      <section class="dSec">
+        <h3>技能目录内的文件</h3>
+        <div class="dCard" style="padding:2px 14px">
+          <div class="assetRow"><svg class="ic"><use href="#i-file"/></svg><span class="name">SKILL.md</span><span class="size">1.8 KB</span></div>
+          <div class="assetRow"><svg class="ic"><use href="#i-folder"/></svg><span class="name">examples/</span><span class="size">3 个文件</span></div>
+          <div class="assetRow"><svg class="ic"><use href="#i-file"/></svg><span class="name">references/diff-checklist.md</span><span class="size">6.2 KB</span></div>
+          <div class="assetRow"><svg class="ic"><use href="#i-image"/></svg><span class="name">assets/risk-levels.png</span><span class="size">14 KB</span></div>
+        </div>
+      </section>
+      <p style="font-size:12px;line-height:18px;color:var(--label-4)">资源文件会随技能一起被 Agent 读取，保持精简可以降低上下文开销。</p>
+    </div>
+
+    <div class="dPanel" data-dpanel="diag">
+      <div class="invokeRow"><svg class="ic"><use href="#i-check"/></svg><span>未发现问题</span></div>
+      <div class="dCard">
+        <div class="dRow"><span class="k">frontmatter</span><span class="v">解析通过，name / description 齐全</span></div>
+        <div class="dRow"><span class="k">name 规范</span><span class="v">kebab-case，与目录名一致</span></div>
+        <div class="dRow"><span class="k">路径可读</span><span class="v">已通过 realpath 校验，未逃逸扫描根</span></div>
+        <div class="dRow"><span class="k">正文体积</span><span class="v">1.8 KB，低于建议阈值</span></div>
+      </div>
+    </div>
+  </div>
+
+  <footer class="drawerFoot">
+    <button class="btnOutline"><svg class="ic"><use href="#i-copy"/></svg>复制调用命令</button>
+    <button class="btnPrimary"><svg class="ic"><use href="#i-pencil"/></svg>编辑</button>
+    <button class="moreBtn" aria-label="更多操作"><svg class="ic"><use href="#i-more"/></svg></button>
+  </footer>
+</aside>
+
+<!-- ======================== 新建模态 ======================== -->
+<div class="modalScrim" id="modalScrim"></div>
+<div class="modal" id="modal" role="dialog" aria-modal="true" aria-label="新建技能">
+  <div class="modalHead">
+    <h2>新建技能</h2>
+    <button class="iconBtn28" id="modalClose" aria-label="关闭"><svg class="ic"><use href="#i-close"/></svg></button>
+  </div>
+  <div class="tabs modalTabs" role="tablist">
+    <button class="tab active" role="tab" aria-selected="true">手写</button>
+    <button class="tab" role="tab" aria-selected="false">导入</button>
+  </div>
+  <div class="modalBody">
+    <div class="mPanel active" data-mpanel="write">
+      <div class="field">
+        <label class="fieldLabel" for="fName">名称<span class="req">*</span><span class="opt">kebab-case · ≤64 字符</span></label>
+        <input id="fName" class="input mono invalid" value="Code Review" spellcheck="false">
+        <span class="fieldError"><svg class="ic"><use href="#i-error"/></svg>名称只能使用小写字母、数字与连字符，例如 code-review</span>
+      </div>
+      <div class="field">
+        <label class="fieldLabel" for="fDesc">描述<span class="req">*</span><span class="opt">≤500 字符</span></label>
+        <input id="fDesc" class="input" value="审查代码变更，指出风险点并给出可执行的修改建议" spellcheck="false">
+      </div>
+      <div class="field">
+        <label class="fieldLabel" for="fWhen">何时使用<span class="opt">选填 · ≤200 字符</span></label>
+        <input id="fWhen" class="input" value="当用户要求 review PR、检查 diff 或评估改动风险时使用" spellcheck="false">
+      </div>
+      <div class="field">
+        <label class="fieldLabel" for="fBody">正文<span class="req">*</span><span class="opt">Markdown</span></label>
+        <textarea id="fBody" class="input" spellcheck="false"># 代码审查
+
+依次检查 diff 中的正确性、边界与外溢风险，按严重度列出问题并给出可直接应用的修改建议。</textarea>
+      </div>
+      <div class="field">
+        <span class="fieldLabel">保存到<span class="req">*</span></span>
+        <div class="locRow">
+          <button class="locOpt active" aria-pressed="true">
+            <span class="radio"></span>
+            <span class="locMain"><span class="locTitle">用户技能</span><span class="locPath">~/.dsh/skills</span></span>
+          </button>
+          <button class="locOpt" aria-pressed="false">
+            <span class="radio"></span>
+            <span class="locMain"><span class="locTitle">项目技能</span><span class="locPath">&lt;repo&gt;/.dsh/skills</span></span>
+          </button>
+        </div>
+      </div>
+    </div>
+
+    <div class="mPanel" data-mpanel="import">
+      <div class="field">
+        <label class="fieldLabel" for="fPaste">粘贴 SKILL.md<span class="req">*</span><span class="opt">包含 frontmatter</span></label>
+        <textarea id="fPaste" class="input" style="height:150px" spellcheck="false">---
+name: release-notes
+description: 从提交记录生成面向用户的发布说明
+whenToUse: 在准备发版时使用
+---
+
+# 发布说明
+
+按 新增 / 修复 / 破坏性变更 三节整理提交记录。</textarea>
+        <span class="fieldHint">解析成功会显示名称、描述与 frontmatter 摘要，失败会给出具体原因。</span>
+      </div>
+      <div class="field">
+        <span class="fieldLabel">保存到<span class="req">*</span></span>
+        <div class="locRow">
+          <button class="locOpt active" aria-pressed="true">
+            <span class="radio"></span>
+            <span class="locMain"><span class="locTitle">用户技能</span><span class="locPath">~/.dsh/skills</span></span>
+          </button>
+          <button class="locOpt" aria-pressed="false">
+            <span class="radio"></span>
+            <span class="locMain"><span class="locTitle">项目技能</span><span class="locPath">&lt;repo&gt;/.dsh/skills</span></span>
+          </button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="modalFoot">
+    <button class="btnCancel" id="modalCancel">取消</button>
+    <button class="btnPrimary" disabled>创建技能</button>
+  </div>
+</div>
+
+<div class="toast" id="toast"><svg class="ic"><use href="#i-check"/></svg><span id="toastText">已停用 code-review</span><button class="undo" id="toastUndo">撤销</button></div>
+
+<div class="protoBar" id="protoBar">
+  <span class="pbTitle">原型</span>
+  <div class="pbGroup" id="pbViews">
+    <button data-v="main" class="on">技能库</button>
+    <button data-v="rail">折叠</button>
+    <button data-v="detail">抽屉</button>
+    <button data-v="new">新建</button>
+    <button data-v="sources">来源</button>
+    <button data-v="diagnostics">诊断</button>
+    <button data-v="empty">空状态</button>
+  </div>
+  <button class="pbTheme" id="pbTheme">暗色</button>
+</div>
+
+<script>
+/* 原型脚本：纯前端 mock，无网络请求 */
+(function () {
+  var q = new URLSearchParams(location.search);
+  var view = q.get('view') || 'main';
+  var theme = q.get('theme') === 'light' ? 'light' : 'dark';
+  var clean = q.get('clean') === '1';
+  var body = document.body;
+
+  document.documentElement.dataset.theme = theme;
+  document.documentElement.dataset.clean = clean ? '1' : '0';
+
+  function $(s, r) { return (r || document).querySelector(s); }
+  function $$(s, r) { return Array.prototype.slice.call((r || document).querySelectorAll(s)); }
+
+  /* ---------- tab ---------- */
+  var tabBtns = $$('.tabs [data-tab]');
+  function setTab(name) {
+    tabBtns.forEach(function (b) {
+      var on = b.dataset.tab === name;
+      b.classList.toggle('active', on);
+      b.setAttribute('aria-selected', on ? 'true' : 'false');
+    });
+    $$('.tabPanel').forEach(function (p) {
+      p.classList.toggle('active', p.dataset.panel === name);
+    });
+  }
+  tabBtns.forEach(function (b) {
+    b.addEventListener('click', function () { setTab(b.dataset.tab); });
+  });
+  $$('[data-goto]').forEach(function (b) {
+    b.addEventListener('click', function () { setTab(b.dataset.goto); });
+  });
+
+  /* ---------- 侧栏面板切换 / 折叠 ---------- */
+  $$('.panelRow').forEach(function (row) {
+    row.addEventListener('click', function () {
+      $$('.panelRow').forEach(function (r) { r.classList.remove('active'); r.removeAttribute('aria-current'); });
+      row.classList.add('active');
+      row.setAttribute('aria-current', 'page');
+      if (body.classList.contains('rail') && row.dataset.panel !== 'skills') {
+        toast('原型中只实现「技能」面板');
+      }
+    });
+  });
+  $('[data-act="collapse"]').addEventListener('click', function () { body.classList.add('rail'); });
+  $('[data-act="expand"]').addEventListener('click', function () { body.classList.remove('rail'); });
+
+  /* ---------- 抽屉 ---------- */
+  var drawer = $('#drawer');
+  var currentRow = null;
+  function openDrawer(row) {
+    currentRow = row;
+    var d = row.dataset;
+    $('#drawerName').textContent = d.name;
+    $('#drawerDesc').textContent = d.desc;
+    $('#drawerWhen').textContent = d.when || '';
+    $('#drawerSource').textContent = d.source;
+    $('#drawerPath').textContent = d.path;
+    $('#drawerRank').textContent = d.rank;
+    $('#drawerMod').textContent = d.mod;
+    $('#drawerCmd').textContent = '/' + d.name;
+    $('#drawerIcon').innerHTML = '<svg class="ic"><use href="#' + d.icon + '"/></svg>';
+    var scopeEl = $('#drawerScope');
+    var noteEl = $('#drawerScopeNote');
+    if (d.scope === 'all') {
+      scopeEl.innerHTML = '<span class="scopeChip">所有预设共享</span>';
+      noteEl.textContent = '全局层技能，对每个挂载了 tool-skill 的预设可见。';
+    } else {
+      scopeEl.innerHTML = (d.scope || 'cordis').split(',').map(function (s) {
+        return '<span class="scopeChip">' + s + '</span>';
+      }).join('');
+      noteEl.textContent = 'minimal 未挂载本地发现，看不到该技能。';
+    }
+    var badges = $('#drawerBadges');
+    var parts = ['<span class="badge' + (d.badge === 'project' ? ' project' : '') + '">' + d.source.replace('技能', '') + '</span>'];
+    if (row.querySelector('.badge.model')) parts.push('<span class="badge model">模型可用</span>');
+    parts.push('<span class="badge">' + (row.querySelector('.badge.model') ? '用户可调用' : '仅用户可调用') + '</span>');
+    badges.innerHTML = parts.join('');
+    setDrawerTab(0);
+    body.classList.add('drawerOpen');
+  }
+  function closeDrawer() { body.classList.remove('drawerOpen'); currentRow = null; }
+  $$('.skillRow').forEach(function (row) {
+    row.addEventListener('click', function (e) {
+      if (e.target.closest('.switch') || e.target.closest('.moreBtn')) return;
+      openDrawer(row);
+    });
+    row.addEventListener('keydown', function (e) {
+      if (e.key === 'Enter') { openDrawer(row); }
+    });
+  });
+  $('#drawerClose').addEventListener('click', closeDrawer);
+  $('#scrim').addEventListener('click', closeDrawer);
+
+  /* 抽屉分段 Tab */
+  var dTabs = $$('.drawerTabs .tab');
+  var dNames = ['overview', 'raw', 'assets', 'diag'];
+  function setDrawerTab(index) {
+    dTabs.forEach(function (b, i) {
+      b.classList.toggle('active', i === index);
+      b.setAttribute('aria-selected', i === index ? 'true' : 'false');
+    });
+    $$('.dPanel').forEach(function (p) { p.classList.toggle('active', p.dataset.dpanel === dNames[index]); });
+    $('.drawerBody').scrollTop = 0;
+  }
+  dTabs.forEach(function (b, i) { b.addEventListener('click', function () { setDrawerTab(i); }); });
+
+  /* 模态分段 Tab */
+  var mTabs = $$('.modalTabs .tab');
+  var mNames = ['write', 'import'];
+  mTabs.forEach(function (b, i) {
+    b.addEventListener('click', function () {
+      mTabs.forEach(function (x, j) {
+        x.classList.toggle('active', i === j);
+        x.setAttribute('aria-selected', i === j ? 'true' : 'false');
+      });
+      $$('.mPanel').forEach(function (p) { p.classList.toggle('active', p.dataset.mpanel === mNames[i]); });
+    });
+  });
+
+  /* ---------- switch ---------- */
+  $$('.switch').forEach(function (sw) {
+    sw.addEventListener('click', function (e) {
+      e.stopPropagation();
+      var on = sw.classList.toggle('on');
+      sw.setAttribute('aria-checked', on ? 'true' : 'false');
+      var row = sw.closest('.skillRow');
+      if (row) {
+        var dot = row.querySelector('.dot');
+        if (dot) dot.classList.toggle('off', !on);
+        toast((on ? '已启用 ' : '已停用 ') + row.dataset.name);
+      }
+    });
+  });
+
+  /* ---------- 已停用折叠 ---------- */
+  var dToggle = $('#disabledToggle');
+  dToggle.addEventListener('click', function () {
+    var open = dToggle.getAttribute('aria-expanded') === 'true';
+    dToggle.setAttribute('aria-expanded', open ? 'false' : 'true');
+    $('#disabledList').hidden = open;
+  });
+
+  /* ---------- 模态 ---------- */
+  function openModal() { body.classList.add('modalOpen'); }
+  function closeModal() { body.classList.remove('modalOpen'); }
+  $('#btnNew').addEventListener('click', openModal);
+  var btnNewEmpty = $('#btnNewEmpty');
+  if (btnNewEmpty) btnNewEmpty.addEventListener('click', openModal);
+  $('#modalClose').addEventListener('click', closeModal);
+  $('#modalCancel').addEventListener('click', closeModal);
+  $('#modalScrim').addEventListener('click', closeModal);
+  $$('.locOpt').forEach(function (o) {
+    o.addEventListener('click', function () {
+      $$('.locOpt').forEach(function (x) { x.classList.remove('active'); x.setAttribute('aria-pressed', 'false'); });
+      o.classList.add('active'); o.setAttribute('aria-pressed', 'true');
+    });
+  });
+  var iName = $('#fName');
+  if (iName) iName.addEventListener('input', function () {
+    var ok = /^[a-z0-9]+(-[a-z0-9]+)*$/.test(iName.value);
+    iName.classList.toggle('invalid', !ok);
+  });
+
+  /* ---------- toast ---------- */
+  var toastTimer = null;
+  function toast(text, undo) {
+    $('#toastText').textContent = text;
+    $('#toastUndo').style.display = undo ? '' : 'none';
+    var t = $('#toast');
+    t.classList.add('show');
+    clearTimeout(toastTimer);
+    toastTimer = setTimeout(function () { t.classList.remove('show'); }, 4000);
+  }
+  $('#toastUndo').addEventListener('click', function () {
+    $('#toast').classList.remove('show');
+    toast('已恢复');
+  });
+
+  /* ---------- Esc ---------- */
+  document.addEventListener('keydown', function (e) {
+    if (e.key !== 'Escape') return;
+    if (body.classList.contains('modalOpen')) { closeModal(); return; }
+    if (body.classList.contains('drawerOpen')) { closeDrawer(); return; }
+  });
+
+  /* ---------- 初始视图 ---------- */
+  function applyView(v) {
+    body.dataset.view = v;
+    body.classList.remove('rail', 'drawerOpen', 'modalOpen', 'isEmpty');
+    if (v === 'rail') { body.classList.add('rail'); }
+    if (v === 'detail') { setTab('library'); body.classList.add('drawerOpen'); }
+    if (v === 'new') { setTab('library'); body.classList.add('modalOpen'); }
+    if (v === 'sources') { setTab('sources'); }
+    if (v === 'diagnostics') { setTab('diagnostics'); }
+    if (v === 'empty') { setTab('library'); body.classList.add('isEmpty'); }
+    var diagCount = $('.tab[data-tab="diagnostics"] .tabCount');
+    if (diagCount) diagCount.textContent = v === 'empty' ? '1' : '2';
+    if (v === 'main') { setTab('library'); }
+  }
+  applyView(view);
+
+  /* 可选：直接打开抽屉/模态的某个分段（便于截图与自检） */
+  var dtabParam = q.get('dtab');
+  if (dtabParam && view === 'detail') {
+    var dIdx = ['overview', 'raw', 'assets', 'diag'].indexOf(dtabParam);
+    if (dIdx >= 0) setDrawerTab(dIdx);
+  }
+  var mtabParam = q.get('mtab');
+  if (mtabParam && view === 'new') {
+    var mIdx = ['write', 'import'].indexOf(mtabParam);
+    if (mIdx >= 0) $$('.modalTabs .tab')[mIdx].click();
+  }
+
+  /* ---------- 原型控件 ---------- */
+  $$('#pbViews button').forEach(function (b) {
+    if (b.dataset.v === view) { $$('#pbViews button').forEach(function (x) { x.classList.remove('on'); }); b.classList.add('on'); }
+    b.addEventListener('click', function () {
+      $$('#pbViews button').forEach(function (x) { x.classList.remove('on'); });
+      b.classList.add('on');
+      applyView(b.dataset.v);
+    });
+  });
+  var pbTheme = $('#pbTheme');
+  pbTheme.textContent = theme === 'light' ? '亮色' : '暗色';
+  pbTheme.addEventListener('click', function () {
+    theme = theme === 'light' ? 'dark' : 'light';
+    document.documentElement.dataset.theme = theme;
+    pbTheme.textContent = theme === 'light' ? '亮色' : '暗色';
+  });
+
+  /* ---------- 开发者几何探针（?debug=1，仅本地用于校准） ---------- */
+  if (q.get('debug') === '1') {
+    var probes = [
+      ['sidebar', '.sidebar'], ['brandRow', '.brandRow'], ['newSession', '.newSession'],
+      ['panelList', '.panelList'], ['panelRow1', '.panelRow[data-panel="plugins"]'],
+      ['panelRow3', '.panelRow[data-panel="skills"]'], ['railTip', '.panelRow[data-panel="skills"] .railTip'],
+      ['wsArea', '.wsArea'], ['wsHeader', '.wsHeader'], ['wsSearch', '.wsHeader .iconBtn28'],
+      ['footArea', '.footArea'], ['footEntry', '.footEntry'], ['footEntry2', '.footEntry.mcp'], ['account', '.accountRow'],
+      ['h1', '.heading h1'], ['tabs', '.tabs'], ['banner', '.banner'], ['filterRow', '.filterRow'],
+      ['group1', '.libNormal .group'], ['lastGroup', '.libNormal .group:last-of-type'],
+      ['disabled', '.disabledWrap'], ['page', '.page']
+    ];
+    var lines = probes.map(function (p) {
+      var el = $(p[1]);
+      if (!el) return p[0] + ': null';
+      var r = el.getBoundingClientRect();
+      return p[0] + ': x' + Math.round(r.x) + ' y' + Math.round(r.y) + ' ' + Math.round(r.width) + 'x' + Math.round(r.height);
+    });
+    var pre = document.createElement('pre');
+    pre.style.cssText = 'position:fixed;left:8px;top:8px;z-index:999;margin:0;padding:8px;border-radius:8px;background:#000c;color:#6f6;font:10px/13px ui-monospace,Menlo,monospace;white-space:pre;pointer-events:none';
+    pre.textContent = lines.join('\n');
+    document.body.appendChild(pre);
+  }
+})();
+</script>
+</body>
+</html>

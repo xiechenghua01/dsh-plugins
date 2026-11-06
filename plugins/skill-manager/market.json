@@ -1,0 +1,14 @@
+{
+  "title": {
+    "en": "Skills Manager",
+    "zh": "技能管理"
+  },
+  "description": {
+    "en": "A sidebar panel that lists skills by install location (project, user, shared, bundled), edits and disables them, diagnoses skills that exist on disk but never reach agents, and installs skills from market indexes.",
+    "zh": "侧栏技能面板：按安装位置（项目、用户、共享、内置）分组列出技能，支持编辑与停用，诊断「文件存在但未生效」的技能，并可从市场索引安装技能。"
+  },
+  "icon": "plugins/skill-manager/icon.svg",
+  "category": "integrations",
+  "keywords": ["skills", "skill", "skill manager", "market", "skill market", "agents", "prompt", "技能", "技能管理", "技能市场"],
+  "labels": ["skills", "management", "ui-panel"]
+}

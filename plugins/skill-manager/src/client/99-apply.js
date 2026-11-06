@@ -1,0 +1,134 @@
+    /* ------------------------------------------------------------------ *
+     * Panel entry, sidebar icon, and registration.                        *
+     * This fragment is written last so it can reference every symbol the  *
+     * earlier fragments define.                                           *
+     * ------------------------------------------------------------------ */
+
+    /** Set by the mounted page; every state mutation funnels through it. */
+    let __rerender = () => {}
+
+    /** Re-render the page after a state mutation. */
+    function rerender() {
+      __rerender()
+    }
+
+    /** Sidebar glyph: the owner renders a 16px (wide) or 18px (rail) slot. */
+    function SkillManagerIcon(props) {
+      const requested = props !== null && typeof props === 'object' ? props.size : undefined
+      // The owner asks for 16px in the wide sidebar and 18px in the collapsed rail.
+      const size = requested === 18 ? 18 : 16
+      const active = props !== null && typeof props === 'object' && props.active === true
+      return h(
+        'svg',
+        {
+          width: size,
+          height: size,
+          viewBox: '0 0 24 24',
+          'aria-hidden': 'true',
+          focusable: 'false',
+          fill: 'none',
+          stroke: 'currentColor',
+          strokeWidth: 1.5,
+          strokeLinecap: 'round',
+          strokeLinejoin: 'round',
+          opacity: active ? 1 : 0.72,
+        },
+        h('path', { d: 'M6 3.5h8.5L19 8v12.5a1 1 0 0 1-1 1H6a1 1 0 0 1-1-1v-16a1 1 0 0 1 1-1Z' }),
+        h('path', { d: 'M14 3.5V8h5' }),
+        h('path', { d: 'm12 11.2 1.35 2.75 3.05.45-2.2 2.15.5 3.05L12 18.15l-2.7 1.45.5-3.05-2.2-2.15 3.05-.45Z' }),
+      )
+    }
+
+    /** The main panel: owns the state subscription and the first data load. */
+    function SkillManagerPage(props) {
+      const source = props !== null && typeof props === 'object' ? props : {}
+      const [version, setVersion] = useState(0)
+      const bootstrapped = useRef(false)
+
+      useEffect(() => {
+        __rerender = () => setVersion((value) => value + 1)
+        return () => {
+          __rerender = () => {}
+        }
+      }, [])
+
+      useEffect(() => {
+        if (bootstrapped.current) return
+        bootstrapped.current = true
+        void bootstrap(props)
+      }, [])
+
+      // `version` is read so React re-runs this component when setState fires.
+      void version
+      return renderPage(props)
+    }
+
+    /** First paint: read settings, then load the active tab's data. */
+    async function bootstrap(props) {
+      try {
+        const settings = await api('settings')
+        if (settings !== null && typeof settings === 'object') {
+          if (typeof settings.fontSize === 'number') appState.fontSize = settings.fontSize
+          if (typeof settings.cwd === 'string') appState.cwd = settings.cwd
+        }
+      } catch {
+        /* settings are best effort; the page still works with defaults */
+      }
+      await Promise.all([loadSources(), loadInstalled()])
+      void loadUpdates()
+    }
+
+    /** Browser half entry. */
+    function apply(ctx) {
+      ctx.effect(() => ctx.locale.register(NS, { zh, en }), 'skill-manager: dictionaries')
+
+      ctx.effect(() => {
+        if (typeof document === 'undefined' || document === null) return () => {}
+        const style = document.createElement('style')
+        style.dataset.plugin = '@xiechenghua01/dsh-skill-manager'
+        style.textContent = STYLES
+        const head = document.head !== undefined && document.head !== null ? document.head : document.documentElement
+        if (head === undefined || head === null) return () => {}
+        head.appendChild(style)
+        return () => {
+          if (typeof style.remove === 'function') style.remove()
+        }
+      }, 'skill-manager: styles')
+
+      const t = ctx.locale.bind(NS)
+
+      ctx.effect(
+        () =>
+          ctx.slots.inject('main', () =>
+            ctx.slots.register(
+              {
+                name: 'main',
+                key: PANEL_ID,
+                locale: NS,
+                inject: () => ({ t }),
+              },
+              SkillManagerPage,
+            ),
+          ),
+        'skill-manager: main panel',
+      )
+
+      ctx.effect(
+        () =>
+          ctx.slots.inject('sidebar.panellist', () =>
+            ctx.slots.register(
+              {
+                name: 'sidebar.panellist',
+                id: PANEL_ID,
+                order: 20,
+                locale: NS,
+                label: () => t('panel.title'),
+              },
+              SkillManagerIcon,
+            ),
+          ),
+        'skill-manager: sidebar entry',
+      )
+    }
+
+    return { inject: ['slots', 'locale', 'layout'], apply }

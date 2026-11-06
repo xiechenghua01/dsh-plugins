@@ -1,0 +1,8 @@
+# Skill Manager bundle: one Host row serving the /skill-manager/api routes and one
+# browser half that renders the 技能 panel (installed / market / sources).
+#
+# The row id `skill-manager` belongs to this package; it collides with neither the
+# shipped rows nor the other plugins in this repository.
+- insert:
+    - id: skill-manager
+      name: '@xiechenghua01/dsh-skill-manager'

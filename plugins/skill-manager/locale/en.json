@@ -1,0 +1,6 @@
+{
+  "meta": {
+    "title": "Skills Manager",
+    "description": "A sidebar panel that lists skills by install location, edits and disables them, diagnoses skills that never reach agents, and installs skills from market indexes."
+  }
+}

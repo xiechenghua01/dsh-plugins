@@ -1,0 +1,49 @@
+{
+  "name": "@xiechenghua01/dsh-skill-manager",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "Skills manager for the DeepSeek Harness Web GUI: a sidebar panel that lists skills by install location, edits and disables them, diagnoses silently skipped skills, and installs skills from market indexes.",
+  "license": "MIT",
+  "author": "xiechenghua01",
+  "homepage": "https://github.com/xiechenghua01/dsh-plugins/tree/main/plugins/skill-manager",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/xiechenghua01/dsh-plugins.git",
+    "directory": "plugins/skill-manager"
+  },
+  "engines": {
+    "dsh": ">=0.2.1-rc.5 <0.3.0"
+  },
+  "exports": {
+    ".": "./index.js",
+    "./client": "./client.js",
+    "./locale/*.json": "./locale/*.json",
+    "./icon": "./icon.svg",
+    "./package.json": "./package.json"
+  },
+  "files": [
+    "README.md",
+    "CONTRACT.md",
+    "index.js",
+    "lib/*.mjs",
+    "client.js",
+    "cordis.patch.yml",
+    "locale/*.json",
+    "icon.svg"
+  ],
+  "dsh": {
+    "bundle": {
+      "patch": "./cordis.patch.yml"
+    },
+    "client": {
+      "platform": "web",
+      "immediately": true,
+      "inject": [
+        "@deepseek-ai/dsh-client-locale",
+        "@deepseek-ai/dsh-client-ui-layout",
+        "@deepseek-ai/dsh-client-ui-sidebar"
+      ]
+    }
+  }
+}

@@ -1,0 +1,6 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" role="img" aria-label="Skills manager">
+  <rect x="2" y="2" width="60" height="60" rx="14" fill="#1b2a3a"/>
+  <path d="M20 16h16l10 10v22a2 2 0 0 1-2 2H20a2 2 0 0 1-2-2V18a2 2 0 0 1 2-2Z" fill="none" stroke="#8fd3ff" stroke-width="3" stroke-linejoin="round"/>
+  <path d="M36 16v10h10" fill="none" stroke="#8fd3ff" stroke-width="3" stroke-linejoin="round"/>
+  <path d="m32 33 2.6 5.3 5.9.9-4.3 4.1 1 5.8-5.2-2.7-5.2 2.7 1-5.8-4.3-4.1 5.9-.9Z" fill="#4fb3ff"/>
+</svg>
