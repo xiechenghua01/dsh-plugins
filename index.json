@@ -292,6 +292,19 @@
           "engines": {
             "dsh": ">=0.2.1-rc.5 <0.3.0"
           }
+        },
+        {
+          "version": "0.7.0",
+          "publishTimestamp": 1793948419,
+          "source": {
+            "type": "git",
+            "url": "https://github.com/xiechenghua01/dsh-plugins",
+            "commit": "6c3d7605ea8fece3854c2aac673f271e87709d2d",
+            "path": "plugins/mcp-manager"
+          },
+          "engines": {
+            "dsh": ">=0.2.1-rc.5 <0.3.0"
+          }
         }
       ],
       "title": {
