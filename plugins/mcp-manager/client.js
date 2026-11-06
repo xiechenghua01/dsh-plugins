@@ -1078,31 +1078,38 @@ window.__ModuleLoader__.load({
      * Fixed-size modal with a transparent backdrop. The body scrolls; the frame never changes
      * size. Escape, the close icon and a backdrop click all dismiss the topmost dialog.
      */
-    function FooterEntry(props) {
+    function RailEntry(props) {
       const source = isObject(props) ? props : {}
-      const wide = source.wide === true
       const t = typeof source.t === 'function' ? source.t : (key) => key
-      const togglePanel = typeof source.togglePanel === 'function' ? source.togglePanel : null
-      const usePanelInfo = source.usePanelInfo
-      const active = typeof usePanelInfo === 'function'
-        ? usePanelInfo((info) => isObject(info) && info.activePanelId === PANEL_ID) === true
-        : false
+      const [open, setOpen] = useState(false)
       return h(
-        'button',
-        {
-          type: 'button',
-          className: 'mm-footer-entry',
-          'data-collapsed': wide ? 'false' : 'true',
-          'data-active': active ? 'true' : 'false',
-          'aria-label': t('section.title'),
-          'aria-pressed': active,
-          title: wide ? undefined : t('section.title'),
-          onClick: () => {
-            if (togglePanel !== null) togglePanel(active)
+        Fragment,
+        null,
+        h(
+          'button',
+          {
+            type: 'button',
+            className: 'mm-rail-entry',
+            'aria-label': t('section.title'),
+            'aria-pressed': open ? 'true' : 'false',
+            title: t('section.title'),
+            onClick: () => setOpen((value) => value !== true),
           },
-        },
-        h(Svg, { d: ICON_LAYERS, size: 16 }),
-        wide ? h('span', { className: 'mm-footer-label' }, t('section.title')) : null,
+          h(Svg, { d: ICON_LAYERS, size: 18 }),
+        ),
+        open === true
+          ? h(
+              Dialog,
+              {
+                size: 'panel',
+                title: t('section.title'),
+                closeLabel: t('action.close'),
+                closeTooltip: t('action.close'),
+                onClose: () => setOpen(false),
+              },
+              h(McpPage, { t: t, embedded: true }),
+            )
+          : null,
       )
     }
 
@@ -1147,7 +1154,7 @@ window.__ModuleLoader__.load({
       // The prototype dialog covers the layer beneath: size it to the enclosing settings panel.
       const [hostBox, setHostBox] = useState(null)
       useLayoutEffect(() => {
-        if (props.size === 'confirm') return undefined
+        if (props.size === 'confirm' || props.size === 'panel') return undefined
         const measure = () => {
           const node = boxRef.current
           if (node === null || node.parentElement === null) return
@@ -1185,7 +1192,9 @@ window.__ModuleLoader__.load({
             'aria-modal': 'true',
             'aria-label': props.title,
             ref: boxRef,
-            style: hostBox === null ? undefined : { width: hostBox.width + 'px', height: hostBox.height + 'px', maxWidth: 'none', maxHeight: 'none' },
+            style: props.size === 'panel'
+              ? { width: 'min(800px, calc(100vw - 32px))', height: 'min(800px, calc(100vh - 32px))', maxWidth: 'none', maxHeight: 'none' }
+              : hostBox === null ? undefined : { width: hostBox.width + 'px', height: hostBox.height + 'px', maxWidth: 'none', maxHeight: 'none' },
           },
           h(
             'div',
@@ -2355,13 +2364,15 @@ window.__ModuleLoader__.load({
 
       const header = h(
         'div',
-        { className: 'mm-head' },
-        h(
-          'div',
-          { className: 'mm-head-left' },
-          h('h2', { className: 'mm-title' }, t('page.title')),
-          h(HelpDot, { tip: t('page.help') }),
-        ),
+        { className: 'mm-head' + (props.embedded === true ? ' mm-head-embedded' : '') },
+        props.embedded === true
+          ? null
+          : h(
+            'div',
+            { className: 'mm-head-left' },
+            h('h2', { className: 'mm-title' }, t('page.title')),
+            h(HelpDot, { tip: t('page.help') }),
+          ),
         h(
           'div',
           { className: 'mm-head-actions' },
@@ -2480,14 +2491,13 @@ window.__ModuleLoader__.load({
       '.mm-root,.mm-root *,.mm-root *::before,.mm-root *::after{box-sizing:border-box}',
       '.mm-root{display:flex;flex-direction:column;width:100%;height:100%;min-height:0;padding:20px 24px;color:var(--dsw-alias-label-primary);font-family:var(--dsw-font-family,-apple-system,BlinkMacSystemFont,"PingFang SC","Microsoft YaHei",sans-serif);font-size:13px;line-height:20px}',
       '.mm-mono{font-family:ui-monospace,SFMono-Regular,Menlo,monospace}',
-      '.mm-footer-entry{display:flex;align-items:center;gap:8px;width:100%;height:32px;padding:0 8px;border:none;border-radius:6px;background:transparent;color:var(--dsw-alias-label-secondary);font-size:12px;cursor:pointer;text-align:left}',
-      '.mm-footer-entry:hover{background:var(--dsw-alias-interactive-bg-hover);color:var(--dsw-alias-label-primary)}',
-      '.mm-footer-entry[data-active="true"]{background:var(--dsw-alias-interactive-bg-hover);color:var(--dsw-alias-label-primary)}',
-      '.mm-footer-entry[data-collapsed="true"]{justify-content:center;padding:0}',
-      '.mm-footer-label{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}',
+      '.mm-rail-entry{display:flex;align-items:center;justify-content:center;width:100%;height:32px;border:none;border-radius:8px;background:transparent;color:var(--dsw-alias-label-secondary);cursor:pointer}',
+      '.mm-rail-entry:hover{background:var(--dsw-alias-interactive-bg-hover);color:var(--dsw-alias-label-primary)}',
+      '.mm-rail-entry[aria-pressed="true"]{background:var(--dsw-alias-interactive-bg-hover);color:var(--dsw-alias-label-primary)}',
       '.mm-muted{color:var(--dsw-alias-label-tertiary)}',
       '.mm-icon{display:block;flex:none}',
       '.mm-head{display:flex;align-items:center;justify-content:space-between;gap:16px;padding-bottom:18px;border-bottom:1px solid var(--dsw-alias-border-l1);flex:none}',
+      '.mm-head-embedded{justify-content:flex-end;padding-top:0}',
       '.mm-head-left{display:flex;align-items:center;gap:8px;min-width:0}',
       '.mm-title{margin:0;font-size:16px;font-weight:500;letter-spacing:-0.01em}',
       '.mm-head-actions{display:flex;align-items:center;justify-content:flex-end;gap:10px;flex:1 1 auto;min-width:0}',
@@ -2698,25 +2708,14 @@ window.__ModuleLoader__.load({
           tooltip.node = null
         }, 'mcp-manager: tooltip')
 
-        ctx.effect(() => ctx.slots.inject('main', () => ctx.slots.register({
-          name: 'main',
-          key: PANEL_ID,
-          locale: NS,
-          inject: () => ({ t }),
-        }, McpPage)), 'mcp-manager: main panel')
-
-        ctx.effect(() => ctx.slots.inject('sidebar.footer.action', () => ctx.slots.register({
-          name: 'sidebar.footer.action',
+        ctx.effect(() => ctx.slots.inject('sidebar.panellist', () => ctx.slots.register({
+          name: 'sidebar.panellist',
           id: PANEL_ID,
-          order: 12,
+          order: 11,
           locale: NS,
           label: () => t('section.title'),
-          inject: () => ({
-            t,
-            openPanel: () => ctx.layout.selectPanel(PANEL_ID),
-            togglePanel: (active) => ctx.layout.selectPanel(active ? null : PANEL_ID),
-          }),
-        }, FooterEntry)), 'mcp-manager: sidebar footer entry')
+          inject: () => ({ t }),
+        }, RailEntry)), 'mcp-manager: sidebar entry')
       },
     }
   },
