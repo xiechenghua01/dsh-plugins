@@ -25,7 +25,7 @@
      * Placeholders use {name} and are interpolated by t().                *
      * ------------------------------------------------------------------ */
 
-                        const zh = {
+                            const zh = {
       'action.addSource': '添加源',
       'action.cancel': '取消',
       'action.checkUpdates': '检查更新',
@@ -219,9 +219,12 @@
       'layer.global': '全局层',
       'layer.preset': '预设层',
       'loc.bundled': '插件内置',
+      'loc.custom': '自定义目录',
       'loc.disabledGroup': '已停用',
       'loc.disabledPath': '<root>/.disabled/',
       'loc.groupCount': '{count} 个',
+      'loc.preset': '预设内置',
+      'loc.projectAgents': '项目共享',
       'loc.projectDsh': '项目技能',
       'loc.rank': 'rank {rank}',
       'loc.userAgents': '用户共享',
@@ -361,7 +364,7 @@
       'update.toast': '{count} 个技能有更新',
     }
 
-                        const en = {
+                            const en = {
       'action.addSource': 'Add source',
       'action.cancel': 'Cancel',
       'action.checkUpdates': 'Check for updates',
@@ -555,9 +558,12 @@
       'layer.global': 'Global',
       'layer.preset': 'Preset',
       'loc.bundled': 'Bundled',
+      'loc.custom': 'Custom folder',
       'loc.disabledGroup': 'Disabled',
       'loc.disabledPath': '<root>/.disabled/',
       'loc.groupCount': '{count} skills',
+      'loc.preset': 'Preset built-in',
+      'loc.projectAgents': 'Project shared',
       'loc.projectDsh': 'Project',
       'loc.rank': 'rank {rank}',
       'loc.userAgents': 'User shared',

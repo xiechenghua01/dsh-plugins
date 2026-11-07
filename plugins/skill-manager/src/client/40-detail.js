@@ -841,7 +841,7 @@
         if (loading) {
             return h(
                 'div',
-                { className: 'sm-detail-page sm-scroll', style: { display: 'flex', flexDirection: 'column', gap: '20px', padding: '28px 48px 48px', flex: '1 1 auto', minHeight: 0, overflowY: 'auto' } },
+                { className: 'sm-detail-page sm-scroll', style: { display: 'flex', flexDirection: 'column', gap: '20px', flex: '1 1 auto', minHeight: 0, overflowY: 'auto' } },
                 h('button', {
                     type: 'button',
                     className: 'sm-detail-back',
@@ -867,7 +867,7 @@
         if (error !== null) {
             return h(
                 'div',
-                { className: 'sm-detail-page sm-scroll', style: { display: 'flex', flexDirection: 'column', gap: '20px', padding: '28px 48px 48px', flex: '1 1 auto', minHeight: 0, overflowY: 'auto' } },
+                { className: 'sm-detail-page sm-scroll', style: { display: 'flex', flexDirection: 'column', gap: '20px', flex: '1 1 auto', minHeight: 0, overflowY: 'auto' } },
                 h('button', {
                     type: 'button',
                     className: 'sm-detail-back',
@@ -1271,7 +1271,7 @@
 
         return h(
             'div',
-            { className: 'sm-detail-page sm-scroll', style: { display: 'flex', flexDirection: 'column', gap: '20px', padding: '28px 48px 48px', flex: '1 1 auto', minHeight: 0, overflowY: 'auto' } },
+            { className: 'sm-detail-page sm-scroll', style: { display: 'flex', flexDirection: 'column', gap: '20px', flex: '1 1 auto', minHeight: 0, overflowY: 'auto' } },
             h(
                 'div',
                 { style: { display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '12px' } },

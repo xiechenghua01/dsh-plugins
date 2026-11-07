@@ -38,7 +38,7 @@ window.__ModuleLoader__.load({
      * Placeholders use {name} and are interpolated by t().                *
      * ------------------------------------------------------------------ */
 
-                        const zh = {
+                            const zh = {
       'action.addSource': '添加源',
       'action.cancel': '取消',
       'action.checkUpdates': '检查更新',
@@ -232,9 +232,12 @@ window.__ModuleLoader__.load({
       'layer.global': '全局层',
       'layer.preset': '预设层',
       'loc.bundled': '插件内置',
+      'loc.custom': '自定义目录',
       'loc.disabledGroup': '已停用',
       'loc.disabledPath': '<root>/.disabled/',
       'loc.groupCount': '{count} 个',
+      'loc.preset': '预设内置',
+      'loc.projectAgents': '项目共享',
       'loc.projectDsh': '项目技能',
       'loc.rank': 'rank {rank}',
       'loc.userAgents': '用户共享',
@@ -374,7 +377,7 @@ window.__ModuleLoader__.load({
       'update.toast': '{count} 个技能有更新',
     }
 
-                        const en = {
+                            const en = {
       'action.addSource': 'Add source',
       'action.cancel': 'Cancel',
       'action.checkUpdates': 'Check for updates',
@@ -568,9 +571,12 @@ window.__ModuleLoader__.load({
       'layer.global': 'Global',
       'layer.preset': 'Preset',
       'loc.bundled': 'Bundled',
+      'loc.custom': 'Custom folder',
       'loc.disabledGroup': 'Disabled',
       'loc.disabledPath': '<root>/.disabled/',
       'loc.groupCount': '{count} skills',
+      'loc.preset': 'Preset built-in',
+      'loc.projectAgents': 'Project shared',
       'loc.projectDsh': 'Project',
       'loc.rank': 'rank {rank}',
       'loc.userAgents': 'User shared',
@@ -4934,7 +4940,7 @@ window.__ModuleLoader__.load({
         if (loading) {
             return h(
                 'div',
-                { className: 'sm-detail-page sm-scroll', style: { display: 'flex', flexDirection: 'column', gap: '20px', padding: '28px 48px 48px', flex: '1 1 auto', minHeight: 0, overflowY: 'auto' } },
+                { className: 'sm-detail-page sm-scroll', style: { display: 'flex', flexDirection: 'column', gap: '20px', flex: '1 1 auto', minHeight: 0, overflowY: 'auto' } },
                 h('button', {
                     type: 'button',
                     className: 'sm-detail-back',
@@ -4960,7 +4966,7 @@ window.__ModuleLoader__.load({
         if (error !== null) {
             return h(
                 'div',
-                { className: 'sm-detail-page sm-scroll', style: { display: 'flex', flexDirection: 'column', gap: '20px', padding: '28px 48px 48px', flex: '1 1 auto', minHeight: 0, overflowY: 'auto' } },
+                { className: 'sm-detail-page sm-scroll', style: { display: 'flex', flexDirection: 'column', gap: '20px', flex: '1 1 auto', minHeight: 0, overflowY: 'auto' } },
                 h('button', {
                     type: 'button',
                     className: 'sm-detail-back',
@@ -5364,7 +5370,7 @@ window.__ModuleLoader__.load({
 
         return h(
             'div',
-            { className: 'sm-detail-page sm-scroll', style: { display: 'flex', flexDirection: 'column', gap: '20px', padding: '28px 48px 48px', flex: '1 1 auto', minHeight: 0, overflowY: 'auto' } },
+            { className: 'sm-detail-page sm-scroll', style: { display: 'flex', flexDirection: 'column', gap: '20px', flex: '1 1 auto', minHeight: 0, overflowY: 'auto' } },
             h(
                 'div',
                 { style: { display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '12px' } },
@@ -7367,7 +7373,9 @@ window.__ModuleLoader__.load({
   min-height: 0;
   overflow: auto;
   scrollbar-gutter: stable;
-  padding: 28px 48px 48px;
+  /* The page frame owns the horizontal inset and the centred content column;
+   * a scroll view only contributes the bottom breathing room. */
+  padding: 0 0 48px;
   scrollbar-width: thin;
   scrollbar-color: var(--dsw-alias-scrollbar-bg-l1) transparent;
 }
@@ -7413,6 +7421,18 @@ window.__ModuleLoader__.load({
 .sm-root > .sm-page {
   flex: 1 1 auto;
   overflow: hidden;
+  /* Matches the conversation page: one centred content column with an inset
+   * that shrinks on narrow windows instead of the content hugging the frame. */
+  --sm-content-max: 960px;
+  padding: 28px clamp(20px, 4vw, 48px) 0;
+}
+
+/* Header, tabs, list and detail all share the same column, so their left edges
+ * line up instead of the header sitting on the window edge. */
+.sm-root > .sm-page > * {
+  width: 100%;
+  max-width: var(--sm-content-max);
+  margin-inline: auto;
 }
 
 .sm-tab-view {
@@ -7643,7 +7663,7 @@ window.__ModuleLoader__.load({
 }
 
 .sm-group + .sm-group {
-  margin-top: 32px;
+  margin-top: 40px;
 }
 
 .sm-group-head {
@@ -7653,7 +7673,7 @@ window.__ModuleLoader__.load({
   justify-content: space-between;
   gap: 8px;
   padding: 0 8px;
-  margin-bottom: 6px;
+  margin-bottom: 10px;
   min-width: 0;
   font-size: var(--sm-fs);
   font-weight: 500;
@@ -7728,7 +7748,7 @@ window.__ModuleLoader__.load({
 .sm-rows {
   display: flex;
   flex-direction: column;
-  gap: 2px;
+  gap: 8px;
   min-width: 0;
 }
 
@@ -7763,8 +7783,8 @@ window.__ModuleLoader__.load({
 }
 
 .sm-row {
-  min-height: 65px;
-  padding: 8px;
+  min-height: 72px;
+  padding: 8px 10px;
   border-radius: 20px;
   border: 1px solid transparent;
   display: flex;
@@ -7789,7 +7809,7 @@ window.__ModuleLoader__.load({
 .sm-row-market,
 .sm-market .sm-row,
 .sm-row[data-kind="market"] {
-  min-height: 76px;
+  min-height: 84px;
   background: var(--dsw-alias-bg-layer-1);
   border-color: var(--dsw-alias-border-l1);
 }

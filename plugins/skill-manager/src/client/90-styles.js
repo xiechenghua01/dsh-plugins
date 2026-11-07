@@ -64,7 +64,9 @@
   min-height: 0;
   overflow: auto;
   scrollbar-gutter: stable;
-  padding: 28px 48px 48px;
+  /* The page frame owns the horizontal inset and the centred content column;
+   * a scroll view only contributes the bottom breathing room. */
+  padding: 0 0 48px;
   scrollbar-width: thin;
   scrollbar-color: var(--dsw-alias-scrollbar-bg-l1) transparent;
 }
@@ -110,6 +112,18 @@
 .sm-root > .sm-page {
   flex: 1 1 auto;
   overflow: hidden;
+  /* Matches the conversation page: one centred content column with an inset
+   * that shrinks on narrow windows instead of the content hugging the frame. */
+  --sm-content-max: 960px;
+  padding: 28px clamp(20px, 4vw, 48px) 0;
+}
+
+/* Header, tabs, list and detail all share the same column, so their left edges
+ * line up instead of the header sitting on the window edge. */
+.sm-root > .sm-page > * {
+  width: 100%;
+  max-width: var(--sm-content-max);
+  margin-inline: auto;
 }
 
 .sm-tab-view {
@@ -340,7 +354,7 @@
 }
 
 .sm-group + .sm-group {
-  margin-top: 32px;
+  margin-top: 40px;
 }
 
 .sm-group-head {
@@ -350,7 +364,7 @@
   justify-content: space-between;
   gap: 8px;
   padding: 0 8px;
-  margin-bottom: 6px;
+  margin-bottom: 10px;
   min-width: 0;
   font-size: var(--sm-fs);
   font-weight: 500;
@@ -425,7 +439,7 @@
 .sm-rows {
   display: flex;
   flex-direction: column;
-  gap: 2px;
+  gap: 8px;
   min-width: 0;
 }
 
@@ -460,8 +474,8 @@
 }
 
 .sm-row {
-  min-height: 65px;
-  padding: 8px;
+  min-height: 72px;
+  padding: 8px 10px;
   border-radius: 20px;
   border: 1px solid transparent;
   display: flex;
@@ -486,7 +500,7 @@
 .sm-row-market,
 .sm-market .sm-row,
 .sm-row[data-kind="market"] {
-  min-height: 76px;
+  min-height: 84px;
   background: var(--dsw-alias-bg-layer-1);
   border-color: var(--dsw-alias-border-l1);
 }
