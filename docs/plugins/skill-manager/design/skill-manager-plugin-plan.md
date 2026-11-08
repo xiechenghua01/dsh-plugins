@@ -231,7 +231,7 @@ type Issue = {
    - 目录：`<name>/SKILL.md` 存在 → 目录型技能；`<name>` 以 `.` 开头跳过（含 `.disabled`）。
    - 文件：`<name>.md` → 平铺技能。
    - 其余忽略。
-6. 解析 frontmatter（`lib/frontmatter.mjs`）：严格校验 name（kebab-case、≤64）、description（非空、≤500）、
+6. 解析 frontmatter（`lib/frontmatter.mjs`）：严格校验 name（kebab-case、≤64）、description（非空）、
    invocation 布尔严格语法；失败 → 产生 `Issue`，不进入 skills。
 7. 扫描 `<root>/.disabled/`（目录或 `.md`）→ `status: 'disabled'`，`editable: true`。
 8. **按预设读取权威目录**（关键）：

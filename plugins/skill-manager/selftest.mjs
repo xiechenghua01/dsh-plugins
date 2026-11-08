@@ -125,6 +125,10 @@ export async function run(report) {
   if (validateName('code-review').ok !== true) report('frontmatter: rejected a valid kebab-case name')
   if (validateName('Code_Review').ok === true) report('frontmatter: accepted an invalid name')
   if (validateFrontmatter({ name: 'ok', description: '' }).ok === true) report('frontmatter: accepted an empty description')
+  // Descriptions are model-facing trigger text; there is no product length cap.
+  if (validateFrontmatter({ name: 'ok', description: 'x'.repeat(5000) }).ok !== true) {
+    report('frontmatter: rejected a long description')
+  }
 
   // --- market index ------------------------------------------------------
   let validated = null
@@ -135,6 +139,16 @@ export async function run(report) {
   }
   if (validated !== null && validated.index.skills.length !== 1) report('index: lost the skill entry')
   if (validated !== null && validated.index.skills[0].versions.length !== 2) report('index: lost a version entry')
+
+  // Market descriptions have no length cap: a publisher may reuse the long
+  // model-facing trigger description instead of writing a short summary.
+  const longDescription = clone(INDEX)
+  longDescription.skills[0].description = { en: 'x'.repeat(5000), zh: '长'.repeat(5000) }
+  try {
+    validateIndex(longDescription, 'https://example.com/index.json')
+  } catch (error) {
+    report(`index: rejected a long description: ${error.message}`)
+  }
 
   rejects(report, 'index format', (doc) => { doc.format = 2 })
   rejects(report, 'index title', (doc) => { delete doc.title })

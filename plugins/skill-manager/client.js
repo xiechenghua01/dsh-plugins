@@ -191,8 +191,7 @@ window.__ModuleLoader__.load({
       'form.bodyRequired': '请填写正文',
       'form.create': '创建技能',
       'form.description': '描述',
-      'form.descriptionHint': '一句话说明，≤500 字',
-      'form.descriptionTooLong': '描述不能超过 500 字',
+      'form.descriptionHint': '一句话说明这个技能做什么',
       'form.locationProjectDisabled': '当前没有项目目录',
       'form.name': '名称',
       'form.nameHint': 'kebab-case，≤64 字符',
@@ -530,8 +529,7 @@ window.__ModuleLoader__.load({
       'form.bodyRequired': 'Body is required',
       'form.create': 'Create skill',
       'form.description': 'Description',
-      'form.descriptionHint': 'One line, ≤500 chars',
-      'form.descriptionTooLong': 'Description must be 500 chars or fewer',
+      'form.descriptionHint': 'One line describing what the skill does',
       'form.locationProjectDisabled': 'No project directory',
       'form.name': 'Name',
       'form.nameHint': 'kebab-case, 64 chars or fewer',
@@ -6220,11 +6218,9 @@ window.__ModuleLoader__.load({
         } else if (trimmedName !== '' && smSkillList().some((skill) => skill && skill.name === trimmedName && skill.location === location && skill.status !== 'disabled')) {
             nameError = t('form.nameTaken')
         }
-        const descriptionError = description.trim().length > 500 ? t('form.descriptionTooLong') : ''
         const canSubmit = trimmedName !== ''
             && nameError === ''
             && description.trim() !== ''
-            && descriptionError === ''
             && body.trim() !== ''
             && !smLocationDisabled(location)
             && !busy
@@ -6274,7 +6270,7 @@ window.__ModuleLoader__.load({
                     style: Object.assign({}, SM_INPUT_STYLE, { fontFamily: SM_MONO }),
                 }),
             ),
-            h(SmField, { label: t('form.description'), hint: t('form.descriptionHint'), error: descriptionError },
+            h(SmField, { label: t('form.description'), hint: t('form.descriptionHint') },
                 h('input', {
                     type: 'text',
                     value: description,

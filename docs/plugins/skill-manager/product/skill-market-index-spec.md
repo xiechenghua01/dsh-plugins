@@ -150,7 +150,7 @@
 | --- | --- | --- | --- |
 | `name` | string | 是 | kebab-case：`^[a-z0-9]+(?:-[a-z0-9]+)*$`，1–64 字符；同一索引内唯一；必须与 `SKILL.md` frontmatter 的 `name` 完全一致 |
 | `title` | LocalizedText | 否 | 市场展示名；缺省回退 `name` |
-| `description` | LocalizedText | 是 | 市场展示描述；1–500 字符（每个语言值），用于列表卡片/详情摘要 |
+| `description` | LocalizedText | 是 | 市场展示描述；非空，用于列表卡片/详情摘要（不设长度上限） |
 | `author` | string | 否 | 技能作者，1–120 字符 |
 | `license` | string | 否 | SPDX 表达式或简短许可名，≤64 字符 |
 | `homepage` | URL | 否 | 技能主页/文档地址 |
@@ -499,7 +499,7 @@
 | R3 | `description` 可选且合法 LocalizedText |
 | R4 | `skills` 是数组；长度 ≤ 5000 |
 | R5 | 技能 `name` 匹配 kebab-case、长度 1–64、索引内唯一 |
-| R6 | 技能 `description` 必填且合法 LocalizedText、每语言 ≤ 500 字符 |
+| R6 | 技能 `description` 必填且合法 LocalizedText（非空、含 `en`；不限制单语言长度） |
 | R7 | 技能 `title` 可选且合法 |
 | R8 | `versions` 非空、≤100；`version` 精确 SemVer、唯一 |
 | R9 | `publishTimestamp` 整数且 `[0,1e11)` |

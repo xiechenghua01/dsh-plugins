@@ -34,8 +34,6 @@ export const MAX_PATH_LENGTH = 200
 export const MAX_URL_LENGTH = 2048
 /** Maximum number of languages in a LocalizedText object. */
 export const MAX_LANGUAGES = 20
-/** Maximum length of each localized string. */
-export const MAX_LOCALIZED_LENGTH = 500
 /** Maximum number of keywords on one skill. */
 export const MAX_KEYWORDS = 20
 /** Maximum author string length. */
@@ -147,7 +145,6 @@ function checkLocalized(value, path, required = false) {
   }
   if (typeof value === 'string') {
     if (value.length === 0) fail(path, 'must be a non-empty string')
-    if (value.length > MAX_LOCALIZED_LENGTH) fail(path, `must be at most ${MAX_LOCALIZED_LENGTH} characters`)
     return
   }
   if (!isObject(value)) fail(path, 'must be a string or an object of language strings')
@@ -159,7 +156,6 @@ function checkLocalized(value, path, required = false) {
     const text = value[key]
     if (typeof text !== 'string') fail(`${path}.${key}`, 'must be a string')
     if (text.length === 0) fail(`${path}.${key}`, 'must be a non-empty string')
-    if (text.length > MAX_LOCALIZED_LENGTH) fail(`${path}.${key}`, `must be at most ${MAX_LOCALIZED_LENGTH} characters`)
   }
   if (!hasOwn(value, 'en')) fail(path, 'must contain an "en" translation')
 }

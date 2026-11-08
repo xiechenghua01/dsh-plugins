@@ -29,14 +29,14 @@
     },
     "localizedText": {
       "oneOf": [
-        { "type": "string", "minLength": 1, "maxLength": 500 },
+        { "type": "string", "minLength": 1 },
         {
           "type": "object",
           "minProperties": 1,
           "maxProperties": 20,
           "required": ["en"],
           "propertyNames": { "$ref": "#/$defs/languageId" },
-          "additionalProperties": { "type": "string", "minLength": 1, "maxLength": 500 }
+          "additionalProperties": { "type": "string", "minLength": 1 }
         }
       ]
     },

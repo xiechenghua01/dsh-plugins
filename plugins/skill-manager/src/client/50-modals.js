@@ -753,11 +753,9 @@
         } else if (trimmedName !== '' && smSkillList().some((skill) => skill && skill.name === trimmedName && skill.location === location && skill.status !== 'disabled')) {
             nameError = t('form.nameTaken')
         }
-        const descriptionError = description.trim().length > 500 ? t('form.descriptionTooLong') : ''
         const canSubmit = trimmedName !== ''
             && nameError === ''
             && description.trim() !== ''
-            && descriptionError === ''
             && body.trim() !== ''
             && !smLocationDisabled(location)
             && !busy
@@ -807,7 +805,7 @@
                     style: Object.assign({}, SM_INPUT_STYLE, { fontFamily: SM_MONO }),
                 }),
             ),
-            h(SmField, { label: t('form.description'), hint: t('form.descriptionHint'), error: descriptionError },
+            h(SmField, { label: t('form.description'), hint: t('form.descriptionHint') },
                 h('input', {
                     type: 'text',
                     value: description,

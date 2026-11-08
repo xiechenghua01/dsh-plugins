@@ -351,7 +351,7 @@ DSH 的 Skill 是「一层注册表 + 每个 scope 一套 provider」，**没有
 | 字段 | 规格 | 校验 |
 | --- | --- | --- |
 | 名称 | 等宽输入，占位 `例如: code-review` | 必填、kebab-case、≤64、目标位置不重名 |
-| 描述 | 输入，占位 `一句话说明这个技能做什么` | 必填、≤500 |
+| 描述 | 输入，占位 `一句话说明这个技能做什么` | 必填；不限制长度 |
 | 何时使用 | 选填 | ≤200 |
 | 正文 | Markdown textarea（12 行） | 必填 |
 | 保存到 | 分段：用户技能 `~/.dsh/skills` / 用户共享 `~/.agents/skills` / 项目 `<repo>/.dsh/skills` | 默认用户技能；项目不可用时禁用 |
@@ -560,7 +560,7 @@ v1 支持的源：
 ### 10.1 命名与校验（必须与 Host 一致）
 
 - 名称：`^[a-z0-9]+(?:-[a-z0-9]+)*$`，≤64。
-- 描述：非空，≤500（模型 catalog 截断阈值）。
+- 描述：非空；不限制长度（模型 catalog 展示时由 DSH 截断）。
 - `whenToUse`：可选，≤200。
 - 布尔：只接受真布尔或 `true/false/yes/no/on/off/1/0`；旧键（`disableModelInvocation` 等）拒绝。
 - 文件布局：`<root>/<name>/SKILL.md` 或 `<root>/<name>.md`；只扫一层。

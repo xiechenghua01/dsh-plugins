@@ -22,7 +22,6 @@
 
 export const SKILL_NAME_RE = /^[a-z0-9]+(?:-[a-z0-9]+)*$/
 export const MAX_NAME_LENGTH = 64
-export const MAX_DESCRIPTION_LENGTH = 500
 export const MAX_WHEN_TO_USE_LENGTH = 200
 
 const LEGACY_KEYS = ['disableModelInvocation', 'modelInvocable', 'userInvocable']
@@ -409,13 +408,6 @@ export function validateFrontmatter(frontmatter) {
   const description = frontmatter.description
   if (typeof description !== 'string' || description.trim() === '') {
     return { ok: false, error: 'frontmatter requires a non-empty description', frontmatter: null }
-  }
-  if (description.trim().length > MAX_DESCRIPTION_LENGTH) {
-    return {
-      ok: false,
-      error: `description must be at most ${MAX_DESCRIPTION_LENGTH} characters`,
-      frontmatter: null,
-    }
   }
 
   let whenToUse
