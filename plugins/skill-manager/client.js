@@ -9284,7 +9284,10 @@ window.__ModuleLoader__.load({
 .sm-menu {
   position: fixed;
   z-index: 1600;
-  min-width: 168px;
+  /* The widest label plus its icon decides the width; the old 168px floor left
+   * a large empty gutter on the right of every short row. */
+  min-width: 128px;
+  max-width: 260px;
   padding: 4px;
   border-radius: 12px;
   border: 1px solid var(--dsw-alias-border-l2);
@@ -9299,7 +9302,7 @@ window.__ModuleLoader__.load({
 
 .sm-menu-item {
   height: 30px;
-  padding: 0 10px;
+  padding: 0 8px;
   border-radius: 8px;
   border: none;
   background: transparent;
@@ -9308,8 +9311,10 @@ window.__ModuleLoader__.load({
   font-family: inherit;
   display: flex;
   align-items: center;
-  justify-content: space-between;
-  gap: 12px;
+  /* Icon and label sit together on the left; the label owns the rest of the row
+   * so the hit area still spans the full width. */
+  justify-content: flex-start;
+  gap: 8px;
   text-align: left;
   white-space: nowrap;
   cursor: pointer;
@@ -9606,6 +9611,17 @@ window.__ModuleLoader__.load({
     scroll-behavior: auto !important;
   }
 }
+/* Menu rows: the label takes the remaining width so the whole row stays
+ * clickable while the icon keeps its natural size. */
+.sm-menu-item > span {
+  flex: 1 1 auto;
+  min-width: 0;
+  text-align: left;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
 `
 // ===== 99-apply.js =====
     /* ------------------------------------------------------------------ *
