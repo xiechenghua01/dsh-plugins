@@ -732,6 +732,7 @@ const SCREENS = [
   { id: 'detail', label: '详情 · 可写技能（git-commit）', state: { view: 'detail', detail: { kind: 'installed', id: 'git-commit' } } },
   { id: 'detail-builtin', label: '详情 · 内置只读（office）', state: { view: 'detail', detail: { kind: 'installed', id: 'office' } } },
   { id: 'diagnostics', label: '诊断抽屉 · 1 个未生效', state: { diagOpen: true } },
+  { id: 'diagnostics-multi', label: '诊断抽屉 · 2 个问题（断链 + 同名）', state: { diagOpen: true, issueCount: 2 } },
   { id: 'disabled', label: '列表 · 已停用行内状态', state: { highlight: 'legacy-jira-sync' } },
   { id: 'market', label: '市场 · 有源有结果', state: { tab: 'market' } },
   { id: 'market-empty', label: '市场 · 无源空态', state: { tab: 'market', noSources: true } },
@@ -763,6 +764,7 @@ function baseState() {
     sourcesOpen: false,
     modal: null,
     issueFixed: false,
+    issueCount: 1,
     highlight: null,
     menu: null,
     sources: SOURCES.map(s => Object.assign({}, s))
@@ -927,9 +929,13 @@ function renderBanner() {
       <button class="sm-link brand" onclick="openDiag()">查看诊断</button>
     </div>`;
   }
+  const count = state.issueCount === 2 ? 2 : 1;
+  const summary = count === 2
+    ? 'code-review 与另一个技能同名，ego-browser 的文件链接已失效。'
+    : 'ego-browser 的文件链接已失效，Agent 现在用不到它。';
   return `<div class="sm-banner sm-banner-warn">
     <span class="sm-banner-icon">${icon('alert', 16)}</span>
-    <div class="sm-banner-text"><strong>1 个技能未生效</strong><span>ego-browser 的文件链接已失效，Agent 现在用不到它。</span></div>
+    <div class="sm-banner-text"><strong>${count} 个技能未生效</strong><span>${summary}</span></div>
     <button class="sm-link" onclick="openDiag()">查看原因 →</button>
   </div>`;
 }
@@ -1303,7 +1309,26 @@ function renderDiagnosticsDrawer() {
     </div>
     <p class="sm-drawer-note">刚刚又检查了一遍，其它技能都正常。</p>`;
   } else {
-    body = `<div class="sm-issue">
+    const sameNameCard = `<div class="sm-issue">
+      <div class="sm-issue-head">
+        <span class="sm-issue-icon">${icon('alert', 16)}</span>
+        <span class="mono fs-14">code-review</span>
+        <span class="sm-badge warn">未生效</span>
+      </div>
+      <p class="sm-issue-reason">code-review 与『我的技能』里的另一个技能同名，现在生效的是后者。</p>
+      <div class="sm-issue-actions">
+        <button class="btn btn-primary btn-sm" onclick="toast('已打开生效的技能（原型）')">${icon('check', 14)} 查看生效项</button>
+        <button class="btn btn-ghost btn-sm" onclick="toast('已停用同名技能（原型）')">停用其中一个</button>
+      </div>
+      <details class="sm-details">
+        <summary><span class="sm-chevron">${icon('chevron-right', 12)}</span>详细信息</summary>
+        <div class="sm-details-body">
+          <div class="sm-kv"><span class="sm-kv-label">当前生效</span><span class="sm-kv-value mono">~/.dsh/skills/code-review</span></div>
+          <div class="sm-kv"><span class="sm-kv-label">被覆盖</span><span class="sm-kv-value mono">~/.agents/skills/code-review</span></div>
+        </div>
+      </details>
+    </div>`;
+    const brokenCard = `<div class="sm-issue">
       <div class="sm-issue-head">
         <span class="sm-issue-icon">${icon('alert', 16)}</span>
         <span class="mono fs-14">ego-browser</span>
@@ -1325,6 +1350,7 @@ function renderDiagnosticsDrawer() {
       </details>
     </div>
     <p class="sm-drawer-note">修复后会自动重新检查，不需要重启。其它 10 个技能都正常。</p>`;
+    body = (state.issueCount === 2 ? sameNameCard : '') + brokenCard;
   }
 
   return `<div class="sm-drawer-backdrop" onclick="closeDiag()"></div>
@@ -1332,7 +1358,7 @@ function renderDiagnosticsDrawer() {
       <header class="sm-drawer-head">
         <div class="sm-drawer-head-left">
           <span class="sm-drawer-title">诊断</span>
-          <span class="sm-badge ${state.issueFixed ? 'success' : 'warn'}">${state.issueFixed ? '0 个问题' : '1 个问题'}</span>
+          <span class="sm-badge ${state.issueFixed ? 'success' : 'warn'}">${state.issueFixed ? '0 个问题' : (state.issueCount === 2 ? '2 个问题' : '1 个问题')}</span>
         </div>
         <button class="sm-icon-btn plain" aria-label="关闭" onclick="closeDiag()">${icon('x', 16)}</button>
       </header>
