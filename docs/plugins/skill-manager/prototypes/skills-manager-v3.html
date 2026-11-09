@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>DSH · 技能管理 v3.0</title>
+<title>DSH · 技能管理 v3.1</title>
 <style>
   /* ============ 1. DSH tokens（原型内近似值，命名与用途与 DSH 一致） ============ */
   :root {
@@ -20,6 +20,7 @@
     --dsw-alias-border-l1: #ffffff0f;
     --dsw-alias-border-l2: #ffffff1f;
     --dsw-alias-border-l3: #ffffff29;
+    --dsw-alias-border-inverted: #ffffff1f;
     --dsw-alias-interactive-bg-hover: #ffffff14;
     --dsw-specific-sidebar-nav-item-active: #43454a;
     --dsw-alias-button-primary-fill: #f9fafb;
@@ -27,7 +28,13 @@
     --dsw-alias-state-success-primary: #22c55e;
     --dsw-alias-state-warn-primary: #f59e0b;
     --dsw-alias-state-error-primary: #f25a5a;
+    --dsw-alias-state-business-primary: #5b9dff;
     --dsw-alias-brand-primary: #7aaaff;
+    --dsw-alias-settings-card-fill: #1d1d1f;
+    --dsw-alias-settings-card-stroke: #ffffff1f;
+    --dsw-radius-lg: 12px;
+    --dsw-radius-xl: 16px;
+    --dsw-radius-panel: 20px;
     --dsw-focus-ring-color: #7aaaff;
     --dsw-focus-ring-width: 2px;
   }
@@ -110,7 +117,7 @@
   .sm-nav-ver { font-size: calc(var(--sm-fs) - 4px); color: var(--dsw-alias-label-caption); padding: 4px 8px; }
 
   #main-panel { flex: 1; height: 100%; overflow-y: auto; padding: 28px 48px 48px; background: var(--dsw-alias-bg-base); }
-  .page-col { width: 100%; max-width: 960px; margin: 0 auto; }
+  .page-col { width: 100%; max-width: 960px; margin: 0 auto; container-type: inline-size; }
 
   /* ============ 5. 页头、工具栏、Tab ============ */
   .sm-page-head { display: flex; align-items: flex-start; justify-content: space-between; gap: 16px; flex-wrap: wrap; margin-bottom: 12px; }
@@ -161,53 +168,33 @@
   .sm-segmented { height: 34px; background: var(--dsw-alias-bg-layer-3); border-radius: 14px; padding: 2px; display: inline-flex; align-items: center; gap: 2px; }
   .sm-seg-tab { height: 30px; padding: 0 14px; border-radius: 12px; font-size: var(--sm-fs); color: var(--dsw-alias-label-secondary); display: inline-flex; align-items: center; gap: 6px; }
   .sm-seg-tab[aria-selected="true"] { background: var(--dsw-alias-bg-layer-1); color: var(--dsw-alias-label-primary); font-weight: 500; }
-  .sm-meta-link { display: inline-flex; align-items: center; gap: 5px; color: var(--dsw-alias-brand-primary); font-size: calc(var(--sm-fs) - 2px); }
-  .sm-meta-link:hover { text-decoration: underline; }
-  .sm-tabs-meta { font-size: calc(var(--sm-fs) - 2px); color: var(--dsw-alias-label-caption); }
 
-  /* ============ 6. 提示条 ============ */
-  .sm-banner {
-    display: flex; align-items: center; gap: 10px;
-    padding: 8px 14px; border-radius: 14px; margin-bottom: 14px;
-    border: 1px solid var(--dsw-alias-border-l2); font-size: calc(var(--sm-fs) - 1px);
+  /* 二级 Tab（仅技能 Tab） */
+  .sm-subtabs-row { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; margin-bottom: 16px; }
+  .sm-subtabs { height: 34px; background: var(--dsw-alias-bg-layer-2); border-radius: 14px; padding: 2px; display: inline-flex; align-items: center; gap: 2px; }
+  .sm-subtab { height: 30px; padding: 0 12px; border-radius: 12px; font-size: calc(var(--sm-fs) - 1px); color: var(--dsw-alias-label-secondary); display: inline-flex; align-items: center; gap: 6px; }
+  .sm-subtab:hover { color: var(--dsw-alias-label-primary); }
+  .sm-subtab[aria-selected="true"] { background: var(--dsw-alias-bg-layer-1); color: var(--dsw-alias-label-primary); font-weight: 500; }
+  .sm-count-badge {
+    min-width: 18px; height: 18px; padding: 0 6px; border-radius: 999px;
+    background: var(--dsw-alias-bg-layer-3); color: var(--dsw-alias-label-secondary);
+    font-size: calc(var(--sm-fs) - 4px); font-variant-numeric: tabular-nums;
+    display: inline-flex; align-items: center; justify-content: center;
   }
-  .sm-banner-warn { background: color-mix(in srgb, var(--dsw-alias-state-warn-primary) 11%, transparent); border-color: color-mix(in srgb, var(--dsw-alias-state-warn-primary) 30%, transparent); }
-  .sm-banner-ok { background: color-mix(in srgb, var(--dsw-alias-state-success-primary) 10%, transparent); border-color: color-mix(in srgb, var(--dsw-alias-state-success-primary) 26%, transparent); }
-  .sm-banner-icon { display: inline-flex; color: var(--dsw-alias-state-warn-primary); flex-shrink: 0; }
-  .sm-banner-ok .sm-banner-icon { color: var(--dsw-alias-state-success-primary); }
-  .sm-banner-text { flex: 1; min-width: 0; color: var(--dsw-alias-label-secondary); display: flex; align-items: baseline; gap: 8px; flex-wrap: wrap; }
-  .sm-banner-text strong { color: var(--dsw-alias-label-primary); font-weight: 500; }
-  .sm-link { color: var(--dsw-alias-state-warn-primary); font-size: calc(var(--sm-fs) - 2px); font-weight: 500; white-space: nowrap; }
-  .sm-link:hover { text-decoration: underline; }
-  .sm-link.brand { color: var(--dsw-alias-brand-primary); }
+  .sm-subtab[aria-selected="true"] .sm-count-badge { background: var(--dsw-specific-sidebar-nav-item-active); color: var(--dsw-alias-label-primary); }
 
-  /* ============ 7. 分组与行 ============ */
-  .sm-groups { display: flex; flex-direction: column; gap: 32px; }
-  .sm-group { display: flex; flex-direction: column; gap: 8px; }
-  .sm-group-head {
-    height: 22px; padding: 0 8px; display: flex; align-items: center; gap: 8px;
-    width: 100%; text-align: left; color: var(--dsw-alias-label-primary);
+  /* 状态图标（替代横幅） */
+  .sm-status-icons { display: flex; align-items: center; gap: 2px; margin-left: auto; }
+  .sm-status-btn {
+    width: 32px; height: 32px; padding: 0; border-radius: 10px;
+    display: inline-flex; align-items: center; justify-content: center;
+    color: var(--dsw-alias-label-secondary);
   }
-  .sm-group-head:hover .sm-group-title { color: var(--dsw-alias-brand-primary); }
-  .sm-chevron { display: inline-flex; color: var(--dsw-alias-label-caption); width: 14px; }
-  .sm-group-title { font-size: var(--sm-fs); font-weight: 500; white-space: nowrap; }
-  .sm-group-sub { font-size: calc(var(--sm-fs) - 2px); color: var(--dsw-alias-label-caption); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-  .sm-group-count { font-size: calc(var(--sm-fs) - 3px); color: var(--dsw-alias-label-secondary); background: var(--dsw-alias-bg-layer-2); border: 1px solid var(--dsw-alias-border-l1); padding: 0 7px; border-radius: 999px; flex-shrink: 0; }
-  .sm-rows { display: flex; flex-direction: column; gap: 8px; }
+  .sm-status-btn:hover { background: var(--dsw-alias-interactive-bg-hover); }
+  .sm-status-btn.warn { color: var(--dsw-alias-state-warn-primary); }
+  .sm-status-btn.update { color: var(--dsw-alias-state-business-primary); }
 
-  .sm-row {
-    height: 72px; border-radius: 20px; padding: 8px 12px 8px 8px;
-    display: flex; align-items: center; gap: 12px; cursor: pointer;
-    transition: background 120ms, outline-color 120ms;
-  }
-  .sm-row:hover { background: var(--dsw-alias-interactive-bg-hover); }
-  .sm-row.is-highlight { outline: 1.5px solid var(--dsw-alias-brand-primary); outline-offset: -1px; }
-  .sm-row.is-disabled { opacity: 0.62; }
-  .sm-row-icon {
-    width: 49px; height: 49px; border-radius: 16px; flex-shrink: 0; position: relative;
-    background: var(--dsw-alias-bg-layer-1); border: 1px solid var(--dsw-alias-border-l2);
-    display: flex; align-items: center; justify-content: center; color: var(--dsw-alias-label-secondary);
-  }
+  /* ============ 6. 卡片网格 ============ */
   .sm-dot { position: absolute; left: 5px; bottom: 5px; width: 8px; height: 8px; border-radius: 999px; border: 1.5px solid var(--dsw-alias-bg-base); }
   .sm-dot-ok { background: var(--dsw-alias-state-success-primary); }
   .sm-dot-warn { background: var(--dsw-alias-state-warn-primary); }
@@ -215,13 +202,8 @@
   .sm-dot-error { background: var(--dsw-alias-state-error-primary); }
   .sm-dot-update { background: var(--dsw-alias-brand-primary); }
 
-  .sm-row-main { flex: 1; min-width: 0; display: flex; flex-direction: column; justify-content: center; gap: 4px; }
-  .sm-row-title { display: flex; align-items: center; gap: 8px; min-width: 0; }
-  .sm-name { font-size: var(--sm-fs); font-weight: 500; color: var(--dsw-alias-label-primary); white-space: nowrap; flex-shrink: 0; }
-  .sm-row.is-disabled .sm-name { color: var(--dsw-alias-label-caption); }
+  .sm-chevron { display: inline-flex; color: var(--dsw-alias-label-caption); width: 14px; }
   .sm-tagbar { display: inline-flex; align-items: center; gap: 5px; max-width: 340px; overflow: hidden; flex-wrap: nowrap; flex-shrink: 1; }
-  .sm-desc { font-size: calc(var(--sm-fs) - 1px); color: var(--dsw-alias-label-tertiary); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-  .sm-row.is-disabled .sm-desc { color: var(--dsw-alias-label-caption); }
   .sm-badge {
     font-size: calc(var(--sm-fs) - 3px); padding: 1px 8px; border-radius: 999px;
     background: var(--dsw-alias-bg-layer-2); color: var(--dsw-alias-label-secondary);
@@ -237,22 +219,47 @@
   .sm-badge.warn { background: color-mix(in srgb, var(--dsw-alias-state-warn-primary) 14%, transparent); color: var(--dsw-alias-state-warn-primary); border-color: color-mix(in srgb, var(--dsw-alias-state-warn-primary) 32%, transparent); }
   .sm-badge.error { background: color-mix(in srgb, var(--dsw-alias-state-error-primary) 14%, transparent); color: var(--dsw-alias-state-error-primary); border-color: color-mix(in srgb, var(--dsw-alias-state-error-primary) 32%, transparent); }
   .sm-badge.success { background: color-mix(in srgb, var(--dsw-alias-state-success-primary) 14%, transparent); color: var(--dsw-alias-state-success-primary); border-color: color-mix(in srgb, var(--dsw-alias-state-success-primary) 32%, transparent); }
-  .sm-row-tail { display: flex; align-items: center; gap: 8px; flex-shrink: 0; }
 
-  /* 市场 */
-  .sm-market-filters { display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap; margin-bottom: 18px; }
-  .sm-chips { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }
-  .sm-chip {
-    height: 26px; padding: 0 11px; border-radius: 999px; font-size: calc(var(--sm-fs) - 2px);
-    color: var(--dsw-alias-label-secondary); background: var(--dsw-alias-bg-layer-1);
-    border: 1px solid var(--dsw-alias-border-l1); display: inline-flex; align-items: center; gap: 4px;
+  .sm-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; }
+  @container (max-width: 720px) {
+    .sm-grid { grid-template-columns: minmax(0, 1fr); }
   }
-  .sm-chip:hover { background: var(--dsw-alias-interactive-bg-hover); color: var(--dsw-alias-label-primary); }
-  .sm-chip.active { background: var(--dsw-specific-sidebar-nav-item-active); color: var(--dsw-alias-label-primary); font-weight: 500; }
-  .sm-market-count { font-size: calc(var(--sm-fs) - 2px); color: var(--dsw-alias-label-caption); }
-  .sm-market-rows { display: flex; flex-direction: column; gap: 8px; }
-  .sm-market-row { background: var(--dsw-alias-bg-layer-1); border: 1px solid var(--dsw-alias-border-l1); }
-  .sm-market-row:hover { background: var(--dsw-alias-bg-layer-2); border-color: var(--dsw-alias-border-l2); }
+  .sm-card-item {
+    min-height: 96px; padding: 12px; display: flex; align-items: flex-start; gap: 12px;
+    border: .5px solid var(--dsw-alias-settings-card-stroke);
+    border-radius: var(--dsw-radius-xl);
+    background: var(--dsw-alias-settings-card-fill);
+    cursor: pointer; transition: background 120ms, border-color 120ms;
+    min-width: 0;
+  }
+  .sm-card-item:hover { background: color-mix(in srgb, var(--dsw-alias-settings-card-fill) 72%, var(--dsw-alias-bg-layer-3)); border-color: var(--dsw-alias-border-l3); }
+  .sm-card-item.is-highlight { outline: 1.5px solid var(--dsw-alias-brand-primary); outline-offset: -1px; }
+  .sm-card-item.is-disabled { opacity: .6; }
+  .sm-card-icon {
+    width: 48px; height: 48px; border-radius: var(--dsw-radius-lg); flex-shrink: 0; position: relative;
+    background: var(--dsw-alias-bg-layer-2); border: .5px solid var(--dsw-alias-border-l2);
+    display: flex; align-items: center; justify-content: center; color: var(--dsw-alias-label-secondary);
+  }
+  .sm-card-main { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 5px; padding-top: 1px; }
+  .sm-card-title-row { display: flex; align-items: center; gap: 6px; min-width: 0; }
+  .sm-card-name { font-size: var(--sm-fs); font-weight: 500; color: var(--dsw-alias-label-primary); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; min-width: 0; }
+  .sm-card-desc {
+    font-size: calc(var(--sm-fs) - 1px); color: var(--dsw-alias-label-tertiary); line-height: 1.5;
+    display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden;
+  }
+  .sm-card-item.is-disabled .sm-card-name { color: var(--dsw-alias-label-caption); }
+  .sm-card-item.is-disabled .sm-card-desc { color: var(--dsw-alias-label-caption); }
+  .sm-card-tail { width: 68px; flex-shrink: 0; align-self: center; display: flex; flex-direction: column; align-items: stretch; justify-content: center; gap: 6px; }
+  .sm-card-tail .btn { width: 100%; }
+  .sm-card-more { width: 100% !important; height: 26px !important; border-radius: 8px !important; }
+
+  /* ============ 7. 市场按源分组 ============ */
+  .sm-market-blocks { display: flex; flex-direction: column; gap: 28px; }
+  .sm-source-block { display: flex; flex-direction: column; gap: 10px; min-width: 0; }
+  .sm-source-block-head { display: flex; align-items: center; gap: 8px; padding: 0 2px; min-width: 0; }
+  .sm-source-block-title { font-size: var(--sm-fs); font-weight: 500; color: var(--dsw-alias-label-primary); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .sm-source-block-count { font-size: calc(var(--sm-fs) - 2px); color: var(--dsw-alias-label-caption); white-space: nowrap; }
+  .sm-source-block-actions { margin-left: auto; display: inline-flex; align-items: center; gap: 2px; flex-shrink: 0; }
 
   /* 空态 / 搜索无结果 */
   .sm-empty { padding: 64px 24px; display: flex; flex-direction: column; align-items: center; text-align: center; gap: 10px; }
@@ -371,23 +378,36 @@
   /* ============ 10. 弹窗 ============ */
   .sm-modal-layer { position: fixed; inset: 0; z-index: 1300; display: flex; align-items: center; justify-content: center; padding: 16px; background: transparent; }
   .sm-dialog {
-    width: 560px; max-width: 92vw; max-height: 88vh;
+    width: min(488px, 100%); max-height: 88vh;
     background: var(--dsw-static-neutral-bluish-850, var(--dsw-alias-bg-layer-1));
-    border: 1px solid var(--dsw-alias-border-l2); border-radius: 20px;
+    border: .5px solid var(--dsw-alias-border-inverted); border-radius: var(--dsw-radius-panel);
     box-shadow: none; display: flex; flex-direction: column; overflow: hidden;
   }
-  .sm-dialog.small { width: 360px; border-radius: 14px; }
+  .sm-dialog.form { width: min(488px, 100%); border-radius: var(--dsw-radius-panel); }
+  .sm-dialog.confirm { width: min(480px, 100vw - 32px); border-radius: var(--dsw-radius-xl); }
+  .sm-dialog.large { width: min(720px, 100%); border-radius: var(--dsw-radius-panel); }
   .sm-dialog-head { padding: 18px 20px 0; display: flex; align-items: flex-start; justify-content: space-between; gap: 10px; flex-shrink: 0; }
   .sm-dialog-title { font-size: calc(var(--sm-fs) + 1px); font-weight: 500; }
   .sm-dialog-sub { margin: 4px 0 0; font-size: calc(var(--sm-fs) - 2px); color: var(--dsw-alias-label-caption); }
   .sm-dialog-body { padding: 16px 20px; overflow-y: auto; min-height: 0; }
-  .sm-dialog-foot { padding: 14px 20px 18px; border-top: 1px solid var(--dsw-alias-border-l1); display: flex; justify-content: flex-end; gap: 8px; flex-shrink: 0; }
+  .sm-dialog.form .sm-dialog-body { padding-top: 38px; }
+  .sm-dialog.large .sm-dialog-body { padding-top: 18px; }
+  .sm-dialog-foot { min-height: 56px; padding: 12px 20px; border-top: 1px solid var(--dsw-alias-border-l1); display: flex; align-items: center; justify-content: flex-end; gap: 8px; flex-shrink: 0; }
   .sm-form-field { display: flex; flex-direction: column; gap: 6px; margin-bottom: 14px; }
   .sm-form-field:last-child { margin-bottom: 0; }
   .sm-form-label { font-size: calc(var(--sm-fs) - 2px); font-weight: 500; color: var(--dsw-alias-label-secondary); display: flex; justify-content: space-between; gap: 8px; }
   .sm-form-hint { font-size: calc(var(--sm-fs) - 3px); color: var(--dsw-alias-label-caption); font-weight: 400; }
   textarea.sm-input { height: auto; padding: 8px 12px; resize: vertical; min-height: 62px; line-height: 1.55; }
-  .sm-confirm { padding: 2px 0 4px; display: flex; flex-direction: column; gap: 10px; }
+  .sm-confirm { padding: 2px 0 4px; display: flex; flex-direction: column; gap: 12px; }
+  textarea.sm-input.sm-edit-body { min-height: 320px; font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace; font-size: calc(var(--sm-fs) - 2px); line-height: 1.65; }
+  .sm-dropzone {
+    padding: 28px 20px; border-radius: var(--dsw-radius-lg); text-align: center;
+    border: 1px dashed var(--dsw-alias-border-l3); background: var(--dsw-alias-bg-layer-1);
+    display: flex; flex-direction: column; align-items: center; gap: 8px;
+  }
+  .sm-dropzone-icon { color: var(--dsw-alias-label-caption); display: inline-flex; }
+  .sm-dropzone-title { font-size: calc(var(--sm-fs) - 1px); color: var(--dsw-alias-label-secondary); }
+  .sm-dropzone-hint { font-size: calc(var(--sm-fs) - 3px); color: var(--dsw-alias-label-caption); }
   .sm-confirm-ver { display: flex; align-items: center; gap: 8px; font-size: calc(var(--sm-fs) - 1px); color: var(--dsw-alias-label-secondary); flex-wrap: wrap; }
   .sm-confirm-ver .mono { color: var(--dsw-alias-label-primary); }
   .sm-confirm-note { font-size: calc(var(--sm-fs) - 2px); color: var(--dsw-alias-label-caption); line-height: 1.65; margin: 0; }
@@ -408,6 +428,8 @@
   .sm-menu-item .sm-menu-icon { display: inline-flex; color: var(--dsw-alias-label-secondary); width: 16px; }
   .sm-menu-item.danger { color: var(--dsw-alias-state-error-primary); }
   .sm-menu-item.danger .sm-menu-icon { color: var(--dsw-alias-state-error-primary); }
+  .sm-menu-item:disabled { opacity: .38; cursor: not-allowed; }
+  .sm-menu-item:disabled:hover { background: transparent; }
   .sm-menu-sep { height: 1px; background: var(--dsw-alias-border-l1); margin: 3px 4px; }
 
   #toast-host { position: fixed; bottom: 28px; left: 50%; transform: translateX(-50%); z-index: 1800; display: flex; flex-direction: column; gap: 8px; pointer-events: none; }
@@ -440,7 +462,7 @@
 <header class="pb" aria-label="原型画面切换">
   <div class="pb-left">
     <span class="pb-brand">DSH · 技能管理</span>
-    <span class="pb-ver">v3.0</span>
+    <span class="pb-ver">v3.1</span>
     <span class="pb-label">画面</span>
     <select id="screen-select" class="proto-select" onchange="applyScreen(this.value)" aria-label="切换原型画面"></select>
     <button class="proto-btn" onclick="stepScreen(-1)" title="上一画面">←</button>
@@ -453,7 +475,7 @@
       <option value="16">16px</option>
       <option value="12">12px</option>
     </select>
-    <span class="pb-date">v3.0 · 2026-11-09</span>
+    <span class="pb-date">v3.1 · 2026-11-09</span>
   </div>
 </header>
 
@@ -509,6 +531,8 @@ const ICONS = {
   alert: '<path stroke-linecap="round" stroke-linejoin="round" d="M12 9v3.75m-9.303 3.376c-.866 1.5.217 3.374 1.948 3.374h14.71c1.73 0 2.813-1.874 1.948-3.374L13.949 3.378c-.866-1.5-3.032-1.5-3.898 0L2.697 16.126zM12 15.75h.007v.008H12v-.008z"/>',
   info: '<path stroke-linecap="round" stroke-linejoin="round" d="M11.25 11.25l.041-.02a.75.75 0 011.063.852l-.708 2.836a.75.75 0 001.063.853l.041-.021M21 12a9 9 0 11-18 0 9 9 0 0118 0zm-9-3.75h.008v.008H12V8.25z"/>',
   'arrow-up': '<path stroke-linecap="round" stroke-linejoin="round" d="M12 19.5v-15m0 0l-6 6m6-6l6 6"/>',
+  'arrow-down': '<path stroke-linecap="round" stroke-linejoin="round" d="M12 4.5v15m0 0l6-6m-6 6l-6-6"/>',
+  'arrow-up-dot': '<path stroke-linecap="round" stroke-linejoin="round" d="M9.5 20.25V8.25m0 0l-4.5 4.5m4.5-4.5l4.5 4.5"/><circle cx="17.75" cy="5.5" r="2.25" fill="currentColor" stroke="none"/>',
   check: '<path stroke-linecap="round" stroke-linejoin="round" d="M4.5 12.75l6 6 9-13.5"/>',
   edit: '<path stroke-linecap="round" stroke-linejoin="round" d="M16.862 4.487l1.687-1.688a1.875 1.875 0 112.652 2.652L10.582 16.07a4.5 4.5 0 01-1.897 1.13L6 18l.8-2.685a4.5 4.5 0 011.13-1.897l8.932-8.931zM16.862 4.487L19.5 7.125"/>',
   trash: '<path stroke-linecap="round" stroke-linejoin="round" d="M14.74 9l-.346 9m-4.788 0L9.26 9m9.968-3.21c.342.052.682.107 1.022.166m-1.022-.165L18.16 19.673a2.25 2.25 0 01-2.244 2.077H8.084a2.25 2.25 0 01-2.244-2.077L4.772 5.79m14.456 0a48.108 48.108 0 00-3.478-.397m-12 .562c.34-.059.68-.114 1.022-.165m0 0a48.11 48.11 0 013.478-.397m7.5 0v-.916c0-1.18-.91-2.164-2.09-2.201a51.964 51.964 0 00-3.32 0c-1.18.037-2.09 1.022-2.09 2.201v.916m7.5 0a48.667 48.667 0 00-7.5 0"/>',
@@ -538,11 +562,11 @@ function icon(name, size) {
 /*************************************************************************
  * 1. 示例数据
  *************************************************************************/
-const GROUPS = [
-  { key: 'mine', title: '我的技能', sub: '我自己装的，只在这台机器可见' },
-  { key: 'shared', title: '共享技能', sub: '所有 Agent 都能用' },
-  { key: 'project', title: '项目技能', sub: '跟随当前项目' },
-  { key: 'system', title: '系统内置', sub: 'Harness 自带，只读' }
+const CATEGORIES = [
+  { key: 'mine', title: '我的技能', icon: 'user', emptyTitle: '还没有自己的技能', emptyDesc: '从市场装一个或新建一个。' },
+  { key: 'shared', title: '共享技能', icon: 'users', emptyTitle: '还没有共享技能', emptyDesc: '这里放所有 Agent 共用的技能。' },
+  { key: 'project', title: '项目技能', icon: 'folder', emptyTitle: '当前项目还没有技能', emptyDesc: '项目里的技能会显示在这里。' },
+  { key: 'system', title: '系统内置', icon: 'package', emptyTitle: '没有系统内置技能', emptyDesc: 'Harness 自带的技能都正常。' }
 ];
 
 const SKILLS = [
@@ -664,6 +688,7 @@ const MARKET = [
   {
     id: 'code-review', name: 'code-review', cat: '代码质量', version: '1.3.0',
     desc: '深度审查代码安全性、边界条件与并发问题，并给出修复建议。',
+    installed: true, installedVersion: '1.3.0',
     tags: ['安全', '代码审查'], author: 'deepseek-ai', license: 'MIT',
     sourceName: 'DSH 官方技能索引', sourceUrl: 'https://skills.deepseek.com/index.json',
     updated: '2026-11-05', engines: '>=0.2.1-rc.5 <0.3.0',
@@ -691,6 +716,7 @@ const MARKET = [
   {
     id: 'k8s-incident-triage', name: 'k8s-incident-triage', cat: '运维', version: '1.0.4',
     desc: '定位 Kubernetes 崩溃重启、内存溢出与网络策略故障的五步方法。',
+    installed: true, installedVersion: '0.9.5',
     tags: ['Kubernetes', '运维', '排障'], author: 'deepseek-ai', license: 'MIT',
     sourceName: 'DSH 官方技能索引', sourceUrl: 'https://skills.deepseek.com/index.json',
     updated: '2026-10-31', engines: '>=0.2.1-rc.5 <0.3.0',
@@ -724,23 +750,26 @@ const SOURCES = [
 ];
 
 const SCREENS = [
-  { id: 'list', label: '列表 · 默认态（内置折叠）', state: {} },
-  { id: 'builtin', label: '列表 · 系统内置展开', state: { groups: { system: true }, scrollTo: 'system' } },
-  { id: 'search', label: '列表 · 搜索有结果（office）', state: { search: 'office' } },
-  { id: 'search-empty', label: '列表 · 搜索无结果', state: { search: 'kubernetes' } },
-  { id: 'empty', label: '列表 · 空态', state: { empty: true } },
+  { id: 'list', label: '技能 · 我的技能（两列卡片）', state: {} },
+  { id: 'category-empty', label: '技能 · 分类空态（共享技能）', state: { category: 'shared', omit: ['ego-browser'] } },
+  { id: 'search', label: '技能 · 跨分类搜索（office）', state: { search: 'office' } },
+  { id: 'search-empty', label: '技能 · 搜索无结果', state: { search: 'kubernetes' } },
+  { id: 'empty', label: '技能 · 全局空态', state: { empty: true } },
   { id: 'detail', label: '详情 · 可写技能（git-commit）', state: { view: 'detail', detail: { kind: 'installed', id: 'git-commit' } } },
   { id: 'detail-builtin', label: '详情 · 内置只读（office）', state: { view: 'detail', detail: { kind: 'installed', id: 'office' } } },
   { id: 'diagnostics', label: '诊断抽屉 · 1 个未生效', state: { diagOpen: true } },
   { id: 'diagnostics-multi', label: '诊断抽屉 · 2 个问题（断链 + 同名）', state: { diagOpen: true, issueCount: 2 } },
-  { id: 'disabled', label: '列表 · 已停用行内状态', state: { highlight: 'legacy-jira-sync' } },
-  { id: 'market', label: '市场 · 有源有结果', state: { tab: 'market' } },
+  { id: 'disabled', label: '技能 · 已停用卡片', state: { highlight: 'legacy-jira-sync' } },
+  { id: 'market', label: '市场 · 按源分组', state: { tab: 'market' } },
+  { id: 'source-order', label: '市场 · 调整源顺序后', state: { tab: 'market', sourceOrder: ['team', 'official', 'legacy'] } },
   { id: 'market-empty', label: '市场 · 无源空态', state: { tab: 'market', noSources: true } },
   { id: 'market-detail', label: '市场详情 · 未安装', state: { tab: 'market', view: 'detail', detail: { kind: 'market', id: 'playwright-e2e-gen' } } },
-  { id: 'sources', label: '管理源抽屉', state: { tab: 'market', sourcesOpen: true } },
-  { id: 'modal-new', label: '弹窗 · 新建技能', state: { modal: { kind: 'new' } } },
-  { id: 'modal-update', label: '弹窗 · 更新确认', state: { modal: { kind: 'update', id: 'git-commit' } } },
-  { id: 'modal-uninstall', label: '弹窗 · 卸载确认', state: { modal: { kind: 'uninstall', id: 'git-commit' } } }
+  { id: 'sources', label: '管理源抽屉 · 排序', state: { tab: 'market', sourcesOpen: true } },
+  { id: 'modal-new', label: '弹窗 · 新建技能（488）', state: { modal: { kind: 'new' } } },
+  { id: 'modal-update', label: '弹窗 · 更新确认（480）', state: { modal: { kind: 'update', id: 'git-commit' } } },
+  { id: 'modal-uninstall', label: '弹窗 · 卸载确认（480）', state: { modal: { kind: 'uninstall', id: 'git-commit' } } },
+  { id: 'modal-import', label: '弹窗 · 导入技能（488）', state: { modal: { kind: 'import' } } },
+  { id: 'modal-source', label: '弹窗 · 添加索引源（488）', state: { modal: { kind: 'add-source' } } }
 ];
 
 /*************************************************************************
@@ -756,8 +785,8 @@ function baseState() {
     marketSearch: '',
     sort: 'name',
     marketSort: 'recommend',
-    marketCat: 'all',
-    groups: { mine: true, shared: true, project: true, system: false },
+    category: 'mine',
+    omit: [],
     empty: false,
     noSources: false,
     diagOpen: false,
@@ -767,7 +796,18 @@ function baseState() {
     issueCount: 1,
     highlight: null,
     menu: null,
-    sources: SOURCES.map(s => Object.assign({}, s))
+    saveTo: 'mine',
+    installTarget: 'mine',
+    sources: (() => {
+      const order = loadSourceOrder();
+      const list = SOURCES.map(s => Object.assign({}, s));
+      if (!order || !order.length) return list;
+      const rank = id => {
+        const idx = order.indexOf(id);
+        return idx < 0 ? order.length + 1 : idx;
+      };
+      return list.sort((a, b) => rank(a.id) - rank(b.id));
+    })()
   };
 }
 
@@ -778,12 +818,16 @@ function applyScreen(id) {
   const next = baseState();
   const patch = preset.state || {};
   Object.keys(patch).forEach(k => {
-    if (k === 'groups') {
-      next.groups = Object.assign({}, next.groups, patch.groups);
-    } else {
-      next[k] = patch[k];
-    }
+    next[k] = patch[k];
   });
+  if (patch.sourceOrder) {
+    const order = patch.sourceOrder;
+    next.sources.sort((a, b) => {
+      const ia = order.indexOf(a.id);
+      const ib = order.indexOf(b.id);
+      return (ia < 0 ? 999 : ia) - (ib < 0 ? 999 : ib);
+    });
+  }
   next.screen = preset.id;
   Object.keys(state).forEach(k => { delete state[k]; });
   Object.assign(state, next);
@@ -855,7 +899,36 @@ function codeBlock(text) {
 }
 
 function renderFooter() {
-  return '<footer class="sm-footer">v3.0 · 2026-11-09</footer>';
+  return '<footer class="sm-footer">v3.1 · 2026-11-09</footer>';
+}
+
+function visibleSkills() {
+  return SKILLS.filter(s => state.omit.indexOf(s.id) < 0);
+}
+
+function issueCountNow() {
+  if (state.empty) return 0;
+  if (state.issueFixed) return 0;
+  return state.issueCount === 2 ? 2 : 1;
+}
+
+function updateCountNow() {
+  if (state.empty) return 0;
+  return visibleSkills().filter(s => effectiveStatus(s) === 'active' && s.update).length;
+}
+
+function renderStatusIcons() {
+  const warn = issueCountNow();
+  const upd = updateCountNow();
+  let html = '<div class="sm-status-icons">';
+  if (warn > 0) {
+    html += `<button class="sm-status-btn warn" aria-label="查看未生效技能" data-tip="${warn} 个技能未生效" onclick="openDiag()">${icon('alert', 16)}</button>`;
+  }
+  if (upd > 0) {
+    html += `<button class="sm-status-btn update" aria-label="更新技能" data-tip="${upd} 个技能可以更新 · 上次检查 5 分钟前" onclick="openUpdateFlow()">${icon('arrow-up-dot', 16)}</button>`;
+  }
+  html += '</div>';
+  return html;
 }
 
 /*************************************************************************
@@ -894,16 +967,6 @@ function renderListHeader(tab) {
         <button class="sm-icon-btn" aria-label="更多" data-tip="更多：导入技能、检查更新" onclick="event.stopPropagation();openTopMenu(event)">${icon('more', 16)}</button>
       </div>`;
 
-  const meta = isMarket
-    ? (state.noSources
-        ? '<span class="sm-tabs-meta">还没有索引源</span>'
-        : '<span class="sm-tabs-meta">上次检查 5 分钟前</span>')
-    : (state.empty
-        ? '<span class="sm-tabs-meta">还没有技能</span>'
-        : `<button class="sm-meta-link" onclick="openModal('update','git-commit')" data-tip="检查更新在工具栏的 ⋯ 里">
-            ${icon('arrow-up', 13)} 1 个技能有更新 · 上次检查 5 分钟前
-          </button>`);
-
   return `
     <div class="sm-page-head">
       <div class="sm-page-heading">
@@ -917,36 +980,31 @@ function renderListHeader(tab) {
         <button class="sm-seg-tab" role="tab" aria-selected="${tab === 'skills' ? 'true' : 'false'}" onclick="switchTab('skills')">技能</button>
         <button class="sm-seg-tab" role="tab" aria-selected="${tab === 'market' ? 'true' : 'false'}" onclick="switchTab('market')">市场</button>
       </div>
-      ${meta}
+      ${renderStatusIcons()}
     </div>`;
-}
-
-function renderBanner() {
-  if (state.issueFixed) {
-    return `<div class="sm-banner sm-banner-ok">
-      <span class="sm-banner-icon">${icon('check', 16)}</span>
-      <div class="sm-banner-text"><strong>所有技能都已生效</strong><span>刚才的文件链接问题已经修复。</span></div>
-      <button class="sm-link brand" onclick="openDiag()">查看诊断</button>
-    </div>`;
-  }
-  const count = state.issueCount === 2 ? 2 : 1;
-  const summary = count === 2
-    ? 'code-review 与另一个技能同名，ego-browser 的文件链接已失效。'
-    : 'ego-browser 的文件链接已失效，Agent 现在用不到它。';
-  return `<div class="sm-banner sm-banner-warn">
-    <span class="sm-banner-icon">${icon('alert', 16)}</span>
-    <div class="sm-banner-text"><strong>${count} 个技能未生效</strong><span>${summary}</span></div>
-    <button class="sm-link" onclick="openDiag()">查看原因 →</button>
-  </div>`;
 }
 
 /*************************************************************************
  * 5. 技能 Tab
  *************************************************************************/
+function renderSubTabs(skills) {
+  return `<div class="sm-subtabs-row">
+    <div class="sm-subtabs" role="tablist" aria-label="技能分类">
+      ${CATEGORIES.map(c => {
+        const count = skills.filter(s => s.group === c.key).length;
+        return `<button class="sm-subtab" role="tab" aria-selected="${state.category === c.key ? 'true' : 'false'}"
+          onclick="switchCategory('${c.key}')">${c.title}<span class="sm-count-badge">${count}</span></button>`;
+      }).join('')}
+    </div>
+  </div>`;
+}
+
 function renderSkillsPage() {
   let content = renderListHeader('skills');
+  const skills = visibleSkills();
 
   if (state.empty) {
+    content += renderSubTabs(skills);
     content += `<div class="sm-empty">
       <div class="sm-empty-icon">${icon('skill', 40)}</div>
       <div class="sm-empty-title">还没有技能</div>
@@ -960,50 +1018,67 @@ function renderSkillsPage() {
     return '<div class="page-col">' + content + renderFooter() + '</div>';
   }
 
-  content += renderBanner();
-
   const q = state.search.trim().toLowerCase();
   const matches = s => {
     if (!q) return true;
     return (s.name + ' ' + s.desc + ' ' + (s.when || '')).toLowerCase().includes(q);
   };
-  const filtered = SKILLS.filter(matches);
 
-  if (q && filtered.length === 0) {
+  // 跨分类搜索：命中后自动切到第一个有结果的分类，搜索词保持不变
+  if (q) {
+    const allMatched = skills.filter(matches);
+    const first = CATEGORIES.filter(c => allMatched.some(s => s.group === c.key))[0];
+    if (first) state.category = first.key;
+  }
+
+  content += renderSubTabs(skills);
+  content += '<div class="sm-subview">';
+
+  if (q && skills.filter(matches).length === 0) {
     content += `<div class="sm-empty">
       <div class="sm-empty-icon">${icon('search', 36)}</div>
       <div class="sm-empty-title">没有匹配「${escapeHtml(state.search.trim())}」的技能</div>
       <div class="sm-empty-desc">换个关键词，或清除搜索看看全部技能。</div>
       <div class="sm-empty-actions"><button class="btn btn-secondary" onclick="clearSearch()">清除搜索</button></div>
     </div>`;
+    content += '</div>';
     return '<div class="page-col">' + content + renderFooter() + '</div>';
   }
 
-  let groupsHtml = '';
-  GROUPS.forEach(g => {
-    const items = filtered.filter(s => s.group === g.key);
-    if (items.length === 0) return;
-    const expanded = q ? true : state.groups[g.key];
-    const sorted = items.slice().sort((a, b) => {
-      if (state.sort === 'recent') return b.mtime - a.mtime;
-      return a.name.localeCompare(b.name);
-    });
-    groupsHtml += `<section class="sm-group" data-group="${g.key}" aria-label="${g.title}">
-      <button class="sm-group-head" aria-expanded="${expanded ? 'true' : 'false'}" onclick="toggleGroup('${g.key}')">
-        <span class="sm-chevron">${icon(expanded ? 'chevron-down' : 'chevron-right', 14)}</span>
-        <span class="sm-group-title">${g.title}</span>
-        <span class="sm-group-sub">${g.sub}</span>
-        <span class="sm-group-count">${sorted.length}</span>
-      </button>
-      ${expanded ? '<div class="sm-rows">' + sorted.map(renderSkillRow).join('') + '</div>' : ''}
-    </section>`;
+  const cat = CATEGORIES.find(c => c.key === state.category) || CATEGORIES[0];
+  const items = skills.filter(s => s.group === cat.key && matches(s));
+  const sorted = items.slice().sort((a, b) => {
+    if (state.sort === 'recent') return b.mtime - a.mtime;
+    return a.name.localeCompare(b.name);
   });
 
-  content += '<div class="sm-groups">' + groupsHtml + '</div>';
+  if (sorted.length === 0) {
+    // Built-in skills cannot be created by the user, so that category keeps a
+    // single exit (browse the market) instead of the two-action empty state.
+    const actions = cat.key === 'system'
+      ? `<div class="sm-empty-actions">
+        <button class="btn btn-secondary" onclick="switchTab('market')">去市场看看</button>
+      </div>`
+      : `<div class="sm-empty-actions">
+        <button class="btn btn-primary" onclick="switchTab('market')">去市场看看</button>
+        <button class="btn btn-secondary" onclick="openModal('new')">${icon('plus', 15)} 新建技能</button>
+      </div>`;
+    content += `<div class="sm-empty">
+      <div class="sm-empty-icon">${icon(cat.icon || 'skill', 40)}</div>
+      <div class="sm-empty-title">${cat.emptyTitle}</div>
+      <div class="sm-empty-desc">${cat.emptyDesc}</div>
+      ${actions}
+    </div>`;
+    content += '</div>';
+    return '<div class="page-col">' + content + renderFooter() + '</div>';
+  }
+
+  content += '<div class="sm-grid">' + sorted.map(renderSkillCard).join('') + '</div>';
+  content += '</div>';
   return '<div class="page-col">' + content + renderFooter() + '</div>';
 }
 
-function renderSkillRow(skill) {
+function renderSkillCard(skill) {
   const st = effectiveStatus(skill);
   const isDisabled = st === 'disabled';
   const isBroken = st === 'broken';
@@ -1014,19 +1089,25 @@ function renderSkillRow(skill) {
   if (isBroken) badges += '<span class="sm-badge warn">未生效</span>';
   if (isDisabled) badges += '<span class="sm-badge">已停用</span>';
 
-  return `<div class="sm-row${isDisabled ? ' is-disabled' : ''}${isHighlight ? ' is-highlight' : ''}" data-skill-id="${skill.id}" role="button" tabindex="0"
+  // The skills page lists what is already installed, so it never offers an
+  // install action; only an available update gets a primary button.
+  const primary = skill.update
+    ? `<button class="btn btn-primary btn-sm" onclick="event.stopPropagation();openModal('update','${skill.id}')">更新</button>`
+    : '';
+
+  return `<div class="sm-card-item${isDisabled ? ' is-disabled' : ''}${isHighlight ? ' is-highlight' : ''}" data-skill-id="${skill.id}" role="button" tabindex="0"
       onclick="openDetail('installed','${skill.id}')" onkeydown="if(event.key==='Enter') openDetail('installed','${skill.id}')">
-    <div class="sm-row-icon">${icon('skill', 24)}<span class="sm-dot ${statusDot(st)}" data-tip="${statusLabel(st)}"></span></div>
-    <div class="sm-row-main">
-      <div class="sm-row-title">
-        <span class="sm-name mono">${escapeHtml(skill.name)}</span>
+    <div class="sm-card-icon">${icon('skill', 22)}<span class="sm-dot ${statusDot(st)}" data-tip="${statusLabel(st)}"></span></div>
+    <div class="sm-card-main">
+      <div class="sm-card-title-row">
+        <span class="sm-card-name mono" title="${escapeHtml(skill.name)}">${escapeHtml(skill.name)}</span>
         ${badges ? '<span class="sm-tagbar">' + badges + '</span>' : ''}
       </div>
-      <div class="sm-desc">${escapeHtml(skill.desc)}</div>
+      <div class="sm-card-desc">${escapeHtml(skill.desc)}</div>
     </div>
-    <div class="sm-row-tail" onclick="event.stopPropagation()">
-      ${skill.update ? '<button class="btn btn-secondary btn-sm" onclick="openModal(\'update\',\'' + skill.id + '\')">更新</button>' : ''}
-      <button class="sm-icon-btn" aria-label="更多操作" data-tip="更多操作" onclick="event.stopPropagation();openRowMenu(event,'${skill.id}')">${icon('more', 16)}</button>
+    <div class="sm-card-tail" onclick="event.stopPropagation()">
+      ${primary}
+      <button class="sm-icon-btn plain sm-card-more" aria-label="更多操作" data-tip="更多操作" onclick="event.stopPropagation();openRowMenu(event,'${skill.id}')">${icon('more', 16)}</button>
     </div>
   </div>`;
 }
@@ -1036,8 +1117,9 @@ function renderSkillRow(skill) {
  *************************************************************************/
 function renderMarketPage() {
   let content = renderListHeader('market');
+  const enabled = state.sources.filter(s => s.enabled);
 
-  if (state.noSources) {
+  if (state.noSources || enabled.length === 0) {
     content += `<div class="sm-empty">
       <div class="sm-empty-icon">${icon('market', 40)}</div>
       <div class="sm-empty-title">还没有技能索引源</div>
@@ -1049,52 +1131,66 @@ function renderMarketPage() {
     return '<div class="page-col">' + content + renderFooter() + '</div>';
   }
 
-  const cats = ['all', '代码质量', '测试', '文档', '运维', '数据库'];
   const q = state.marketSearch.trim().toLowerCase();
-  let list = MARKET.filter(m => {
-    if (state.marketCat !== 'all' && m.cat !== state.marketCat) return false;
-    if (!q) return true;
-    return (m.name + ' ' + m.desc + ' ' + m.tags.join(' ')).toLowerCase().includes(q);
-  });
-  if (state.marketSort === 'name') list = list.slice().sort((a, b) => a.name.localeCompare(b.name));
-  if (state.marketSort === 'updated') list = list.slice().sort((a, b) => b.updated.localeCompare(a.updated));
+  const blocks = enabled.map(src => {
+    let list = MARKET.filter(m => m.sourceName === src.name && m.sourceUrl === src.url);
+    if (!q && list.length === 0) list = MARKET.filter(m => m.sourceName === src.name);
+    if (q) list = list.filter(m => (m.name + ' ' + m.desc + ' ' + m.tags.join(' ')).toLowerCase().includes(q));
+    if (state.marketSort === 'name') list = list.slice().sort((a, b) => a.name.localeCompare(b.name));
+    if (state.marketSort === 'updated') list = list.slice().sort((a, b) => b.updated.localeCompare(a.updated));
+    if (list.length === 0) return '';
+    const dot = src.status === 'ok' ? 'sm-dot-ok' : src.status === 'checking' ? 'sm-dot-update' : 'sm-dot-error';
+    return `<section class="sm-source-block" data-source-id="${src.id}">
+      <div class="sm-source-block-head">
+        <span class="sm-dot ${dot}" style="position:static;border:none;flex-shrink:0;" data-tip="${src.status === 'ok' ? '源正常' : src.status === 'checking' ? '正在检查' : '源有错误'}"></span>
+        <span class="sm-source-block-title">${escapeHtml(src.name)}</span>
+        <span class="sm-source-block-count">${list.length} 个技能</span>
+        <span class="sm-source-block-actions">
+          <button class="sm-icon-btn plain" style="width:28px;height:28px;border-radius:9px;" aria-label="源操作" data-tip="刷新 / 删除 / 上移 / 下移" onclick="event.stopPropagation();openSourceMenu(event,'${src.id}')">${icon('more', 16)}</button>
+        </span>
+      </div>
+      <div class="sm-grid">${list.map(renderMarketCard).join('')}</div>
+    </section>`;
+  }).filter(Boolean);
 
-  content += `<div class="sm-market-filters">
-    <div class="sm-chips" role="radiogroup" aria-label="分类">
-      ${cats.map(c => '<button class="sm-chip' + (state.marketCat === c ? ' active' : '') + '" onclick="setMarketCat(\'' + c + '\')">' + (c === 'all' ? '全部' : c) + '</button>').join('')}
-    </div>
-    <span class="sm-market-count">${list.length} 个技能 · ${state.sources.filter(s => s.enabled).length} 个源</span>
-  </div>`;
-
-  if (list.length === 0) {
+  if (blocks.length === 0) {
     content += `<div class="sm-empty">
       <div class="sm-empty-icon">${icon('search', 36)}</div>
       <div class="sm-empty-title">没有找到匹配的技能</div>
-      <div class="sm-empty-desc">换个关键词，或切换一个分类。</div>
-      <div class="sm-empty-actions"><button class="btn btn-secondary" onclick="clearMarketSearch()">清除筛选</button></div>
+      <div class="sm-empty-desc">换个关键词，或清除搜索看看全部来源。</div>
+      <div class="sm-empty-actions"><button class="btn btn-secondary" onclick="clearMarketSearch()">清除搜索</button></div>
     </div>`;
     return '<div class="page-col">' + content + renderFooter() + '</div>';
   }
 
-  content += '<div class="sm-market-rows">' + list.map(renderMarketRow).join('') + '</div>';
+  content += '<div class="sm-market-blocks">' + blocks.join('') + '</div>';
   return '<div class="page-col">' + content + renderFooter() + '</div>';
 }
 
-function renderMarketRow(item) {
-  const tags = item.tags.slice(0, 3).map(t => '<span class="sm-badge">' + escapeHtml(t) + '</span>').join('');
-  return `<div class="sm-row sm-market-row" data-market-id="${item.id}" role="button" tabindex="0"
+function renderMarketCard(item) {
+  const isInstalled = item.installed;
+  const hasUpdate = isInstalled && item.installedVersion && item.installedVersion !== item.version;
+  let primary;
+  if (!isInstalled) {
+    primary = `<button class="btn btn-primary btn-sm" onclick="event.stopPropagation();installSkill('${item.id}')">安装</button>`;
+  } else if (hasUpdate) {
+    primary = `<button class="btn btn-primary btn-sm" onclick="event.stopPropagation();updateMarketSkill('${item.id}')">更新</button>`;
+  } else {
+    primary = `<button class="btn btn-ghost btn-sm" onclick="event.stopPropagation();openDetail('market','${item.id}')">已安装</button>`;
+  }
+  return `<div class="sm-card-item" data-market-id="${item.id}" role="button" tabindex="0"
       onclick="openDetail('market','${item.id}')" onkeydown="if(event.key==='Enter') openDetail('market','${item.id}')">
-    <div class="sm-row-icon">${icon('skill', 24)}<span class="sm-dot sm-dot-idle" data-tip="未安装"></span></div>
-    <div class="sm-row-main">
-      <div class="sm-row-title">
-        <span class="sm-name mono">${escapeHtml(item.name)}</span>
-        <span class="fs-11 mono" style="color:var(--dsw-alias-label-caption);flex-shrink:0;">v${escapeHtml(item.version)}</span>
-        <span class="sm-tagbar">${tags}</span>
+    <div class="sm-card-icon">${icon('skill', 22)}<span class="sm-dot ${isInstalled ? 'sm-dot-ok' : 'sm-dot-idle'}" data-tip="${isInstalled ? '已安装' : '未安装'}"></span></div>
+    <div class="sm-card-main">
+      <div class="sm-card-title-row">
+        <span class="sm-card-name mono" title="${escapeHtml(item.name)}">${escapeHtml(item.name)}</span>
+        <span class="sm-badge mono">v${escapeHtml(item.version)}</span>
       </div>
-      <div class="sm-desc">${escapeHtml(item.desc)}</div>
+      <div class="sm-card-desc">${escapeHtml(item.desc)}</div>
     </div>
-    <div class="sm-row-tail" onclick="event.stopPropagation()">
-      <button class="btn btn-primary btn-sm" onclick="installSkill('${item.id}')">安装</button>
+    <div class="sm-card-tail" onclick="event.stopPropagation()">
+      ${primary}
+      <button class="sm-icon-btn plain sm-card-more" aria-label="更多操作" data-tip="更多操作" onclick="event.stopPropagation();openMarketMenu(event,'${item.id}')">${icon('more', 16)}</button>
     </div>
   </div>`;
 }
@@ -1125,7 +1221,7 @@ function renderInstalledDetail(skill) {
     actions += '<button class="btn btn-secondary" onclick="toast(\'已恢复 ' + skill.id + '（原型）\')">恢复技能</button>';
   } else if (!isReadonly) {
     if (skill.update) actions += '<button class="btn btn-primary" onclick="openModal(\'update\',\'' + skill.id + '\')">更新到 v' + skill.update + '</button>';
-    actions += '<button class="btn btn-secondary" onclick="toast(\'已进入编辑态（原型）\')">' + icon('edit', 15) + ' 编辑原文</button>';
+    actions += '<button class="btn btn-secondary" onclick="openModal(\'edit\',\'' + skill.id + '\')">' + icon('edit', 15) + ' 编辑原文</button>';
   } else {
     actions += '<button class="btn btn-secondary" onclick="copyCommand(\'' + skill.id + '\')">' + icon('copy', 15) + ' 复制调用命令</button>';
   }
@@ -1201,7 +1297,7 @@ function renderInstalledDetail(skill) {
             <span>SKILL.md</span>
             ${isReadonly
               ? '<span class="sm-badge">只读</span>'
-              : '<button class="btn btn-secondary btn-sm" onclick="toast(\'已进入编辑态（原型）\')">' + icon('edit', 14) + ' 编辑</button>'}
+              : '<button class="btn btn-secondary btn-sm" onclick="openModal(\'edit\',\'' + skill.id + '\')">' + icon('edit', 14) + ' 编辑</button>'}
           </div>
           ${codeBlock(skill.body)}
         </div>
@@ -1226,11 +1322,30 @@ function renderMarketDetail(item) {
   const tags = item.tags.map(t => '<span class="sm-badge">' + escapeHtml(t) + '</span>').join('');
   const target = state.installTarget || 'mine';
   const targetLabel = target === 'mine' ? '我的技能' : target === 'shared' ? '共享技能' : '项目技能';
+  const hasUpdate = item.installed && item.installedVersion && item.installedVersion !== item.version;
+  const headAction = !item.installed
+    ? `<button class="btn btn-primary" onclick="installSkill('${item.id}')">${icon('download', 15)} 安装</button>`
+    : hasUpdate
+      ? `<button class="btn btn-primary" onclick="updateMarketSkill('${item.id}')">${icon('arrow-up', 15)} 更新到 v${escapeHtml(item.version)}</button>`
+      : `<button class="btn btn-secondary" onclick="toast('${escapeHtml(item.name)} 已安装')">${icon('check', 15)} 已安装</button>`;
+  const installBody = !item.installed
+    ? `<div class="sm-form-field">
+            <span class="sm-form-label">安装到</span>
+            <div class="sm-choice-row">
+              <button class="sm-choice${target === 'mine' ? ' active' : ''}" onclick="setInstallTarget('mine')">我的技能</button>
+              <button class="sm-choice${target === 'shared' ? ' active' : ''}" onclick="setInstallTarget('shared')">共享技能</button>
+              <button class="sm-choice${target === 'project' ? ' active' : ''}" onclick="setInstallTarget('project')">项目技能</button>
+            </div>
+          </div>
+          <button class="btn btn-primary" onclick="installSkill('${item.id}')">${icon('download', 15)} 安装到${targetLabel}</button>
+          <p class="sm-confirm-note">安装后可以在「技能」Tab 里查看和停用。</p>`
+    : `<div class="sm-note neutral">已安装${hasUpdate ? '，当前版本 v' + escapeHtml(item.installedVersion) : ''}。可以在「技能」Tab 里查看、停用或卸载。</div>
+          ${hasUpdate ? `<button class="btn btn-primary" onclick="updateMarketSkill('${item.id}')">${icon('arrow-up', 15)} 更新到 v${escapeHtml(item.version)}</button>` : ''}`;
 
   return `
     <button class="sm-back" onclick="backToList()">← 返回</button>
     <div class="sm-detail-head">
-      <div class="sm-detail-icon">${icon('skill', 28)}<span class="sm-dot sm-dot-idle" data-tip="未安装"></span></div>
+      <div class="sm-detail-icon">${icon('skill', 28)}<span class="sm-dot ${item.installed ? 'sm-dot-ok' : 'sm-dot-idle'}" data-tip="${item.installed ? '已安装' : '未安装'}"></span></div>
       <div class="sm-detail-heading">
         <div class="sm-detail-title-line">
           <span class="sm-detail-name mono">${escapeHtml(item.name)}</span>
@@ -1239,9 +1354,7 @@ function renderMarketDetail(item) {
         </div>
         <div class="sm-detail-desc">${escapeHtml(item.desc)}</div>
       </div>
-      <div class="sm-detail-actions">
-        <button class="btn btn-primary" onclick="installSkill('${item.id}')">${icon('download', 15)} 安装</button>
-      </div>
+      <div class="sm-detail-actions">${headAction}</div>
     </div>
 
     <div class="sm-detail-grid">
@@ -1261,16 +1374,7 @@ function renderMarketDetail(item) {
       <div class="sm-detail-col">
         <div class="sm-card">
           <div class="sm-card-title">安装</div>
-          <div class="sm-form-field">
-            <span class="sm-form-label">安装到</span>
-            <div class="sm-choice-row">
-              <button class="sm-choice${target === 'mine' ? ' active' : ''}" onclick="setInstallTarget('mine')">我的技能</button>
-              <button class="sm-choice${target === 'shared' ? ' active' : ''}" onclick="setInstallTarget('shared')">共享技能</button>
-              <button class="sm-choice${target === 'project' ? ' active' : ''}" onclick="setInstallTarget('project')">项目技能</button>
-            </div>
-          </div>
-          <button class="btn btn-primary" onclick="installSkill('${item.id}')">${icon('download', 15)} 安装到${targetLabel}</button>
-          <p class="sm-confirm-note">安装后可以在「技能」Tab 里查看和停用。</p>
+          ${installBody}
         </div>
         <div class="sm-card">
           <div class="sm-card-title">详情</div>
@@ -1367,14 +1471,18 @@ function renderDiagnosticsDrawer() {
 }
 
 function renderSourcesDrawer() {
-  const rows = state.sources.map(src => {
+  const rows = state.sources.map((src, idx) => {
     const dot = src.status === 'ok' ? 'sm-dot-ok' : src.status === 'checking' ? 'sm-dot-update' : 'sm-dot-error';
+    const isFirst = idx === 0;
+    const isLast = idx === state.sources.length - 1;
     return `<div class="sm-source${src.enabled ? '' : ' is-off'}">
       <div class="sm-source-top">
         <span class="sm-dot ${dot}" data-tip="${src.status === 'ok' ? '正常' : src.status === 'checking' ? '正在检查' : '有错误'}"></span>
         <span class="sm-source-name">${escapeHtml(src.name)}</span>
         <span class="sm-badge">${src.count} 个技能</span>
         <span class="sm-source-actions">
+          <button class="sm-icon-btn plain" aria-label="上移 ${escapeHtml(src.name)}" data-tip="上移（优先级更高）" onclick="moveSource('${src.id}',-1)" ${isFirst ? 'disabled' : ''}>${icon('arrow-up', 14)}</button>
+          <button class="sm-icon-btn plain" aria-label="下移 ${escapeHtml(src.name)}" data-tip="下移" onclick="moveSource('${src.id}',1)" ${isLast ? 'disabled' : ''}>${icon('arrow-down', 14)}</button>
           <button class="sm-switch" role="switch" aria-checked="${src.enabled ? 'true' : 'false'}" aria-label="启用或停用 ${escapeHtml(src.name)}" onclick="toggleSource('${src.id}')"><span class="sm-switch-thumb"></span></button>
           <button class="sm-icon-btn plain" aria-label="刷新" data-tip="刷新" onclick="refreshSource('${src.id}')">${icon('refresh', 14)}</button>
           <button class="sm-icon-btn plain" aria-label="删除" data-tip="删除源" onclick="removeSource('${src.id}')">${icon('trash', 14)}</button>
@@ -1396,15 +1504,12 @@ function renderSourcesDrawer() {
         <button class="sm-icon-btn plain" aria-label="关闭" onclick="closeSources()">${icon('x', 16)}</button>
       </header>
       <div class="sm-drawer-body">
-        <p class="sm-drawer-intro">市场里的技能来自这些索引源。停用后不再检查更新，已安装的技能不受影响。</p>
+        <p class="sm-drawer-intro">市场里的技能来自这些索引源。排序即优先级：排在前面的源，其技能在市场中排在前面。停用后不再检查更新，已安装的技能不受影响。</p>
         ${rows}
         <div class="sm-add-source">
           <span class="sm-add-label">添加索引源</span>
-          <div class="sm-add-row">
-            <input id="new-source-url" class="sm-input mono" placeholder="https://…/index.json" aria-label="新索引源地址">
-            <button class="btn btn-primary btn-sm" onclick="addSource()">${icon('plus', 14)} 添加</button>
-          </div>
-          <p class="sm-confirm-note">支持 JSON 索引地址，添加后会先检查一次。</p>
+          <button class="btn btn-secondary" onclick="openModal('add-source')">${icon('plus', 15)} 添加索引源…</button>
+          <p class="sm-confirm-note">支持 JSON 索引地址，添加后会先检查一次。新源默认排在最后。</p>
         </div>
       </div>
     </aside>`;
@@ -1416,13 +1521,16 @@ function renderModal() {
   if (m.kind === 'new') return renderNewModal();
   if (m.kind === 'update') return renderUpdateModal();
   if (m.kind === 'uninstall') return renderUninstallModal();
+  if (m.kind === 'edit') return renderEditModal();
+  if (m.kind === 'add-source') return renderAddSourceModal();
+  if (m.kind === 'import') return renderImportModal();
   return '';
 }
 
 function renderNewModal() {
   const target = state.saveTo || 'mine';
   return `<div class="sm-modal-layer" onclick="if(event.target===this) closeModal()">
-    <div class="sm-dialog" role="dialog" aria-modal="true" aria-label="新建技能">
+    <div class="sm-dialog form" role="dialog" aria-modal="true" aria-label="新建技能">
       <div class="sm-dialog-head">
         <div>
           <div class="sm-dialog-title">新建技能</div>
@@ -1464,7 +1572,7 @@ function renderUpdateModal() {
   const id = state.modal.id || 'git-commit';
   const skill = SKILLS.find(s => s.id === id) || SKILLS[0];
   return `<div class="sm-modal-layer" onclick="if(event.target===this) closeModal()">
-    <div class="sm-dialog small" role="dialog" aria-modal="true" aria-label="更新确认">
+    <div class="sm-dialog confirm" role="dialog" aria-modal="true" aria-label="更新确认">
       <div class="sm-dialog-head">
         <div class="sm-dialog-title">更新 ${escapeHtml(skill.name)}？</div>
         <button class="sm-icon-btn plain" aria-label="关闭" onclick="closeModal()">${icon('x', 16)}</button>
@@ -1487,21 +1595,103 @@ function renderUpdateModal() {
 function renderUninstallModal() {
   const id = state.modal.id || 'git-commit';
   const skill = SKILLS.find(s => s.id === id) || SKILLS[0];
+  const verb = skill.market ? '卸载' : '删除';
+  const note = skill.market
+    ? '会从「我的技能」移除，文件移到备份目录，7 天内可以恢复。'
+    : '会从技能目录删除，文件移到备份目录，7 天内可以恢复。';
   return `<div class="sm-modal-layer" onclick="if(event.target===this) closeModal()">
-    <div class="sm-dialog small" role="dialog" aria-modal="true" aria-label="卸载确认">
+    <div class="sm-dialog confirm" role="dialog" aria-modal="true" aria-label="${verb}确认">
       <div class="sm-dialog-head">
-        <div class="sm-dialog-title">卸载 ${escapeHtml(skill.name)}？</div>
+        <div class="sm-dialog-title">${verb} ${escapeHtml(skill.name)}？</div>
         <button class="sm-icon-btn plain" aria-label="关闭" onclick="closeModal()">${icon('x', 16)}</button>
       </div>
       <div class="sm-dialog-body">
         <div class="sm-confirm">
-          <p class="sm-confirm-note">会从「我的技能」移除，文件移到备份目录，7 天内可以恢复。</p>
-          <p class="sm-confirm-note">卸载后 Agent 就不能再调用这个技能了。</p>
+          <p class="sm-confirm-note">${note}</p>
+          <p class="sm-confirm-note">${verb}后 Agent 就不能再调用这个技能了。</p>
         </div>
       </div>
       <div class="sm-dialog-foot">
         <button class="btn btn-ghost" onclick="closeModal()">取消</button>
-        <button class="btn btn-danger" onclick="doUninstall('${skill.id}')">卸载</button>
+        <button class="btn btn-danger" onclick="doUninstall('${skill.id}')">${verb}</button>
+      </div>
+    </div>
+  </div>`;
+}
+
+function renderEditModal() {
+  const id = state.modal.id || 'git-commit';
+  const skill = SKILLS.find(s => s.id === id) || SKILLS[0];
+  return `<div class="sm-modal-layer" onclick="if(event.target===this) closeModal()">
+    <div class="sm-dialog large" role="dialog" aria-modal="true" aria-label="编辑原文">
+      <div class="sm-dialog-head">
+        <div>
+          <div class="sm-dialog-title">编辑 ${escapeHtml(skill.name)}</div>
+          <p class="sm-dialog-sub">直接修改 SKILL.md 原文，保存后立即生效。</p>
+        </div>
+        <button class="sm-icon-btn plain" aria-label="关闭" onclick="closeModal()">${icon('x', 16)}</button>
+      </div>
+      <div class="sm-dialog-body">
+        <textarea id="edit-skill-body" class="sm-input sm-edit-body" spellcheck="false">${escapeHtml(skill.body)}</textarea>
+      </div>
+      <div class="sm-dialog-foot">
+        <button class="btn btn-ghost" onclick="closeModal()">取消</button>
+        <button class="btn btn-primary" onclick="saveEdit('${skill.id}')">保存</button>
+      </div>
+    </div>
+  </div>`;
+}
+
+function renderAddSourceModal() {
+  return `<div class="sm-modal-layer" onclick="if(event.target===this) closeModal()">
+    <div class="sm-dialog form" role="dialog" aria-modal="true" aria-label="添加索引源">
+      <div class="sm-dialog-head">
+        <div>
+          <div class="sm-dialog-title">添加索引源</div>
+          <p class="sm-dialog-sub">添加后会先检查一次，通过的技能会出现在市场里。</p>
+        </div>
+        <button class="sm-icon-btn plain" aria-label="关闭" onclick="closeModal()">${icon('x', 16)}</button>
+      </div>
+      <div class="sm-dialog-body">
+        <div class="sm-form-field">
+          <label class="sm-form-label" for="source-name">源名称 <span class="sm-form-hint">可选</span></label>
+          <input id="source-name" class="sm-input" value="我的技能索引" autocomplete="off">
+        </div>
+        <div class="sm-form-field">
+          <label class="sm-form-label" for="source-url">索引地址</label>
+          <input id="source-url" class="sm-input mono" placeholder="https://…/index.json" autocomplete="off">
+        </div>
+        <p class="sm-confirm-note">新添加的源默认排在最后；可在管理源抽屉里上移。</p>
+      </div>
+      <div class="sm-dialog-foot">
+        <button class="btn btn-ghost" onclick="closeModal()">取消</button>
+        <button class="btn btn-primary" onclick="createSource()">添加源</button>
+      </div>
+    </div>
+  </div>`;
+}
+
+function renderImportModal() {
+  return `<div class="sm-modal-layer" onclick="if(event.target===this) closeModal()">
+    <div class="sm-dialog form" role="dialog" aria-modal="true" aria-label="导入技能">
+      <div class="sm-dialog-head">
+        <div>
+          <div class="sm-dialog-title">导入技能</div>
+          <p class="sm-dialog-sub">把已有的 SKILL.md、技能文件夹或 .zip 导入到本地技能目录。</p>
+        </div>
+        <button class="sm-icon-btn plain" aria-label="关闭" onclick="closeModal()">${icon('x', 16)}</button>
+      </div>
+      <div class="sm-dialog-body">
+        <div class="sm-dropzone">
+          <span class="sm-dropzone-icon">${icon('upload', 28)}</span>
+          <span class="sm-dropzone-title">拖入文件或文件夹，或选择文件</span>
+          <span class="sm-dropzone-hint">支持 SKILL.md、文件夹与 .zip</span>
+          <button class="btn btn-secondary btn-sm" onclick="toast('已选择 skills.zip（原型）')">选择文件…</button>
+        </div>
+      </div>
+      <div class="sm-dialog-foot">
+        <button class="btn btn-ghost" onclick="closeModal()">取消</button>
+        <button class="btn btn-primary" onclick="doImport()">导入</button>
       </div>
     </div>
   </div>`;
@@ -1519,6 +1709,27 @@ function renderMenu() {
     items = `<button class="sm-menu-item" onclick="menuAction('import')"><span class="sm-menu-icon">${icon('upload', 15)}</span>导入技能</button>
       <button class="sm-menu-item" onclick="menuAction('check')"><span class="sm-menu-icon">${icon('refresh', 15)}</span>检查更新</button>
       <button class="sm-menu-item" onclick="menuAction('refresh')"><span class="sm-menu-icon">${icon('refresh', 15)}</span>刷新列表</button>`;
+  } else if (m.type === 'source') {
+    const src = state.sources.find(s => s.id === m.id);
+    if (!src) return '';
+    const idx = state.sources.indexOf(src);
+    items = `<button class="sm-menu-item" onclick="refreshSource('${src.id}')"><span class="sm-menu-icon">${icon('refresh', 15)}</span>刷新</button>
+      <button class="sm-menu-item danger" onclick="removeSource('${src.id}')"><span class="sm-menu-icon">${icon('trash', 15)}</span>删除源</button>
+      <div class="sm-menu-sep"></div>
+      <button class="sm-menu-item" onclick="moveSource('${src.id}',-1)" ${idx === 0 ? 'disabled' : ''}><span class="sm-menu-icon">${icon('arrow-up', 15)}</span>上移</button>
+      <button class="sm-menu-item" onclick="moveSource('${src.id}',1)" ${idx === state.sources.length - 1 ? 'disabled' : ''}><span class="sm-menu-icon">${icon('arrow-down', 15)}</span>下移</button>`;
+  } else if (m.type === 'market') {
+    const item = MARKET.find(x => x.id === m.id);
+    if (!item) return '';
+    const hasUpdate = item.installed && item.installedVersion && item.installedVersion !== item.version;
+    items = `<button class="sm-menu-item" onclick="menuAction('market-detail','${item.id}')"><span class="sm-menu-icon">${icon('skill', 15)}</span>查看详情</button>`;
+    if (!item.installed) {
+      items += `<button class="sm-menu-item" onclick="menuAction('market-install','${item.id}')"><span class="sm-menu-icon">${icon('download', 15)}</span>安装</button>`;
+    } else if (hasUpdate) {
+      items += `<button class="sm-menu-item" onclick="menuAction('market-update','${item.id}')"><span class="sm-menu-icon">${icon('arrow-up', 15)}</span>更新到 v${escapeHtml(item.version)}</button>`;
+    } else {
+      items += `<button class="sm-menu-item" disabled><span class="sm-menu-icon">${icon('check', 15)}</span>已安装</button>`;
+    }
   } else {
     const skill = SKILLS.find(s => s.id === m.id) || SKILLS[0];
     const st = effectiveStatus(skill);
@@ -1567,13 +1778,6 @@ function render() {
     }
   }
 
-  if (state.scrollTo) {
-    const target = state.scrollTo;
-    state.scrollTo = null;
-    const groupEl = document.querySelector('[data-group="' + target + '"]');
-    if (groupEl) groupEl.scrollIntoView({ block: 'start' });
-  }
-
   if (state.highlight) {
     const row = document.querySelector('[data-skill-id="' + state.highlight + '"]');
     if (row) row.scrollIntoView({ block: 'nearest' });
@@ -1606,7 +1810,6 @@ function clearSearch() {
 
 function clearMarketSearch() {
   state.marketSearch = '';
-  state.marketCat = 'all';
   render();
 }
 
@@ -1620,19 +1823,53 @@ function setMarketSort(value) {
   render();
 }
 
-function setMarketCat(value) {
-  state.marketCat = value;
+function switchCategory(key) {
+  state.category = key;
+  state.search = '';
+  state.highlight = null;
   render();
 }
 
-function toggleGroup(key) {
-  if (state.search) {
-    state.search = '';
-    state.groups[key] = true;
-  } else {
-    state.groups[key] = !state.groups[key];
+function sourceOrderStorageKey() {
+  return 'sm.v31.sourceOrder';
+}
+
+function loadSourceOrder() {
+  try {
+    const raw = localStorage.getItem(sourceOrderStorageKey());
+    if (!raw) return null;
+    const parsed = JSON.parse(raw);
+    return Array.isArray(parsed) ? parsed : null;
+  } catch {
+    return null;
   }
+}
+
+function saveSourceOrder() {
+  try {
+    localStorage.setItem(sourceOrderStorageKey(), JSON.stringify(state.sources.map(src => src.id)));
+  } catch {
+    /* storage may be unavailable in a sandboxed preview */
+  }
+}
+
+function moveSource(id, dir) {
+  const idx = state.sources.findIndex(s => s.id === id);
+  if (idx < 0) return;
+  const next = idx + dir;
+  if (next < 0 || next >= state.sources.length) return;
+  const moved = state.sources.splice(idx, 1)[0];
+  state.sources.splice(next, 0, moved);
+  state.menu = null;
+  saveSourceOrder();
   render();
+  toast('已' + (dir < 0 ? '上移' : '下移') + '「' + moved.name + '」，市场顺序已更新');
+}
+
+function openUpdateFlow() {
+  const skill = visibleSkills().find(s => effectiveStatus(s) === 'active' && s.update);
+  if (skill) openModal('update', skill.id);
+  else toast('当前没有可更新的技能');
 }
 
 function openDetail(kind, id) {
@@ -1710,17 +1947,20 @@ function removeSource(id) {
   toast('已删除这个源');
 }
 
-function addSource() {
-  const input = document.getElementById('new-source-url');
-  const url = input ? input.value.trim() : '';
+function createSource() {
+  const urlInput = document.getElementById('source-url');
+  const nameInput = document.getElementById('source-name');
+  const url = urlInput ? urlInput.value.trim() : '';
   if (!url) {
     toast('请先填入索引地址');
-    if (input) input.focus();
+    if (urlInput) urlInput.focus();
     return;
   }
+  const name = nameInput && nameInput.value.trim() ? nameInput.value.trim() : '新索引源';
+  const id = 'custom-' + Date.now();
   state.sources.push({
-    id: 'custom-' + Date.now(),
-    name: '新索引源',
+    id: id,
+    name: name,
     url: url,
     enabled: true,
     status: 'checking',
@@ -1728,16 +1968,23 @@ function addSource() {
     checked: '正在检查…',
     error: null
   });
+  state.modal = null;
   render();
   toast('已添加索引源，正在检查…');
   setTimeout(() => {
-    const added = state.sources[state.sources.length - 1];
-    if (!added || added.name !== '新索引源') return;
+    const added = state.sources.find(s => s.id === id);
+    if (!added) return;
     added.status = 'ok';
     added.checked = '刚刚';
     added.count = 3;
     render();
   }, 1200);
+}
+
+function doImport() {
+  state.modal = null;
+  render();
+  toast('已导入技能，正在检查 SKILL.md');
 }
 
 function openModal(kind, id) {
@@ -1776,13 +2023,44 @@ function doUpdate(id) {
 }
 
 function doUninstall(id) {
+  const skill = SKILLS.find(s => s.id === id);
+  const verb = skill && skill.market ? '卸载' : '删除';
   state.modal = null;
   render();
-  toast('已卸载 ' + id + '，文件已移到备份目录');
+  toast('已' + verb + ' ' + id + '，文件已移到备份目录');
+}
+
+function saveEdit(id) {
+  const el = document.getElementById('edit-skill-body');
+  const body = el ? el.value : '';
+  const skill = SKILLS.find(s => s.id === id);
+  if (skill && body) skill.body = body;
+  state.modal = null;
+  render();
+  toast('已保存 ' + id + ' 的 SKILL.md');
 }
 
 function installSkill(id) {
+  const item = MARKET.find(x => x.id === id);
+  if (item && item.installed) {
+    toast(id + ' 已经安装');
+    return;
+  }
+  if (item) {
+    item.installed = true;
+    item.installedVersion = item.version;
+  }
+  render();
   toast('已开始安装 ' + id + '…');
+}
+
+function updateMarketSkill(id) {
+  const item = MARKET.find(x => x.id === id);
+  if (!item) return;
+  item.installed = true;
+  item.installedVersion = item.version;
+  render();
+  toast('已更新 ' + id + ' 到 v' + item.version);
 }
 
 function copyText(text) {
@@ -1824,8 +2102,42 @@ function openTopMenu(e) {
   render();
 }
 
+function openSourceMenu(e, id) {
+  e.stopPropagation();
+  const r = e.currentTarget.getBoundingClientRect();
+  const width = 184;
+  let x = Math.min(Math.max(8, r.right - width), window.innerWidth - width - 8);
+  let y = r.bottom + 6;
+  if (y + 230 > window.innerHeight) y = Math.max(52, r.top - 230);
+  state.menu = { type: 'source', id: id, x: x, y: y };
+  render();
+}
+
+function openMarketMenu(e, id) {
+  e.stopPropagation();
+  const r = e.currentTarget.getBoundingClientRect();
+  const width = 184;
+  let x = Math.min(Math.max(8, r.right - width), window.innerWidth - width - 8);
+  let y = r.bottom + 6;
+  if (y + 120 > window.innerHeight) y = Math.max(52, r.top - 120);
+  state.menu = { type: 'market', id: id, x: x, y: y };
+  render();
+}
+
 function menuAction(action, id) {
   state.menu = null;
+  if (action === 'market-detail') {
+    openDetail('market', id);
+    return;
+  }
+  if (action === 'market-install') {
+    installSkill(id);
+    return;
+  }
+  if (action === 'market-update') {
+    updateMarketSkill(id);
+    return;
+  }
   if (action === 'detail') {
     openDetail('installed', id);
     return;
@@ -1857,8 +2169,7 @@ function menuAction(action, id) {
     return;
   }
   if (action === 'import') {
-    render();
-    toast('导入入口已打开（原型）');
+    openModal('import');
     return;
   }
   if (action === 'check') {
