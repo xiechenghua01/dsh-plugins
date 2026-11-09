@@ -9,314 +9,266 @@
     const DEFAULT_FONT_SIZE = 14
     const API_BASE = '/skill-manager/api/'
 
-    /** Display order, rank and writability of the seven installation roots. */
-    const LOCATION_ORDER = [
-        { id: 'project-dsh', label: '项目技能', key: 'loc.projectDsh', filterKey: 'project', rank: 100, layer: 'preset', writable: true },
-        { id: 'project-agents', label: '项目共享', key: 'loc.projectAgents', filterKey: 'projectShared', rank: 200, layer: 'preset', writable: true },
-        { id: 'custom', label: '自定义目录', key: 'loc.custom', filterKey: 'custom', rank: 300, layer: 'preset', writable: true },
-        { id: 'preset', label: '预设内置', key: 'loc.preset', filterKey: 'builtin', rank: 300, layer: 'preset', writable: false },
-        { id: 'user-dsh', label: '用户技能', key: 'loc.userDsh', filterKey: 'user', rank: 400, layer: 'preset', writable: true },
-        { id: 'user-agents', label: '用户共享', key: 'loc.userAgents', filterKey: 'userShared', rank: 500, layer: 'preset', writable: true },
-        { id: 'bundled', label: '插件内置', key: 'loc.bundled', filterKey: 'builtin', rank: 600, layer: 'global', writable: false },
-    ]
+    /** Shared dataTransfer key for source drag-and-drop (see 30-source-dialog). */
+    const DRAG_KEY = 'application/x-sm-source'
+
+    /** Secondary tabs of the skills page, in fixed display order. */
+    const SKILL_CATEGORIES = ['mine', 'shared', 'project', 'system']
+
+    /** Skills-page sort values (interaction spec: name / recently modified). */
+    const SKILL_SORTS = ['name', 'modified']
+
+    /** Market sort values (contract 3.5). */
+    const MARKET_SORTS = ['recommend', 'updated', 'name']
 
     /* ------------------------------------------------------------------ *
      * Locale dictionaries. zh/en must keep identical key sets.            *
      * Placeholders use {name} and are interpolated by t().                *
      * ------------------------------------------------------------------ */
 
-                            const zh = {
+        const zh = {
       'action.addSource': '添加源',
+      'action.back.market': '返回市场',
+      'action.back.skills': '返回技能列表',
+      'action.backup': '保留一份备份',
       'action.cancel': '取消',
-      'action.checkUpdates': '检查更新',
-      'action.clearFilter': '查看全部技能',
-      'action.clearSearch': '清除搜索',
+      'action.clear': '清除',
       'action.close': '关闭',
-      'action.collapse': '收起',
       'action.copyPath': '复制路径',
+      'action.create': '创建技能',
       'action.delete': '删除',
+      'action.deleteSource': '删除源',
       'action.disable': '停用',
-      'action.disableSkill': '停用技能',
-      'action.edit': '编辑',
-      'action.editContent': '编辑原文',
+      'action.disableSource': '停用源',
+      'action.edit': '编辑原文',
       'action.enable': '恢复',
-      'action.enableSkill': '恢复技能',
-      'action.expand': '展开',
+      'action.enableSource': '启用源',
+      'action.goMarket': '去市场看看',
       'action.import': '导入技能',
       'action.install': '安装',
-      'action.more': '更多操作',
+      'action.manageSources': '管理源',
+      'action.more': '更多',
       'action.newSkill': '新建技能',
-      'action.openFolder': '打开目录',
+      'action.openFile': '打开文件修正',
+      'action.parse': '解析',
       'action.refresh': '刷新',
+      'action.removeLink': '删除失效项',
       'action.retry': '重试',
       'action.save': '保存',
       'action.undo': '撤销',
       'action.uninstall': '卸载',
       'action.update': '更新',
+      'action.validate': '校验',
       'action.viewActive': '查看生效项',
-      'action.viewDetails': '查看详情',
-      'badge.builtin': '内置',
+      'action.viewDetail': '查看详情',
+      'action.viewFile': '查看并精简正文',
+      'action.viewInstalled': '查看技能',
       'badge.disabled': '已停用',
-      'badge.invalid': '格式异常',
-      'badge.model': '模型可用',
-      'badge.modelTip': '模型会按描述自动匹配调用',
+      'badge.issue': '未生效',
       'badge.readonly': '只读',
-      'badge.readonlyTip': '内置技能不支持修改',
-      'badge.shadowed': '被覆盖',
-      'badge.shadowedTip': '被更高优先级位置覆盖：{path}',
-      'badge.update': '有更新',
+      'badge.update': '可更新至 {version}',
       'badge.updateTip': '可升级至新版本 {version}',
-      'badge.user': '用户可调用',
-      'badge.userOnly': '仅用户可调用',
-      'badge.userTip': '可在对话中输入斜杠命令调用',
-      'banner.checking': '正在检查更新…',
-      'banner.issues': '{count} 个技能未生效，可能导致 Agent 行为与预期不符。',
-      'banner.unreadable': '无法读取技能目录 {path}，其余位置已正常加载。',
-      'banner.upToDate': '已是最新',
-      'banner.viewIssues': '查看原因',
-      'delete.confirm.body': '将删除 {path} 及其所有资源文件，无法撤销。',
-      'delete.confirm.title': '删除技能？',
-      'delete.success': '已删除 {name}',
-      'detail.allPresets': '所有预设共享',
+      'delete.body': '将删除 {name} 及其所有文件，无法撤销。',
+      'delete.readonly': '这个技能不能删除',
+      'delete.title': '删除技能？',
       'detail.author': '作者',
-      'detail.backInstalled': '返回已安装列表',
-      'detail.backMarket': '返回市场列表',
-      'detail.commit': 'Commit',
-      'detail.conflictMtime': '文件已被外部修改，请刷新后重试',
+      'detail.builtinNote': '系统内置，Harness 自带，不能修改。',
       'detail.content': '原文',
-      'detail.copyCommand': '复制调用命令',
-      'detail.description': '描述',
-      'detail.diagAfterInstall': '安装后可在此查看诊断',
-      'detail.diagOk': '未发现问题',
-      'detail.diagnostics': '诊断',
-      'detail.engines': '兼容 DSH',
-      'detail.escHint': 'Esc 返回列表',
-      'detail.files': '文件与资源',
-      'detail.installedAt': '安装时间',
-      'detail.invocation': '调用方式',
-      'detail.layer': '层',
-      'detail.license': '许可证',
-      'detail.localModified': '本地已修改',
-      'detail.location': '位置',
-      'detail.marketReadmeMissing': '该市场条目未提供 README',
-      'detail.meta': '元信息',
-      'detail.mtimeHint': '保存时校验文件修改时间',
-      'detail.noFiles': '没有可列出的文件',
-      'detail.notInstalled': '未安装',
-      'detail.notInstalledMeta': '未安装',
-      'detail.presetInvisible': '不可见',
-      'detail.provider': 'Provider',
-      'detail.source': '来源',
-      'detail.unsaved': '未保存',
-      'detail.updatedAt': '修改时间',
-      'detail.visibility': '可见性',
-      'detail.whenToUse': '何时使用',
-      'detail.whenToUseEmpty': '未填写「何时使用」',
-      'diag.error': '错误',
-      'diag.explain': '格式不合法的技能会被静默跳过，不进入模型目录。这里集中列出原因与修复方式。',
-      'diag.fix.openFile': '打开文件',
-      'diag.fix.removeLink': '移除链接',
-      'diag.fix.rename': '重命名',
-      'diag.fix.renameHint': '建议改名为 {name}',
-      'diag.fix.viewActive': '查看生效项',
-      'diag.fixed': '已处理 {name}',
-      'diag.info': '提示',
-      'diag.issuesCount': '{errors} 个错误 · {warnings} 个警告',
-      'diag.kind.brokenLink': '断链',
-      'diag.kind.crossLayer': '跨层覆盖',
-      'diag.kind.frontmatter': 'frontmatter 非法',
-      'diag.kind.name': '名称非法',
-      'diag.kind.oversize': '正文过大',
-      'diag.kind.sameLayer': '同层覆盖',
-      'diag.kind.unreadable': '目录不可读',
-      'diag.noActive': '找不到生效项',
-      'diag.none': '全部正常，没有发现问题',
-      'diag.open': '打开诊断',
+      'detail.content.empty': '正文为空',
+      'detail.copiedPath': '路径已复制',
+      'detail.descTitle': '描述',
+      'detail.disabledNote': '已停用。Agent 暂时看不到它，文件还在，可随时恢复。',
+      'detail.editHint': '如果文件在其他地方被修改，保存时会提醒你。',
+      'detail.location': '文件位置',
+      'detail.location.builtin': '由 Harness 内置提供，没有本地文件',
+      'detail.readonlyNote': '只读技能，不能修改或删除。',
+      'detail.source.local': '本地文件',
+      'detail.source.market': '来自市场：{source}',
+      'detail.status.active': '生效中',
+      'detail.status.builtin': '系统内置',
+      'detail.status.issue': '未生效',
+      'detail.updated': '最近修改 {time}',
+      'detail.version': '版本',
+      'detail.whenToUse': '什么时候用',
+      'diag.checkedAt': '上次检查 {time}',
+      'diag.details': '详细信息',
+      'diag.details.hide': '收起详细信息',
+      'diag.effective': '当前生效',
+      'diag.error.fixFailed': '没能处理这个问题：{reason}',
+      'diag.fix.manageSources': '去管理源处理',
+      'diag.fix.openFolder': '打开所在目录',
+      'diag.fixHint': '处理后会重新检查。',
+      'diag.kind': '类型',
+      'diag.note': '文件开头格式不对的技能会被跳过，不会出现在技能列表里。',
+      'diag.partial': '有些位置这次没检查到',
+      'diag.path': '路径',
       'diag.recheck': '重新检查',
-      'diag.title': '技能诊断',
-      'diag.viewReasons': '查看原因',
-      'diag.warning': '警告',
-      'empty.filter': '当前筛选下没有技能',
-      'empty.importAction': '导入技能',
-      'empty.installed.body': '从市场安装，或把 SKILL.md 放进技能目录。',
-      'empty.installed.title': '还没有可管理的技能',
-      'empty.market.noEnabledSource': '没有启用的市场源',
-      'empty.market.noEnabledSourceBody': '在「来源」中启用至少一个市场源。',
-      'empty.market.noSourceBody': '添加一个索引地址即可浏览技能。',
-      'empty.marketAction': '去市场安装',
-      'empty.newAction': '新建技能',
+      'diag.rechecking': '正在检查…',
+      'diag.section.attention': '需要留意',
+      'diag.section.inactive': '未生效',
+      'diag.sentence.brokenLink': '{name} 指向的位置已经不存在了。',
+      'diag.sentence.frontmatter': '{name} 的文件开头格式不对，Agent 读不到它。',
+      'diag.sentence.name': '{name} 的名字不符合规则：只能用小写字母、数字和连字符。',
+      'diag.sentence.oversize': '{name} 的内容比较大，加载会变慢，有些 Agent 可能读不全。',
+      'diag.sentence.sameName': '{name} 与『{group}』里的另一个技能同名，现在生效的是后者。',
+      'diag.sentence.sourceUnreachable': '{name} 来自市场源『{source}』，这个源暂时连不上；已安装的版本仍然能用，只是暂时不能检查更新。',
+      'diag.sentence.unreadable': '{name} 所在的文件夹打不开，可能是权限问题。',
+      'diag.summary': '{active} 个技能未生效 · {attention} 个需要留意',
+      'diag.title': '未生效与问题',
+      'diag.toast.fixed': '已处理',
+      'empty.diag.body': '没有发现问题。',
+      'empty.diag.title': '全部正常',
+      'empty.market.noResults.body': '换个关键词或分类试试。',
+      'empty.market.noResults.title': '没有匹配「{query}」的技能',
+      'empty.market.noSkills.body': '到「管理源」里看看，或稍后再试。',
+      'empty.market.noSkills.title': '这个源暂时没有技能',
+      'empty.market.noSource.body': '添加一个索引源，就能发现并安装社区技能。',
+      'empty.market.noSource.title': '还没有添加技能索引源',
       'empty.search': '没有匹配「{query}」的技能',
-      'error.badRequest': '请求参数不正确',
+      'empty.search.body': '换个关键词试试。',
+      'empty.sources.body': '添加后，市场里就能搜索和安装技能。',
+      'empty.sources.title': '还没有添加技能索引源',
+      'empty.tab.builtin': 'Harness 自带的技能都正常',
+      'empty.tab.mine': '还没有自己的技能，从市场装一个或新建一个',
+      'empty.tab.project': '当前项目还没有技能',
+      'empty.tab.shared': '这里放所有 Agent 共用的技能',
       'error.canceled': '已取消',
-      'error.checkUpdates': '无法检查更新',
       'error.checksum': '文件校验失败，安装已取消',
-      'error.frontmatter': '技能格式不正确',
       'error.generic': '发生未知错误',
-      'error.loadInstalled': '无法读取已安装技能',
-      'error.loadMarket': '无法读取市场',
-      'error.loadSources': '无法读取市场源',
-      'error.notFound': '找不到该技能',
+      'error.indexInvalid': '索引内容不正确',
+      'error.noCompatible': '没有与当前 Harness 兼容的版本',
+      'error.notEnoughSpace': '磁盘空间不足',
+      'error.notFound': '文件已被移动或删除',
       'error.pathOutside': '目标位置不允许写入',
-      'error.readLocation': '无法读取技能目录 {path}',
-      'error.readonly': '内置技能不支持修改',
-      'error.retryHint': '请检查权限后重试。',
-      'error.space': '磁盘空间不足',
-      'error.toggleState': '无法切换技能状态：{reason}',
-      'error.tooLarge': '技能文件过大',
+      'error.read': '无法读取技能目录',
+      'error.readonly': '系统内置技能不能修改',
+      'error.service': '技能服务未加载',
+      'error.service.body': '请重启 Harness 后再试。',
+      'error.sourceSchema': '索引格式不正确',
+      'error.stalePage': '列表已更新，请刷新后重试',
+      'error.tooLarge': '文件过大',
       'error.unauthorized': '当前页面未获授权',
-      'filter.all': '全部',
-      'filter.builtin': '内置',
-      'filter.custom': '自定义',
-      'filter.disabled': '已停用',
-      'filter.label': '按位置筛选',
-      'filter.project': '项目',
-      'filter.projectShared': '项目共享',
-      'filter.user': '用户',
-      'filter.userShared': '用户共享',
+      'error.unexpected': '出了点问题，请重试。',
+      'error.versionUnknown': '找不到这个版本',
       'form.body': '正文',
-      'form.bodyHint': 'Markdown 正文',
-      'form.bodyRequired': '请填写正文',
-      'form.create': '创建技能',
-      'form.description': '描述',
-      'form.descriptionHint': '一句话说明这个技能做什么',
-      'form.locationProjectDisabled': '当前没有项目目录',
+      'form.body.placeholder': '写下这个技能的说明与步骤。',
+      'form.body.required': '请填写正文。',
+      'form.description': '一句话描述',
+      'form.description.placeholder': '说明这个技能做什么',
+      'form.edit.dirty': '未保存',
+      'form.edit.discard.body': '关闭后，这次的修改不会保留。',
+      'form.edit.discard.confirm': '放弃修改',
+      'form.edit.discard.title': '放弃未保存的修改？',
+      'form.edit.title': '编辑原文',
+      'form.import.dir': '从文件夹导入',
+      'form.import.dir.placeholder': '输入技能文件夹的路径',
+      'form.import.invalid': '无法解析：{reason}',
+      'form.import.parsed': '解析成功',
+      'form.import.paste': '粘贴 SKILL.md',
+      'form.import.paste.placeholder': '把 SKILL.md 的内容粘贴到这里',
+      'form.import.preview': '将导入 {count} 个文件',
+      'form.import.title': '导入技能',
+      'form.mtimeConflict': '文件已被外部修改，请刷新后重试。',
       'form.name': '名称',
-      'form.nameHint': 'kebab-case，≤64 字符',
-      'form.nameInvalid': '名称只能使用小写字母、数字与连字符',
-      'form.nameTaken': '目标位置已有同名技能',
-      'form.urlRequired': '请填写索引地址',
-      'form.whenToUse': '何时使用',
-      'form.whenToUseHint': '选填，≤200 字',
-      'import.confirm': '导入技能',
-      'import.dir': '从目录导入',
-      'import.dirFilesHint': '将复制该目录下的 SKILL.md 与资源文件',
-      'import.dirLabel': '目录路径',
-      'import.parse': '解析',
-      'import.parseFail': '解析失败：{reason}',
-      'import.parseOk': '格式正确',
-      'import.parsing': '解析中…',
-      'import.paste': '粘贴 SKILL.md',
-      'import.pasteLabel': 'SKILL.md 内容',
-      'import.target': '保存到',
-      'import.title': '导入技能',
-      'install.button': '安装',
-      'install.conflict': '目标位置已有同名技能',
+      'form.name.invalid': '名称只能用小写字母、数字和连字符。',
+      'form.name.placeholder': '例如：code-review',
+      'form.name.taken': '这个位置已有同名技能。',
+      'form.new.title': '新建技能',
+      'form.projectUnavailable': '当前没有打开项目',
+      'form.saveTo': '保存到',
+      'form.whenToUse': '什么时候用（选填）',
+      'group.count': '{count} 个技能',
+      'group.local': '本地创建',
+      'install.cancelConfirm.body': '已写入的临时文件会被清理。',
+      'install.cancelConfirm.ok': '取消安装',
+      'install.cancelConfirm.title': '取消安装？',
+      'install.conflict': '这个位置已有同名技能',
       'install.conflict.changeTarget': '换位置',
       'install.conflict.overwrite': '覆盖',
       'install.conflict.skip': '跳过',
-      'install.failed': '安装失败：{reason}',
-      'install.installed': '已安装',
-      'install.noFreeLocation': '没有可用的安装位置',
-      'install.stageDownload': '下载文件',
-      'install.stageVerify': '校验 sha256',
-      'install.stageWrite': '写入磁盘',
+      'install.progress.preparing': '正在准备…',
+      'install.progress.verifying': '正在校验文件…',
       'install.success': '已安装 {name}',
       'install.target': '安装到',
       'install.title': '安装技能',
+      'install.unavailable': '暂时无法安装这个技能',
       'install.version': '版本',
-      'install.yanked': '已撤回',
-      'layer.global': '全局层',
-      'layer.preset': '预设层',
-      'loc.bundled': '插件内置',
-      'loc.custom': '自定义目录',
-      'loc.disabledGroup': '已停用',
-      'loc.disabledPath': '<root>/.disabled/',
-      'loc.groupCount': '{count} 个',
-      'loc.preset': '预设内置',
-      'loc.projectAgents': '项目共享',
-      'loc.projectDsh': '项目技能',
-      'loc.rank': 'rank {rank}',
-      'loc.userAgents': '用户共享',
-      'loc.userDsh': '用户技能',
-      'market.allSources': '全部启用源（{count} 个 · 共 {total} 个技能）',
-      'market.by': '{author} · {source}',
-      'market.dot.installed': '已安装',
-      'market.dot.notInstalled': '未安装',
-      'market.dot.update': '可更新',
-      'market.empty': '该源暂时没有技能',
-      'market.installedState': '已安装',
-      'market.loadMore': '加载更多',
-      'market.loading': '正在读取市场源…',
-      'market.manageSources': '管理源',
-      'market.offline': '无法连接市场源',
-      'market.sortRecommended': '推荐',
-      'market.sortUpdated': '最近更新',
-      'market.sourceLabel': '市场源',
-      'panel.description': '管理 Agent 可用的技能：安装、查看来源、修复未生效的条目。',
+      'market.author': '作者',
+      'market.detailDesc': '介绍',
+      'market.engines': '需要 Harness {range}',
+      'market.error.offline': '有些源暂时连不上，先显示上次的结果',
+      'market.error.offlineHint': '已安装的技能不受影响。',
+      'market.error.source': '这个源暂时读不了',
+      'market.error.sourceHint': '检查索引地址是否可访问，或换个源。',
+      'market.homepage': '主页',
+      'market.installed': '已安装',
+      'market.license': '许可证',
+      'market.loadingMore': '正在加载更多…',
+      'market.published': '发布于 {time}',
+      'market.readme': 'README',
+      'market.source': '来源',
+      'market.updateTo': '更新到 {version}',
+      'market.version': '版本',
+      'market.yanked': '该版本已撤回',
+      'panel.desc': '管理 Agent 可用的技能，看看哪些没生效。',
       'panel.title': '技能',
       'search.clear': '清除搜索',
-      'search.installed': '搜索技能名称或描述',
-      'search.market': '搜索市场技能',
+      'search.market.placeholder': '搜索市场技能',
       'sort.label': '排序',
-      'sort.location': '位置优先级',
       'sort.modified': '最近修改',
-      'sort.name': '名称',
-      'source.add.title': '添加市场源',
-      'source.added': '已添加源 {name}',
-      'source.delete': '删除源',
-      'source.deleteConfirm': '确定删除该市场源？已安装的技能不受影响。',
-      'source.deleteFailed': '删除失败：{reason}',
-      'source.disable': '停用',
+      'sort.name': '按名称',
+      'sort.recommended': '推荐',
+      'sort.updated': '最近更新',
+      'source.add.title': '添加技能索引源',
+      'source.confirmDelete.body': '已安装的技能不会被删除，但之后无法再检查更新。',
+      'source.confirmDelete.title': '删除这个源？',
       'source.disabled': '已停用',
-      'source.empty': '还没有添加市场源',
-      'source.enable': '启用',
-      'source.enabled': '已启用',
-      'source.error.fetch': '无法读取该源',
-      'source.error.path': '位置 {path}',
+      'source.dragHandle': '拖动排序',
+      'source.dragHint': '拖动调整顺序，越靠前优先级越高；也可用 Alt+↑ / Alt+↓。',
+      'source.error.fetch': '这个源暂时连不上',
+      'source.error.invalidUrl': '请输入有效的 https 地址',
+      'source.error.refreshFailed': '刷新失败，仍在显示上次成功读取的内容。',
+      'source.error.urlRequired': '请填写索引地址',
       'source.lastChecked': '上次检查 {time}',
-      'source.localPath': '本地目录',
-      'source.name': '源名称',
-      'source.neverChecked': '从未检查',
-      'source.preset.fallbackDesc': '由预设决定是否挂载本地发现',
-      'source.preset.mounted': '已挂载',
-      'source.preset.stats': '{skills} 个预设技能 · {roots} 个本地根',
-      'source.preset.unmounted': '未挂载',
-      'source.sample': '示例',
+      'source.name': '名称',
+      'source.name.placeholder': '选填，默认用索引标题',
+      'source.neverChecked': '尚未检查',
+      'source.orderBoundary': '已经在最前 / 最后面',
+      'source.orderMoved': '{name} 已移到第 {n} 位',
+      'source.preview': '示例：{names}',
+      'source.priorityHint': '排序即优先级：排在前面的源，其技能在市场中排在前面。',
       'source.skillCount': '{count} 个技能',
-      'source.stale': '缓存已过期',
-      'source.title': '标题',
+      'source.status.checking': '检查中',
+      'source.status.error': '连不上',
+      'source.status.ok': '正常',
+      'source.title': '管理源',
       'source.trust': '该源由第三方提供，安装前请确认来源可信。',
-      'source.type.index': '索引源',
-      'source.type.local': '本地目录',
       'source.url': '索引地址',
-      'source.validate': '校验',
+      'source.url.placeholder': 'https://…/index.json',
       'source.validated': '已读取 {count} 个技能',
-      'source.warnings': '{count} 条提示',
-      'sources.disabledCount': '{count} 个已停用',
-      'sources.locationsTitle': '本地安装位置',
-      'sources.marketTitle': '市场源',
-      'sources.minimalNoSkills': '该预设的 Agent 没有技能',
-      'sources.missingDir': '目录不存在，新建技能时会自动创建',
-      'sources.noLocations': '没有可用的安装位置',
-      'sources.noPresets': '没有可用的预设信息',
-      'sources.presetNote': '未挂载本地发现的预设，其 Agent 没有技能。',
-      'sources.presetsTitle': 'Agent 预设可见性',
-      'sources.priority': '同一预设内按 rank 排序；预设层覆盖全局层。',
-      'sources.priorityDetail': '被覆盖的技能在「诊断」中列出，可查看生效项或重命名。',
-      'sources.priorityTitle': '优先级规则',
-      'sources.skillCount': '{count} 个技能',
-      'sources.viewOverrides': '查看覆盖',
-      'sources.viewSkills': '查看技能',
-      'state.active': '生效中',
-      'state.disabled': '已停用',
-      'state.emptyDescription': '暂无描述',
-      'state.error': '加载失败',
-      'state.invalid': '格式异常，未进入模型目录',
-      'state.loadFailed': '加载失败',
-      'state.loading': '正在加载…',
-      'state.loadingInstalled': '正在读取已安装技能…',
-      'state.loadingUpdates': '正在检查更新…',
-      'state.readonly': '只读内置技能',
-      'state.shadowed': '被同名高优技能覆盖',
-      'state.unauthorized': '当前页面未获授权',
-      'status.missing': '目录不存在',
-      'status.readable': '可读',
-      'status.readonly': '内置技能不支持修改',
-      'status.unreadable': '不可读',
-      'tab.attention': '{count} 项需要关注',
-      'tab.installed': '已安装',
+      'state.error.detail.body': '文件可能已被移动或删除。',
+      'state.error.detail.title': '无法读取该技能',
+      'state.error.diag.title': '无法获取诊断结果',
+      'state.error.market.title': '无法读取市场',
+      'state.error.skills.body': '请检查服务是否已加载，然后重试。',
+      'state.error.skills.title': '无法加载技能列表',
+      'state.error.sources.body': '源列表暂时不可用，请稍后重试。',
+      'state.error.sources.title': '无法读取技能索引源',
+      'state.installing': '正在安装…',
+      'state.loading': '正在加载技能…',
+      'state.loadingMarket': '正在读取市场…',
+      'state.savingContent': '正在写入文件…',
+      'state.validating': '正在校验…',
+      'status.brokenTooltip': '{count} 个技能未生效',
+      'status.checking': '正在检查更新…',
+      'status.updatesTooltip': '{count} 个技能可以更新 · 上次检查 {time}',
+      'tab.category.mine': '我的技能',
+      'tab.category.project': '项目技能',
+      'tab.category.shared': '共享技能',
+      'tab.category.system': '系统内置',
       'tab.market': '市场',
-      'tab.sources': '来源',
+      'tab.skills': '技能',
+      'tab.skills.label': '技能分类',
       'time.daysAgo': '{count} 天前',
       'time.hoursAgo': '{count} 小时前',
       'time.justNow': '刚刚',
@@ -325,6 +277,7 @@
       'time.never': '从未',
       'time.unknown': '未知时间',
       'time.weeksAgo': '{count} 周前',
+      'toast.checkedSources': '已检查 {sources} 个源，{updates} 个技能可更新',
       'toast.copied': '已复制',
       'toast.copyFailed': '复制失败，请手动复制路径',
       'toast.created': '已创建技能 {name}',
@@ -332,329 +285,276 @@
       'toast.disabled': '已停用 {name}',
       'toast.enabled': '已恢复 {name}',
       'toast.imported': '已导入 {name}（{count} 个文件）',
+      'toast.noUpdates': '已检查 {sources} 个源，已是最新',
       'toast.openedFolder': '已打开目录：{path}',
-      'toast.refreshDone': '已刷新',
       'toast.saved': '已保存',
-      'toast.sourceDisabled': '已停用源 {name}',
-      'toast.sourceEnabled': '已启用源 {name}',
-      'toast.sourceRefreshFailed': '刷新失败：{reason}',
-      'toast.sourceRefreshed': '已刷新 {name}',
-      'toast.sourceToggleFailed': '操作失败：{reason}',
-      'uninstall.confirm.body': '将删除 {name} 及安装记录；不会影响其他技能。',
-      'uninstall.confirm.title': '卸载技能？',
-      'uninstall.keepBackup': '保留备份副本',
+      'toast.sourceAdded': '已添加源 {name}',
+      'toast.sourceDeleted': '已删除源 {name}',
+      'uninstall.body': '将删除 {name} 和安装记录；不会影响其他技能。',
+      'uninstall.readonly': '系统内置技能不能卸载',
       'uninstall.success': '已卸载 {name}',
-      'update.available': '有新版本 {version}',
-      'update.backupHint': '更新前会备份当前版本（保留最近 3 份）',
-      'update.banner': '{count} 个技能有更新',
-      'update.checkAll': '检查全部来源',
-      'update.checkNow': '检查更新',
-      'update.checking': '正在检查更新…',
-      'update.checkingShort': '检查中…',
-      'update.confirm': '更新',
-      'update.count': '{count} 个可更新',
-      'update.failed': '上次检查失败',
-      'update.item': '{name} {current} → {available}',
-      'update.lastChecked': '上次检查 {time}',
+      'uninstall.title': '卸载技能？',
+      'update.all.body': '将更新 {count} 个技能。',
+      'update.all.modified': '其中 {count} 个有本地修改，更新会覆盖这些修改。',
+      'update.all.title': '全部更新',
+      'update.backupNote': '更新前会自动备份当前版本。',
+      'update.cancelConfirm.body': '当前技能会保持原版本。',
+      'update.cancelConfirm.ok': '取消更新',
+      'update.cancelConfirm.title': '取消更新？',
       'update.localModified': '本地文件已修改，更新会覆盖这些修改。',
       'update.none': '已是最新',
-      'update.sourceCommit': '来源 commit',
+      'update.progress': '正在更新 {done}/{total}',
+      'update.result': '已更新 {ok} 个，失败 {failed} 个',
+      'update.result.ok': '全部更新完成',
+      'update.retryFailedCount': '重试失败的 {count} 个',
       'update.success': '已更新到 {version}',
-      'update.toast': '{count} 个技能有更新',
+      'update.title': '更新技能',
+      'update.versionChange': '{current} → {next}',
     }
 
-                            const en = {
+        const en = {
       'action.addSource': 'Add source',
+      'action.back.market': 'Back to market',
+      'action.back.skills': 'Back to skills',
+      'action.backup': 'Keep a backup',
       'action.cancel': 'Cancel',
-      'action.checkUpdates': 'Check for updates',
-      'action.clearFilter': 'Show all skills',
-      'action.clearSearch': 'Clear search',
+      'action.clear': 'Clear',
       'action.close': 'Close',
-      'action.collapse': 'Collapse',
       'action.copyPath': 'Copy path',
+      'action.create': 'Create skill',
       'action.delete': 'Delete',
+      'action.deleteSource': 'Delete source',
       'action.disable': 'Disable',
-      'action.disableSkill': 'Disable skill',
-      'action.edit': 'Edit',
-      'action.editContent': 'Edit source',
+      'action.disableSource': 'Disable source',
+      'action.edit': 'Edit content',
       'action.enable': 'Restore',
-      'action.enableSkill': 'Restore skill',
-      'action.expand': 'Expand',
+      'action.enableSource': 'Enable source',
+      'action.goMarket': 'Browse market',
       'action.import': 'Import skill',
       'action.install': 'Install',
-      'action.more': 'More actions',
+      'action.manageSources': 'Manage sources',
+      'action.more': 'More',
       'action.newSkill': 'New skill',
-      'action.openFolder': 'Open folder',
+      'action.openFile': 'Open file to fix',
+      'action.parse': 'Parse',
       'action.refresh': 'Refresh',
+      'action.removeLink': 'Remove broken item',
       'action.retry': 'Retry',
       'action.save': 'Save',
       'action.undo': 'Undo',
       'action.uninstall': 'Uninstall',
       'action.update': 'Update',
-      'action.viewActive': 'View active',
-      'action.viewDetails': 'View details',
-      'badge.builtin': 'Built-in',
+      'action.validate': 'Validate',
+      'action.viewActive': 'View active skill',
+      'action.viewDetail': 'View details',
+      'action.viewFile': 'View and trim content',
+      'action.viewInstalled': 'View skill',
       'badge.disabled': 'Disabled',
-      'badge.invalid': 'Invalid',
-      'badge.model': 'Model',
-      'badge.modelTip': 'The model can invoke this skill from its description',
+      'badge.issue': 'Not active',
       'badge.readonly': 'Read-only',
-      'badge.readonlyTip': 'Bundled skills are read-only',
-      'badge.shadowed': 'Shadowed',
-      'badge.shadowedTip': 'Shadowed by a higher priority location: {path}',
-      'badge.update': 'Update',
-      'badge.updateTip': 'Can upgrade to version {version}',
-      'badge.user': 'User',
-      'badge.userOnly': 'User only',
-      'badge.userTip': 'Invoke this skill with a slash command',
-      'banner.checking': 'Checking for updates…',
-      'banner.issues': '{count} skills are not active. Agent behavior may differ from expectations.',
-      'banner.unreadable': 'Could not read skill folder {path}. Other locations loaded normally.',
-      'banner.upToDate': 'Up to date',
-      'banner.viewIssues': 'View issues',
-      'delete.confirm.body': 'This deletes {path} and all its resources. This cannot be undone.',
-      'delete.confirm.title': 'Delete skill?',
-      'delete.success': 'Deleted {name}',
-      'detail.allPresets': 'Shared by all presets',
+      'badge.update': 'Update to {version}',
+      'badge.updateTip': 'Update available: {version}',
+      'delete.body': 'This deletes {name} and all its files. It cannot be undone.',
+      'delete.readonly': 'This skill cannot be deleted',
+      'delete.title': 'Delete skill?',
       'detail.author': 'Author',
-      'detail.backInstalled': 'Back to installed',
-      'detail.backMarket': 'Back to market',
-      'detail.commit': 'Commit',
-      'detail.conflictMtime': 'The file changed on disk; refresh and retry',
-      'detail.content': 'Source',
-      'detail.copyCommand': 'Copy command',
-      'detail.description': 'Description',
-      'detail.diagAfterInstall': 'Diagnostics appear after installation',
-      'detail.diagOk': 'No problems found',
-      'detail.diagnostics': 'Diagnostics',
-      'detail.engines': 'DSH engines',
-      'detail.escHint': 'Esc returns to the list',
-      'detail.files': 'Files and resources',
-      'detail.installedAt': 'Installed',
-      'detail.invocation': 'Invocation',
-      'detail.layer': 'Layer',
-      'detail.license': 'License',
-      'detail.localModified': 'Locally modified',
-      'detail.location': 'Location',
-      'detail.marketReadmeMissing': 'No README for this entry',
-      'detail.meta': 'Metadata',
-      'detail.mtimeHint': 'Save validates the file mtime',
-      'detail.noFiles': 'No files',
-      'detail.notInstalled': 'Not installed',
-      'detail.notInstalledMeta': 'Not installed',
-      'detail.presetInvisible': 'hidden',
-      'detail.provider': 'Provider',
-      'detail.source': 'Source',
-      'detail.unsaved': 'Unsaved',
-      'detail.updatedAt': 'Modified',
-      'detail.visibility': 'Visibility',
+      'detail.builtinNote': 'Built-in with Harness; it cannot be changed.',
+      'detail.content': 'Content',
+      'detail.content.empty': 'No content',
+      'detail.copiedPath': 'Path copied',
+      'detail.descTitle': 'Description',
+      'detail.disabledNote': 'Disabled. Agents cannot see it right now. Its files are kept and it can be restored.',
+      'detail.editHint': 'If the file changed elsewhere, you will be told before saving.',
+      'detail.location': 'File location',
+      'detail.location.builtin': 'Provided by Harness; there is no local file',
+      'detail.readonlyNote': 'This skill is read-only.',
+      'detail.source.local': 'Local file',
+      'detail.source.market': 'From market: {source}',
+      'detail.status.active': 'Active',
+      'detail.status.builtin': 'Built-in',
+      'detail.status.issue': 'Not active',
+      'detail.updated': 'Modified {time}',
+      'detail.version': 'Version',
       'detail.whenToUse': 'When to use',
-      'detail.whenToUseEmpty': 'No when-to-use text',
-      'diag.error': 'Error',
-      'diag.explain': 'Invalid skills are skipped silently. Fix them here.',
-      'diag.fix.openFile': 'Open file',
-      'diag.fix.removeLink': 'Remove link',
-      'diag.fix.rename': 'Rename',
-      'diag.fix.renameHint': 'Suggested name: {name}',
-      'diag.fix.viewActive': 'View active',
-      'diag.fixed': 'Fixed {name}',
-      'diag.info': 'Info',
-      'diag.issuesCount': '{errors} errors · {warnings} warnings',
-      'diag.kind.brokenLink': 'Broken link',
-      'diag.kind.crossLayer': 'Cross-layer shadow',
-      'diag.kind.frontmatter': 'Invalid frontmatter',
-      'diag.kind.name': 'Invalid name',
-      'diag.kind.oversize': 'Oversized',
-      'diag.kind.sameLayer': 'Same-layer shadow',
-      'diag.kind.unreadable': 'Unreadable',
-      'diag.noActive': 'No active skill found',
-      'diag.none': 'All clear. No problems found.',
-      'diag.open': 'Open diagnostics',
-      'diag.recheck': 'Re-check',
-      'diag.title': 'Skill diagnostics',
-      'diag.viewReasons': 'View reasons',
-      'diag.warning': 'Warning',
-      'empty.filter': 'No skills match this filter',
-      'empty.importAction': 'Import skill',
-      'empty.installed.body': 'Install from the market, or add a SKILL.md to a skill folder.',
-      'empty.installed.title': 'No skills yet',
-      'empty.market.noEnabledSource': 'No enabled market sources',
-      'empty.market.noEnabledSourceBody': 'Enable at least one market source in Sources.',
-      'empty.market.noSourceBody': 'Add an index URL to browse skills.',
-      'empty.marketAction': 'Browse market',
-      'empty.newAction': 'New skill',
+      'diag.checkedAt': 'Checked {time}',
+      'diag.details': 'Details',
+      'diag.details.hide': 'Hide details',
+      'diag.effective': 'Currently active',
+      'diag.error.fixFailed': 'Could not fix this: {reason}',
+      'diag.fix.manageSources': 'Go to sources',
+      'diag.fix.openFolder': 'Open containing folder',
+      'diag.fixHint': 'We will check again after this.',
+      'diag.kind': 'Type',
+      'diag.note': 'Skills with an invalid file header are skipped and will not appear in the skills list.',
+      'diag.partial': 'Some locations were not checked this time',
+      'diag.path': 'Path',
+      'diag.recheck': 'Check again',
+      'diag.rechecking': 'Checking…',
+      'diag.section.attention': 'Needs attention',
+      'diag.section.inactive': 'Not active',
+      'diag.sentence.brokenLink': 'The location {name} points to no longer exists.',
+      'diag.sentence.frontmatter': 'The file header for {name} is invalid, so agents cannot read it.',
+      'diag.sentence.name': 'The name {name} is invalid: use lowercase letters, numbers, and hyphens.',
+      'diag.sentence.oversize': '{name} is large; loading may be slower and some agents may not read all of it.',
+      'diag.sentence.sameName': 'Another skill in {group} has the same name as {name}; that one is currently active.',
+      'diag.sentence.sourceUnreachable': '{name} comes from the market source {source}, which cannot be reached right now. The installed version still works; updates just cannot be checked for now.',
+      'diag.sentence.unreadable': 'The folder for {name} cannot be opened; it may be a permissions issue.',
+      'diag.summary': '{active} not active · {attention} need attention',
+      'diag.title': 'Inactive and issues',
+      'diag.toast.fixed': 'Fixed',
+      'empty.diag.body': 'No problems found.',
+      'empty.diag.title': 'All clear',
+      'empty.market.noResults.body': 'Try another keyword or category.',
+      'empty.market.noResults.title': 'No skills match "{query}"',
+      'empty.market.noSkills.body': 'Check Manage sources, or try again later.',
+      'empty.market.noSkills.title': 'This source has no skills yet',
+      'empty.market.noSource.body': 'Add an index source to discover and install community skills.',
+      'empty.market.noSource.title': 'No skill index sources yet',
       'empty.search': 'No skills match "{query}"',
-      'error.badRequest': 'Invalid request',
-      'error.canceled': 'Cancelled',
-      'error.checkUpdates': 'Could not check for updates',
-      'error.checksum': 'Checksum failed; installation cancelled',
-      'error.frontmatter': 'Invalid skill format',
+      'empty.search.body': 'Try another keyword.',
+      'empty.sources.body': 'Add one to search and install skills in the market.',
+      'empty.sources.title': 'No skill index sources yet',
+      'empty.tab.builtin': 'Skills shipped with Harness are all set.',
+      'empty.tab.mine': 'You do not have any skills yet. Install one from the market or create one.',
+      'empty.tab.project': 'This project has no skills yet.',
+      'empty.tab.shared': 'Skills shared by all agents live here.',
+      'error.canceled': 'Canceled',
+      'error.checksum': 'File verification failed; installation was canceled',
       'error.generic': 'An unknown error occurred',
-      'error.loadInstalled': 'Could not read installed skills',
-      'error.loadMarket': 'Could not read the market',
-      'error.loadSources': 'Could not read market sources',
-      'error.notFound': 'Skill not found',
-      'error.pathOutside': 'That location is not writable',
-      'error.readLocation': 'Could not read skill folder {path}',
-      'error.readonly': 'Bundled skills are read-only',
-      'error.retryHint': 'Check permissions and try again.',
-      'error.space': 'Not enough disk space',
-      'error.toggleState': 'Could not change skill state: {reason}',
-      'error.tooLarge': 'Skill file too large',
+      'error.indexInvalid': 'The index content is invalid',
+      'error.noCompatible': 'No version is compatible with this Harness',
+      'error.notEnoughSpace': 'Not enough disk space',
+      'error.notFound': 'The file has been moved or deleted',
+      'error.pathOutside': 'This location does not allow writing',
+      'error.read': 'Could not read skill folders',
+      'error.readonly': 'Built-in skills cannot be changed',
+      'error.service': 'Skill service is not loaded',
+      'error.service.body': 'Restart Harness and try again.',
+      'error.sourceSchema': 'The source file is invalid',
+      'error.stalePage': 'The list has changed. Refresh and try again',
+      'error.tooLarge': 'The file is too large',
       'error.unauthorized': 'This page is not authorized',
-      'filter.all': 'All',
-      'filter.builtin': 'Bundled',
-      'filter.custom': 'Custom',
-      'filter.disabled': 'Disabled',
-      'filter.label': 'Filter by location',
-      'filter.project': 'Project',
-      'filter.projectShared': 'Project shared',
-      'filter.user': 'User',
-      'filter.userShared': 'User shared',
-      'form.body': 'Body',
-      'form.bodyHint': 'Markdown body',
-      'form.bodyRequired': 'Body is required',
-      'form.create': 'Create skill',
-      'form.description': 'Description',
-      'form.descriptionHint': 'One line describing what the skill does',
-      'form.locationProjectDisabled': 'No project directory',
+      'error.unexpected': 'Something went wrong. Try again.',
+      'error.versionUnknown': 'This version was not found',
+      'form.body': 'Content',
+      'form.body.placeholder': 'Write the instructions for this skill.',
+      'form.body.required': 'Enter content.',
+      'form.description': 'One-line description',
+      'form.description.placeholder': 'What does this skill do?',
+      'form.edit.dirty': 'Unsaved',
+      'form.edit.discard.body': 'Your changes will not be kept.',
+      'form.edit.discard.confirm': 'Discard',
+      'form.edit.discard.title': 'Discard unsaved changes?',
+      'form.edit.title': 'Edit content',
+      'form.import.dir': 'From folder',
+      'form.import.dir.placeholder': 'Enter the skill folder path',
+      'form.import.invalid': 'Could not parse: {reason}',
+      'form.import.parsed': 'Parsed',
+      'form.import.paste': 'Paste SKILL.md',
+      'form.import.paste.placeholder': 'Paste the contents of SKILL.md here',
+      'form.import.preview': '{count} files will be imported',
+      'form.import.title': 'Import skill',
+      'form.mtimeConflict': 'The file changed elsewhere. Refresh and try again.',
       'form.name': 'Name',
-      'form.nameHint': 'kebab-case, 64 chars or fewer',
-      'form.nameInvalid': 'Use lowercase letters, digits and hyphens',
-      'form.nameTaken': 'A skill with this name already exists',
-      'form.urlRequired': 'Index URL is required',
-      'form.whenToUse': 'When to use',
-      'form.whenToUseHint': 'Optional, 200 chars or fewer',
-      'import.confirm': 'Import skill',
-      'import.dir': 'From folder',
-      'import.dirFilesHint': 'Copies SKILL.md and resources from that folder',
-      'import.dirLabel': 'Folder path',
-      'import.parse': 'Parse',
-      'import.parseFail': 'Parse failed: {reason}',
-      'import.parseOk': 'Looks valid',
-      'import.parsing': 'Parsing…',
-      'import.paste': 'Paste SKILL.md',
-      'import.pasteLabel': 'SKILL.md content',
-      'import.target': 'Save to',
-      'import.title': 'Import skill',
-      'install.button': 'Install',
+      'form.name.invalid': 'Use lowercase letters, numbers, and hyphens.',
+      'form.name.placeholder': 'e.g. code-review',
+      'form.name.taken': 'A skill with this name already exists here.',
+      'form.new.title': 'New skill',
+      'form.projectUnavailable': 'No project is open',
+      'form.saveTo': 'Save to',
+      'form.whenToUse': 'When to use (optional)',
+      'group.count': '{count} skills',
+      'group.local': 'Created locally',
+      'install.cancelConfirm.body': 'Temporary files will be cleaned up.',
+      'install.cancelConfirm.ok': 'Cancel installation',
+      'install.cancelConfirm.title': 'Cancel installation?',
       'install.conflict': 'A skill with this name already exists here',
       'install.conflict.changeTarget': 'Change location',
       'install.conflict.overwrite': 'Overwrite',
       'install.conflict.skip': 'Skip',
-      'install.failed': 'Install failed: {reason}',
-      'install.installed': 'Installed',
-      'install.noFreeLocation': 'No writable location',
-      'install.stageDownload': 'Downloading',
-      'install.stageVerify': 'Verifying',
-      'install.stageWrite': 'Writing',
+      'install.progress.preparing': 'Preparing…',
+      'install.progress.verifying': 'Verifying files…',
       'install.success': 'Installed {name}',
       'install.target': 'Install to',
       'install.title': 'Install skill',
+      'install.unavailable': 'This skill cannot be installed right now',
       'install.version': 'Version',
-      'install.yanked': 'Yanked',
-      'layer.global': 'Global',
-      'layer.preset': 'Preset',
-      'loc.bundled': 'Bundled',
-      'loc.custom': 'Custom folder',
-      'loc.disabledGroup': 'Disabled',
-      'loc.disabledPath': '<root>/.disabled/',
-      'loc.groupCount': '{count} skills',
-      'loc.preset': 'Preset built-in',
-      'loc.projectAgents': 'Project shared',
-      'loc.projectDsh': 'Project',
-      'loc.rank': 'rank {rank}',
-      'loc.userAgents': 'User shared',
-      'loc.userDsh': 'User',
-      'market.allSources': 'All enabled sources ({count} · {total} skills)',
-      'market.by': '{author} · {source}',
-      'market.dot.installed': 'Installed',
-      'market.dot.notInstalled': 'Not installed',
-      'market.dot.update': 'Update available',
-      'market.empty': 'This source has no skills',
-      'market.installedState': 'Installed',
-      'market.loadMore': 'Load more',
-      'market.loading': 'Reading market sources…',
-      'market.manageSources': 'Manage sources',
-      'market.offline': 'Cannot reach the market source',
-      'market.sortRecommended': 'Recommended',
-      'market.sortUpdated': 'Recently updated',
-      'market.sourceLabel': 'Market source',
-      'panel.description': 'Manage the skills available to agents: install, inspect sources, and fix inactive entries.',
+      'market.author': 'Author',
+      'market.detailDesc': 'About',
+      'market.engines': 'Requires Harness {range}',
+      'market.error.offline': 'Some sources cannot be reached; showing the last result',
+      'market.error.offlineHint': 'Installed skills are not affected.',
+      'market.error.source': 'This source cannot be read right now',
+      'market.error.sourceHint': 'Check that the index URL is reachable, or pick another source.',
+      'market.homepage': 'Homepage',
+      'market.installed': 'Installed',
+      'market.license': 'License',
+      'market.loadingMore': 'Loading more…',
+      'market.published': 'Published {time}',
+      'market.readme': 'README',
+      'market.source': 'Source',
+      'market.updateTo': 'Update to {version}',
+      'market.version': 'Version',
+      'market.yanked': 'This version was withdrawn',
+      'panel.desc': 'Manage the skills available to agents and see what is not working.',
       'panel.title': 'Skills',
       'search.clear': 'Clear search',
-      'search.installed': 'Search skills',
-      'search.market': 'Search market skills',
+      'search.market.placeholder': 'Search market',
       'sort.label': 'Sort',
-      'sort.location': 'Location priority',
       'sort.modified': 'Recently modified',
       'sort.name': 'Name',
-      'source.add.title': 'Add market source',
-      'source.added': 'Added source {name}',
-      'source.delete': 'Delete source',
-      'source.deleteConfirm': 'Delete this source? Installed skills are unaffected.',
-      'source.deleteFailed': 'Delete failed: {reason}',
-      'source.disable': 'Disable',
+      'sort.recommended': 'Recommended',
+      'sort.updated': 'Recently updated',
+      'source.add.title': 'Add skill index source',
+      'source.confirmDelete.body': 'Installed skills will not be deleted, but they cannot be checked for updates afterward.',
+      'source.confirmDelete.title': 'Delete this source?',
       'source.disabled': 'Disabled',
-      'source.empty': 'No market sources yet',
-      'source.enable': 'Enable',
-      'source.enabled': 'Enabled',
-      'source.error.fetch': 'Could not read this source',
-      'source.error.path': 'At {path}',
-      'source.lastChecked': 'Last checked {time}',
-      'source.localPath': 'Local folder',
-      'source.name': 'Source name',
+      'source.dragHandle': 'Drag to reorder',
+      'source.dragHint': 'Drag to reorder; higher means higher priority. You can also use Alt+↑ / Alt+↓.',
+      'source.error.fetch': 'This source cannot be reached right now',
+      'source.error.invalidUrl': 'Enter a valid https URL',
+      'source.error.refreshFailed': 'Refresh failed; showing the last successfully loaded content.',
+      'source.error.urlRequired': 'Enter an index URL',
+      'source.lastChecked': 'Checked {time}',
+      'source.name': 'Name',
+      'source.name.placeholder': 'Optional; uses the index title',
       'source.neverChecked': 'Never checked',
-      'source.preset.fallbackDesc': 'The preset decides local discovery',
-      'source.preset.mounted': 'Mounted',
-      'source.preset.stats': '{skills} preset skills · {roots} roots',
-      'source.preset.unmounted': 'Not mounted',
-      'source.sample': 'Sample',
+      'source.orderBoundary': 'Already at the top / bottom',
+      'source.orderMoved': '{name} moved to position {n}',
+      'source.preview': 'Preview: {names}',
+      'source.priorityHint': 'Order is priority: skills from sources higher in the list appear first in the market.',
       'source.skillCount': '{count} skills',
-      'source.stale': 'Stale',
-      'source.title': 'Title',
-      'source.trust': 'This source is provided by a third party. Verify trust before installing.',
-      'source.type.index': 'Index',
-      'source.type.local': 'Local folder',
+      'source.status.checking': 'Checking',
+      'source.status.error': 'Unreachable',
+      'source.status.ok': 'OK',
+      'source.title': 'Sources',
+      'source.trust': 'This is a third-party source. Verify it before installing.',
       'source.url': 'Index URL',
-      'source.validate': 'Validate',
+      'source.url.placeholder': 'https://…/index.json',
       'source.validated': 'Found {count} skills',
-      'source.warnings': '{count} warnings',
-      'sources.disabledCount': '{count} disabled',
-      'sources.locationsTitle': 'Local install locations',
-      'sources.marketTitle': 'Market sources',
-      'sources.minimalNoSkills': 'This preset gives its agent no skills',
-      'sources.missingDir': 'Folder does not exist yet; it is created on demand',
-      'sources.noLocations': 'No install locations',
-      'sources.noPresets': 'No preset information',
-      'sources.presetNote': 'Presets without local discovery give their agents no skills.',
-      'sources.presetsTitle': 'Agent preset visibility',
-      'sources.priority': 'Within a preset, lower rank wins; preset layers override the global layer.',
-      'sources.priorityDetail': 'Shadowed skills appear in Diagnostics; view the active one or rename.',
-      'sources.priorityTitle': 'Priority rules',
-      'sources.skillCount': '{count} skills',
-      'sources.viewOverrides': 'View overrides',
-      'sources.viewSkills': 'View skills',
-      'state.active': 'Active',
-      'state.disabled': 'Disabled',
-      'state.emptyDescription': 'No description',
-      'state.error': 'Load failed',
-      'state.invalid': 'Invalid format; skipped by the model catalog',
-      'state.loadFailed': 'Load failed',
-      'state.loading': 'Loading…',
-      'state.loadingInstalled': 'Reading installed skills…',
-      'state.loadingUpdates': 'Checking for updates…',
-      'state.readonly': 'Read-only bundled skill',
-      'state.shadowed': 'Shadowed by a higher priority skill with the same name',
-      'state.unauthorized': 'This page is not authorized',
-      'status.missing': 'Missing',
-      'status.readable': 'Readable',
-      'status.readonly': 'Bundled skills are read-only',
-      'status.unreadable': 'Unreadable',
-      'tab.attention': '{count} items need attention',
-      'tab.installed': 'Installed',
+      'state.error.detail.body': 'The file may have moved or been deleted.',
+      'state.error.detail.title': 'Could not load this skill',
+      'state.error.diag.title': 'Could not load diagnostics',
+      'state.error.market.title': 'Could not load market',
+      'state.error.skills.body': 'Check that the service is running, then retry.',
+      'state.error.skills.title': 'Could not load skills',
+      'state.error.sources.body': 'Sources are unavailable right now. Try again later.',
+      'state.error.sources.title': 'Could not load sources',
+      'state.installing': 'Installing…',
+      'state.loading': 'Loading skills…',
+      'state.loadingMarket': 'Loading market…',
+      'state.savingContent': 'Saving file…',
+      'state.validating': 'Validating…',
+      'status.brokenTooltip': '{count} skills are not active',
+      'status.checking': 'Checking for updates…',
+      'status.updatesTooltip': '{count} skills can be updated · Checked {time}',
+      'tab.category.mine': 'My skills',
+      'tab.category.project': 'Project skills',
+      'tab.category.shared': 'Shared skills',
+      'tab.category.system': 'Built-in',
       'tab.market': 'Market',
-      'tab.sources': 'Sources',
+      'tab.skills': 'Skills',
+      'tab.skills.label': 'Skill categories',
       'time.daysAgo': '{count} days ago',
       'time.hoursAgo': '{count} hours ago',
       'time.justNow': 'just now',
@@ -663,88 +563,88 @@
       'time.never': 'Never',
       'time.unknown': 'Unknown time',
       'time.weeksAgo': '{count} weeks ago',
+      'toast.checkedSources': 'Checked {sources} sources; {updates} skills can be updated',
       'toast.copied': 'Copied',
       'toast.copyFailed': 'Copy failed. Copy the path manually.',
-      'toast.created': 'Created {name}',
+      'toast.created': 'Created skill {name}',
       'toast.deleted': 'Deleted {name}',
       'toast.disabled': 'Disabled {name}',
       'toast.enabled': 'Restored {name}',
       'toast.imported': 'Imported {name} ({count} files)',
+      'toast.noUpdates': 'Checked {sources} sources; everything is up to date',
       'toast.openedFolder': 'Opened folder: {path}',
-      'toast.refreshDone': 'Refreshed',
       'toast.saved': 'Saved',
-      'toast.sourceDisabled': 'Disabled source {name}',
-      'toast.sourceEnabled': 'Enabled source {name}',
-      'toast.sourceRefreshFailed': 'Refresh failed: {reason}',
-      'toast.sourceRefreshed': 'Refreshed {name}',
-      'toast.sourceToggleFailed': 'Failed: {reason}',
-      'uninstall.confirm.body': 'This removes {name} and its install record. Other skills are unaffected.',
-      'uninstall.confirm.title': 'Uninstall skill?',
-      'uninstall.keepBackup': 'Keep a backup copy',
+      'toast.sourceAdded': 'Added source {name}',
+      'toast.sourceDeleted': 'Deleted source {name}',
+      'uninstall.body': 'This removes {name} and its install record. Other skills are unaffected.',
+      'uninstall.readonly': 'Built-in skills cannot be uninstalled',
       'uninstall.success': 'Uninstalled {name}',
-      'update.available': 'Version {version} available',
-      'update.backupHint': 'The current version is backed up (last 3 kept)',
-      'update.banner': '{count} skills have updates',
-      'update.checkAll': 'Check all sources',
-      'update.checkNow': 'Check for updates',
-      'update.checking': 'Checking for updates…',
-      'update.checkingShort': 'Checking…',
-      'update.confirm': 'Update',
-      'update.count': '{count} updatable',
-      'update.failed': 'Last check failed',
-      'update.item': '{name} {current} → {available}',
-      'update.lastChecked': 'Last checked {time}',
+      'uninstall.title': 'Uninstall skill?',
+      'update.all.body': 'This will update {count} skills.',
+      'update.all.modified': '{count} have local changes that will be overwritten.',
+      'update.all.title': 'Update all',
+      'update.backupNote': 'The current version is backed up before updating.',
+      'update.cancelConfirm.body': 'This skill will stay on its current version.',
+      'update.cancelConfirm.ok': 'Cancel update',
+      'update.cancelConfirm.title': 'Cancel update?',
       'update.localModified': 'Local files changed; updating overwrites them.',
       'update.none': 'Up to date',
-      'update.sourceCommit': 'Source commit',
+      'update.progress': 'Updating {done} of {total}',
+      'update.result': 'Updated {ok}; {failed} failed',
+      'update.result.ok': 'All updates finished',
+      'update.retryFailedCount': 'Retry {count} failed',
       'update.success': 'Updated to {version}',
-      'update.toast': '{count} skills have updates',
+      'update.title': 'Update skill',
+      'update.versionChange': '{current} → {next}',
     }
 
     /* ------------------------------------------------------------------ *
-     * State.                                                              *
+     * State (contract 3.5). Infrastructure fields (cwd / fontSize /       *
+     * locale / toasts) are kept alongside the contract fields.            *
      * ------------------------------------------------------------------ */
 
     const appState = {
-        tab: 'installed',
+        tab: 'skills',
+        category: 'mine',
+        search: '',
+        sort: 'name',
+        marketSort: 'recommend',
         view: 'list',
         detail: null,
-        cwd: '',
-        search: '',
-        filter: 'all',
-        sort: 'location',
-        marketSourceId: 'all',
-        marketTag: 'all',
-        marketSort: 'relevance',
-        marketSkills: [],
-        marketTotal: 0,
-        marketNextOffset: null,
-        marketLoading: false,
+        skills: [],
+        categories: { mine: 0, shared: 0, project: 0, system: 0 },
         sources: [],
-        sourcesLoading: false,
-        installed: null,
-        loading: false,
-        loadingInstalled: false,
-        loadingSources: false,
-        loadingUpdates: false,
-        checkingUpdates: false,
+        sourceOrder: [],
+        marketSources: [],
         updates: null,
+        diagnostics: null,
+        loading: { installed: false, sources: false, market: false, updates: false },
         error: null,
-        lastErrorToast: null,
+        restoreListScroll: null,
+        menu: null,
+        modal: null,
+        sourceDialogOpen: false,
+        checking: false,
+        /* infrastructure */
+        cwd: '',
         fontSize: DEFAULT_FONT_SIZE,
         locale: 'zh',
         toasts: [],
-        rowMenu: null,
-        disabledExpanded: false,
-        busySkillId: null,
-        highlightId: null,
-        listScrollTop: null,
-        restoreListScroll: null,
+        lastErrorToast: null,
     }
 
     function setState(patch) {
         if (patch !== null && typeof patch === 'object') Object.assign(appState, patch)
         rerender()
+    }
+
+    function isLoading(key) {
+        return appState.loading !== null && typeof appState.loading === 'object' && appState.loading[key] === true
+    }
+
+    function setLoading(key, value) {
+        if (appState.loading === null || typeof appState.loading !== 'object') appState.loading = {}
+        appState.loading[key] = value === true
     }
 
     /* ------------------------------------------------------------------ *
@@ -798,11 +698,12 @@
         return size.toFixed(digits).replace(/\.0$/, '') + ' ' + units[index]
     }
 
-    function fmtTime(sec) {
-        const value = Number(sec)
+    /** Format a timestamp in milliseconds (a value in seconds is tolerated). */
+    function fmtTime(ms) {
+        const value = Number(ms)
         if (!Number.isFinite(value) || value <= 0) return t('time.never')
-        const ms = value > 1000000000000 ? value : value * 1000
-        const diff = Date.now() - ms
+        const stamp = value > 1000000000000 ? value : value * 1000
+        const diff = Date.now() - stamp
         if (!Number.isFinite(diff)) return t('time.unknown')
         if (diff < 60000) return t('time.justNow')
         const minutes = Math.floor(diff / 60000)
@@ -814,7 +715,7 @@
         if (days < 30) return t('time.weeksAgo', { count: Math.floor(days / 7) })
         if (days < 365) return t('time.monthsAgo', { count: Math.floor(days / 30) })
         try {
-            return new Date(ms).toLocaleDateString(isEnglishLocale() ? 'en' : 'zh-CN')
+            return new Date(stamp).toLocaleDateString(isEnglishLocale() ? 'en' : 'zh-CN')
         } catch {
             return t('time.unknown')
         }
@@ -847,8 +748,16 @@
         return parts.join(' ')
     }
 
+    function delay(ms) {
+        return new Promise(function (resolve) {
+            if (typeof setTimeout === 'function') setTimeout(resolve, ms)
+            else resolve()
+        })
+    }
+
     /* ------------------------------------------------------------------ *
      * HTTP wrapper. Returns data on success; throws { code, message }.    *
+     * Non-http(s) paths are always prefixed with /skill-manager/api/.     *
      * ------------------------------------------------------------------ */
 
     async function api(path, options) {
@@ -922,8 +831,8 @@
             actionLabel: typeof opts.actionLabel === 'string' ? opts.actionLabel : '',
             onAction: typeof opts.onAction === 'function' ? opts.onAction : null,
         }
-        if (!Array.isArray(appState.toasts)) appState.toasts = []
-        appState.toasts = appState.toasts.concat([item])
+        /* At most one toast at a time: a new one replaces the previous one. */
+        appState.toasts = [item]
         rerender()
         const duration = typeof opts.duration === 'number' && opts.duration > 0 ? opts.duration : 4000
         if (typeof window !== 'undefined' && window !== null && typeof window.setTimeout === 'function') {
@@ -993,6 +902,16 @@
             ['path', { d: 'm8 10 4 4 4-4' }],
             ['path', { d: 'M5 15v3.5A1.5 1.5 0 0 0 6.5 20h11a1.5 1.5 0 0 0 1.5-1.5V15' }],
         ],
+        download: [
+            ['path', { d: 'M12 4v11' }],
+            ['path', { d: 'm8 11 4 4 4-4' }],
+            ['path', { d: 'M5 15v3.5A1.5 1.5 0 0 0 6.5 20h11a1.5 1.5 0 0 0 1.5-1.5V15' }],
+        ],
+        upload: [
+            ['path', { d: 'M12 19V8' }],
+            ['path', { d: 'm8 12 4-4 4 4' }],
+            ['path', { d: 'M5 15v3.5A1.5 1.5 0 0 0 6.5 20h11a1.5 1.5 0 0 0 1.5-1.5V15' }],
+        ],
         folder: [
             ['path', { d: 'M3.5 6.5A1.5 1.5 0 0 1 5 5h4l2 2h8a1.5 1.5 0 0 1 1.5 1.5v9A1.5 1.5 0 0 1 19 19H5a1.5 1.5 0 0 1-1.5-1.5Z' }],
         ],
@@ -1056,6 +975,10 @@
         'arrow-up': [
             ['path', { d: 'M12 19V5m0 0-5 5m5-5 5 5' }],
         ],
+        'arrow-up-dot': [
+            ['path', { d: 'M12 19V6m-5 5 5-5 5 5' }],
+            ['circle', { cx: 19, cy: 5, r: 2, fill: 'currentColor', stroke: 'none' }],
+        ],
         check: [
             ['path', { d: 'm5 12.5 4.5 4.5L19 7' }],
         ],
@@ -1081,6 +1004,14 @@
             ['circle', { cx: 12, cy: 12, r: 1.4, fill: 'currentColor', stroke: 'none' }],
             ['circle', { cx: 12, cy: 18.5, r: 1.4, fill: 'currentColor', stroke: 'none' }],
         ],
+        grip: [
+            ['circle', { cx: 9, cy: 6, r: 1.2, fill: 'currentColor', stroke: 'none' }],
+            ['circle', { cx: 15, cy: 6, r: 1.2, fill: 'currentColor', stroke: 'none' }],
+            ['circle', { cx: 9, cy: 12, r: 1.2, fill: 'currentColor', stroke: 'none' }],
+            ['circle', { cx: 15, cy: 12, r: 1.2, fill: 'currentColor', stroke: 'none' }],
+            ['circle', { cx: 9, cy: 18, r: 1.2, fill: 'currentColor', stroke: 'none' }],
+            ['circle', { cx: 15, cy: 18, r: 1.2, fill: 'currentColor', stroke: 'none' }],
+        ],
         copy: [
             ['rect', { x: 8, y: 8, width: 12, height: 12, rx: 2 }],
             ['path', { d: 'M16 8V6a2 2 0 0 0-2-2H6a2 2 0 0 0-2 2v8a2 2 0 0 0 2 2h2' }],
@@ -1102,13 +1033,22 @@
             ['path', { d: 'M8 11 5.5 13.5a3.5 3.5 0 0 0 5 5L13 16' }],
             ['path', { d: 'M16 13l2.5-2.5a3.5 3.5 0 0 0-5-5L11 8' }],
         ],
+        external: [
+            ['path', { d: 'M14 4h6v6' }],
+            ['path', { d: 'M20 4 11 13' }],
+            ['path', { d: 'M18 14v4.5A1.5 1.5 0 0 1 16.5 20h-11A1.5 1.5 0 0 1 4 18.5v-11A1.5 1.5 0 0 1 5.5 6H10' }],
+        ],
+        pin: [
+            ['path', { d: 'M9 4h6l-1 5 3 3v2H7v-2l3-3Z' }],
+            ['path', { d: 'M12 14v6' }],
+        ],
         package: [
             ['path', { d: 'M12 3 20.5 7.5v9L12 21l-8.5-4.5v-9Z' }],
             ['path', { d: 'M3.5 7.5 12 12l8.5-4.5M12 12v9' }],
         ],
     }
 
-    function icon(name, size) {
+    function icon(name, size, extraClass) {
         const key = String(name === undefined || name === null ? 'skill' : name)
         const glyph = ICON_GLYPHS[key] || ICON_GLYPHS.skill
         const px = typeof size === 'number' && size > 0 ? size : 16
@@ -1126,7 +1066,7 @@
             strokeLinejoin: 'round',
             'aria-hidden': 'true',
             focusable: 'false',
-            className: 'sm-icon',
+            className: cx('sm-icon', extraClass),
         }, children)
     }
 
@@ -1148,93 +1088,26 @@
     }
 
     /* ------------------------------------------------------------------ *
-     * Location / badge / icon helpers shared with the market and detail   *
-     * fragments.                                                          *
+     * Skill helpers shared with the list, market and detail fragments.    *
      * ------------------------------------------------------------------ */
 
-    function locationMeta(id) {
-        const key = String(id === undefined || id === null ? '' : id)
-        return LOCATION_ORDER.find(function (item) { return item.id === key }) || null
-    }
-
-    function locationById(id) {
-        const meta = locationMeta(id)
-        const fallback = {
-            id: meta !== null ? meta.id : String(id === undefined || id === null ? '' : id),
-            label: meta !== null ? meta.label : '',
-            path: '',
-            absPath: '',
-            rank: meta !== null ? meta.rank : 0,
-            layer: meta !== null ? meta.layer : 'preset',
-            writable: meta !== null ? meta.writable : false,
-            exists: true,
-            readable: true,
-            skillCount: 0,
-            disabledCount: 0,
-            presets: [],
-        }
-        const data = appState.installed
-        if (data !== null && typeof data === 'object' && Array.isArray(data.locations)) {
-            const found = data.locations.find(function (item) { return item !== null && typeof item === 'object' && item.id === fallback.id })
-            if (found !== undefined) return found
-        }
-        return fallback
-    }
-
-    function locationLabel(location) {
-        const raw = location !== null && typeof location === 'object' ? location.id : location
-        const meta = locationMeta(raw)
-        if (meta !== null) return t(meta.key)
-        if (location !== null && typeof location === 'object' && typeof location.label === 'string' && location.label !== '') return location.label
-        return String(raw === undefined || raw === null ? '' : raw)
-    }
-
-    function locationFilterKey(id) {
-        const meta = locationMeta(id)
-        return meta !== null ? meta.filterKey : ''
-    }
-
-    /** Latest completed update check, or null when no check has ever produced a result. */
-    function updateCheckState() {
-        const state = appState.updates
-        if (state === null || typeof state !== 'object') return null
-        if (typeof state.checkedAt !== 'number' || state.checkedAt === 0) return null
-        return state
-    }
-
-    /** Find the latest update entry for a skill by name + location (fresh state only). */
-    function skillUpdateEntry(skill) {
-        if (skill === null || typeof skill !== 'object') return null
-        const state = updateCheckState()
-        if (state === null || !Array.isArray(state.updates)) return null
-        const list = state.updates
-        const name = String(skill.name === undefined || skill.name === null ? '' : skill.name)
-        const location = String(skill.location === undefined || skill.location === null ? '' : skill.location)
-        const found = list.find(function (item) {
-            return item !== null && typeof item === 'object'
-                && String(item.name === undefined || item.name === null ? '' : item.name) === name
-                && String(item.location === undefined || item.location === null ? '' : item.location) === location
-        })
-        return found === undefined ? null : found
-    }
-
-    /**
-     * Newer version available for a skill.
-     * The latest completed check is authoritative: when it ran and has no entry for
-     * this skill, the result is '' even if a stale market.updateAvailable remains.
-     * Only when no check has ever run do we fall back to market.updateAvailable.
-     */
+    /** Unified source of the newer version available for a skill. */
     function skillUpdateVersion(skill) {
         if (skill === null || typeof skill !== 'object') return ''
-        if (updateCheckState() !== null) {
-            const entry = skillUpdateEntry(skill)
-            if (entry !== null && entry.available !== undefined && entry.available !== null && String(entry.available) !== '') {
-                return String(entry.available)
+        const direct = skill.updateAvailable
+        if (typeof direct === 'string' && direct !== '') return direct
+        const state = appState.updates
+        if (state !== null && typeof state === 'object' && Array.isArray(state.updates)) {
+            const name = String(skill.name === undefined || skill.name === null ? '' : skill.name)
+            const location = String(skill.location === undefined || skill.location === null ? '' : skill.location)
+            const found = state.updates.find(function (item) {
+                return item !== null && typeof item === 'object'
+                    && String(item.name === undefined || item.name === null ? '' : item.name) === name
+                    && String(item.location === undefined || item.location === null ? '' : item.location) === location
+            })
+            if (found !== undefined && found.available !== undefined && found.available !== null && String(found.available) !== '') {
+                return String(found.available)
             }
-            return ''
-        }
-        if (skill.market !== null && typeof skill.market === 'object' && skill.market.updateAvailable) {
-            return String(skill.market.updateAvailable)
         }
         return ''
     }
@@ -1242,24 +1115,21 @@
     function skillStatusDot(skill) {
         if (skill === null || typeof skill !== 'object') return 'sm-dot sm-dot-idle'
         if (skill.status === 'disabled') return 'sm-dot sm-dot-idle'
-        if (skill.status === 'invalid') return 'sm-dot sm-dot-error'
-        if (skill.status === 'shadowed') return 'sm-dot sm-dot-warn'
+        if (skill.status === 'broken' || skill.status === 'invalid') return 'sm-dot sm-dot-warn'
         if (skillUpdateVersion(skill) !== '') return 'sm-dot sm-dot-update'
-        if (skill.writable === false) return 'sm-dot sm-dot-idle'
         return 'sm-dot sm-dot-ok'
     }
 
     function skillStatusTip(skill) {
-        if (skill === null || typeof skill !== 'object') return t('state.loadFailed')
-        if (skill.status === 'disabled') return t('state.disabled')
-        if (skill.status === 'invalid') return t('state.invalid')
-        if (skill.status === 'shadowed') return t('state.shadowed')
-        const updateVersion = skillUpdateVersion(skill)
-        if (updateVersion !== '') {
-            return t('update.available', { version: versionLabel(updateVersion) })
+        if (skill === null || typeof skill !== 'object') return t('error.unexpected')
+        if (skill.status === 'disabled') return t('badge.disabled')
+        if (skill.status === 'broken' || skill.status === 'invalid') {
+            return typeof skill.brokenReason === 'string' && skill.brokenReason !== '' ? skill.brokenReason : t('badge.issue')
         }
-        if (skill.writable === false) return t('state.readonly')
-        return t('state.active')
+        const updateVersion = skillUpdateVersion(skill)
+        if (updateVersion !== '') return t('badge.update', { version: versionLabel(updateVersion) })
+        if (skill.writable === false) return t('badge.readonly')
+        return t('detail.status.active')
     }
 
     /** Pick a stable semantic glyph for a skill name and location. */
@@ -1290,7 +1160,7 @@
     function renderSkillIconBox(skill, options) {
         const opts = options !== null && typeof options === 'object' ? options : {}
         const size = typeof opts.iconSize === 'number' && opts.iconSize > 0 ? opts.iconSize : 24
-        return h('div', { className: cx('sm-row-icon', opts.className) },
+        return h('div', { className: cx('sm-card-icon', opts.className) },
             icon(skillIconName(skill), size),
             h('span', { className: skillStatusDot(skill), 'data-tip': skillStatusTip(skill) }))
     }
@@ -1311,7 +1181,6 @@
             key: opts.key !== undefined ? opts.key : 'upgrade',
             className: cx('sm-badge', 'sm-badge-update', 'sm-mono', opts.className),
             'data-tip': t('badge.updateTip', { version: text }),
-            title: t('update.available', { version: text }),
             role: interactive ? 'button' : undefined,
             tabIndex: interactive ? 0 : undefined,
             onClick: interactive ? opts.onClick : undefined,
@@ -1325,7 +1194,55 @@
                 : undefined,
         },
         upgradeIcon(13),
-        h('span', null, text === '' ? t('badge.update') : text))
+        h('span', null, text === '' ? t('badge.update', { version: '' }) : text))
+    }
+
+    /* ------------------------------------------------------------------ *
+     * Counters used by the tab bar status icons.                          *
+     * ------------------------------------------------------------------ */
+
+    function categoryCount(category) {
+        const key = String(category === undefined || category === null ? '' : category)
+        if (appState.categories !== null && typeof appState.categories === 'object' && typeof appState.categories[key] === 'number') {
+            return appState.categories[key]
+        }
+        let count = 0
+        appState.skills.forEach(function (skill) {
+            if (skill !== null && typeof skill === 'object' && skill.category === key) count += 1
+        })
+        return count
+    }
+
+    /** Skills that are not active (broken / invalid), excluding attention-only issues. */
+    function brokenSkillCount() {
+        const diag = appState.diagnostics
+        if (diag !== null && typeof diag === 'object') {
+            if (Array.isArray(diag.inactive)) return diag.inactive.length
+            if (Array.isArray(diag.issues)) {
+                return diag.issues.filter(function (issue) {
+                    if (issue === null || typeof issue !== 'object') return false
+                    if (issue.severity !== 'error' && issue.severity !== 'warning') return false
+                    return issue.kind !== 'oversize' && issue.kind !== 'sourceUnreachable'
+                }).length
+            }
+        }
+        return appState.skills.filter(function (skill) {
+            return skill !== null && typeof skill === 'object' && (skill.status === 'broken' || skill.status === 'invalid')
+        }).length
+    }
+
+    function updateSkillCount() {
+        const state = appState.updates
+        if (state !== null && typeof state === 'object' && Array.isArray(state.updates)) return state.updates.length
+        return appState.skills.filter(function (skill) { return skillUpdateVersion(skill) !== '' }).length
+    }
+
+    function lastCheckedLabel() {
+        const state = appState.updates
+        if (state === null || typeof state !== 'object' || typeof state.checkedAt !== 'number' || state.checkedAt === 0) {
+            return t('time.never')
+        }
+        return fmtTime(state.checkedAt)
     }
 
     /* ------------------------------------------------------------------ *
@@ -1344,200 +1261,139 @@
         }
     }
 
+    function clearErrorScope(scope) {
+        if (appState.error !== null && typeof appState.error === 'object' && appState.error.scope === scope) appState.error = null
+    }
+
     async function loadInstalled(force) {
-        if (appState.loadingInstalled === true && force !== true) return null
-        appState.loadingInstalled = true
-        if (appState.installed === null) appState.loading = true
-        appState.error = null
+        if (isLoading('installed') === true && force !== true) return null
+        setLoading('installed', true)
+        clearErrorScope('installed')
         rerender()
         try {
             const data = await api('installed?cwd=' + encodeURIComponent(appState.cwd === undefined || appState.cwd === null ? '' : appState.cwd))
             if (data !== null && typeof data === 'object') {
-                appState.installed = data
+                if (Array.isArray(data.skills)) appState.skills = data.skills
+                if (data.categories !== null && typeof data.categories === 'object') {
+                    appState.categories = Object.assign({ mine: 0, shared: 0, project: 0, system: 0 }, data.categories)
+                }
+                if (Array.isArray(data.sources)) appState.sources = data.sources
+                if (Array.isArray(data.sourceOrder)) appState.sourceOrder = data.sourceOrder
+                if (data.diagnostics !== null && typeof data.diagnostics === 'object') appState.diagnostics = data.diagnostics
+                else if (Array.isArray(data.issues)) appState.diagnostics = { issues: data.issues, checkedAt: Date.now() }
                 if (data.updates !== null && typeof data.updates === 'object') appState.updates = data.updates
                 if (typeof data.cwd === 'string' && data.cwd !== '') appState.cwd = data.cwd
             }
             appState.lastErrorToast = null
             return data
         } catch (error) {
-            reportError('installed', error, t('error.loadInstalled'))
+            reportError('installed', error, t('error.read'))
             return null
         } finally {
-            appState.loadingInstalled = false
-            appState.loading = false
+            setLoading('installed', false)
             rerender()
         }
     }
 
     async function loadSources(force) {
-        if (appState.loadingSources === true && force !== true) return null
-        appState.loadingSources = true
+        if (isLoading('sources') === true && force !== true) return null
+        setLoading('sources', true)
+        clearErrorScope('sources')
         rerender()
         try {
             const data = await api('sources')
-            if (data !== null && typeof data === 'object' && Array.isArray(data.sources)) appState.sources = data.sources
+            if (Array.isArray(data)) {
+                appState.sources = data
+            } else if (data !== null && typeof data === 'object') {
+                if (Array.isArray(data.sources)) appState.sources = data.sources
+                if (Array.isArray(data.sourceOrder)) appState.sourceOrder = data.sourceOrder
+                else if (Array.isArray(data.order)) appState.sourceOrder = data.order
+            }
             appState.lastErrorToast = null
             return data
         } catch (error) {
-            reportError('sources', error, t('error.loadSources'))
+            reportError('sources', error, t('error.read'))
             return null
         } finally {
-            appState.loadingSources = false
+            setLoading('sources', false)
             rerender()
         }
     }
 
-    /* Market request coordination: one monotonically increasing id ensures only
-       the newest response may touch the shared list. The signature check below
-       covers the case where the query changed while the newest request was in
-       flight (no replacement request has been sent yet). */
+    /* One monotonically increasing id ensures only the newest market response
+       may touch the shared state. */
     let marketRequestSeq = 0
     let marketLatestRequestId = 0
-    let marketInFlightSig = ''
-    let marketLastSettledSig = ''
-    let marketLastSettledAt = 0
-    let marketCorrectionTimer = null
 
-    /** Canonical query signature, shared with 20-market's scheduler. */
-    function marketQuerySignature(query) {
-        const input = query !== null && typeof query === 'object' ? query : {}
-        const sourceId = input.sourceId !== undefined ? input.sourceId : appState.marketSourceId
-        const tag = input.tag !== undefined ? input.tag : appState.marketTag
-        const sort = input.sort !== undefined ? input.sort : appState.marketSort
-        const text = typeof input.q === 'string' ? input.q : appState.search
-        const normSource = sourceId === undefined || sourceId === null || sourceId === '' ? 'all' : String(sourceId)
-        const normTag = tag === undefined || tag === null || tag === '' ? 'all' : String(tag)
-        const normSort = sort === undefined || sort === null || sort === '' ? 'relevance' : String(sort)
-        return [normSource, String(text === undefined || text === null ? '' : text), normTag, normSort].join('|')
-    }
-
-    function marketCurrentSignature() {
-        return marketQuerySignature({
-            sourceId: appState.marketSourceId,
-            tag: appState.marketTag,
-            sort: appState.marketSort,
-            q: appState.search,
+    /** Append a refreshed page of one source block onto the existing block. */
+    function mergeMarketSource(previous, next, appendSourceId) {
+        if (appendSourceId === undefined || appendSourceId === null || appendSourceId === '') return next
+        const old = (Array.isArray(previous) ? previous : []).find(function (block) {
+            return block !== null && typeof block === 'object' && block.sourceId === appendSourceId
         })
-    }
-
-    /** True when a request for this exact query is in flight or just succeeded. */
-    function marketRequestIsFresh(sig) {
-        const signature = String(sig === undefined || sig === null ? '' : sig)
-        if (signature === '') return false
-        if (marketInFlightSig === signature) return true
-        return marketLastSettledSig === signature && (Date.now() - marketLastSettledAt) < 300
-    }
-
-    function marketSkillKey(item) {
-        if (item === null || typeof item !== 'object') return ''
-        const sourceId = typeof item.sourceId === 'string' ? item.sourceId : ''
-        const name = typeof item.name === 'string' ? item.name : ''
-        if (sourceId !== '' || name !== '') return sourceId + '::' + name
-        return typeof item.id === 'string' ? item.id : ''
-    }
-
-    /** Append a page to the shared list, de-duplicating by sourceId + name. */
-    function marketMergeSkills(previous, page) {
-        const merged = Array.isArray(previous) ? previous.slice() : []
-        const seen = Object.create(null)
-        merged.forEach(function (item) {
-            const key = marketSkillKey(item)
-            if (key !== '') seen[key] = true
-        })
-        ;(Array.isArray(page) ? page : []).forEach(function (item) {
-            if (item === null || typeof item !== 'object') return
-            const key = marketSkillKey(item)
-            if (key !== '' && seen[key] === true) return
-            if (key !== '') seen[key] = true
-            merged.push(item)
-        })
-        return merged
-    }
-
-    /** Re-fetch the current query once, debounced, after discarding a stale page. */
-    function marketScheduleCorrection() {
-        if (marketCorrectionTimer !== null) clearTimeout(marketCorrectionTimer)
-        marketCorrectionTimer = setTimeout(function () {
-            marketCorrectionTimer = null
-            const sig = marketCurrentSignature()
-            if (marketRequestIsFresh(sig)) return
-            void loadMarket({
-                q: appState.search,
-                sourceId: appState.marketSourceId,
-                tag: appState.marketTag,
-                sort: appState.marketSort,
+        if (old === undefined || !Array.isArray(old.skills)) return next
+        return next.map(function (block) {
+            if (block === null || typeof block !== 'object' || block.sourceId !== appendSourceId) return block
+            const merged = old.skills.slice()
+            const seen = Object.create(null)
+            merged.forEach(function (skill) { if (skill !== null && typeof skill === 'object') seen[String(skill.name)] = true })
+            ;(Array.isArray(block.skills) ? block.skills : []).forEach(function (skill) {
+                if (skill === null || typeof skill !== 'object') return
+                const key = String(skill.name)
+                if (seen[key] === true) return
+                seen[key] = true
+                merged.push(skill)
             })
-        }, 300)
+            return Object.assign({}, block, { skills: merged })
+        })
     }
 
-    async function loadMarket(query) {
-        const input = query !== null && typeof query === 'object'
-            ? query
-            : { q: typeof query === 'string' ? query : appState.search }
-        const params = new URLSearchParams()
-        const sourceId = input.sourceId !== undefined ? input.sourceId : appState.marketSourceId
-        const tag = input.tag !== undefined ? input.tag : appState.marketTag
-        const sort = input.sort !== undefined ? input.sort : appState.marketSort
+    /**
+     * GET /market?q=&sort=&cursor=&limit=
+     * opts: { q?, sort?, cursor?, limit?, sourceId?, append? }
+     * `sourceId` + `append` only affects how the per-source cursor page is merged.
+     */
+    async function loadMarket(opts) {
+        const input = opts !== null && typeof opts === 'object' ? opts : {}
         const text = typeof input.q === 'string' ? input.q : appState.search
-        if (sourceId !== undefined && sourceId !== null && sourceId !== '' && sourceId !== 'all') params.set('sourceId', String(sourceId))
-        if (tag !== undefined && tag !== null && tag !== '' && tag !== 'all') params.set('tag', String(tag))
-        if (sort !== undefined && sort !== null && sort !== '' && sort !== 'relevance') params.set('sort', String(sort))
+        const sort = typeof input.sort === 'string' ? input.sort : appState.marketSort
+        const params = new URLSearchParams()
         if (text !== '') params.set('q', text)
-        if (input.refresh === true) params.set('refresh', '1')
-        if (typeof input.offset === 'number') params.set('offset', String(input.offset))
-        if (typeof input.limit === 'number') params.set('limit', String(input.limit))
-        const append = typeof input.offset === 'number' && input.offset > 0
-        const sig = marketQuerySignature({ sourceId: sourceId, tag: tag, sort: sort, q: text })
-        const previous = append ? (Array.isArray(appState.marketSkills) ? appState.marketSkills.slice() : []) : null
+        if (sort !== '' && sort !== 'recommend') params.set('sort', sort)
+        if (input.cursor !== undefined && input.cursor !== null && input.cursor !== '') params.set('cursor', String(input.cursor))
+        if (typeof input.limit === 'number' && input.limit > 0) params.set('limit', String(input.limit))
+        const appendSourceId = input.append === true ? String(input.sourceId === undefined || input.sourceId === null ? '' : input.sourceId) : ''
+        const previous = Array.isArray(appState.marketSources) ? appState.marketSources.slice() : []
 
         marketRequestSeq += 1
         const requestId = marketRequestSeq
         marketLatestRequestId = requestId
-        marketInFlightSig = sig
-        if (appState.error !== null && typeof appState.error === 'object' && appState.error.scope === 'market') appState.error = null
-        appState.marketLoading = true
+        clearErrorScope('market')
+        setLoading('market', true)
         rerender()
         try {
             const data = await api('market?' + params.toString())
-            /* A newer request owns the shared state; drop this response. */
             if (requestId !== marketLatestRequestId) return null
-            /* The query changed after this request started and no replacement
-               request has been sent yet: drop the payload and re-fetch. */
-            if (sig !== marketCurrentSignature()) {
-                marketScheduleCorrection()
-                return null
+            if (data !== null && typeof data === 'object' && Array.isArray(data.sources)) {
+                appState.marketSources = mergeMarketSource(previous, data.sources, appendSourceId)
             }
-            if (data !== null && typeof data === 'object') {
-                const page = Array.isArray(data.skills) ? data.skills : []
-                appState.marketSkills = append ? marketMergeSkills(previous, page) : page
-                appState.marketTotal = typeof data.total === 'number' ? data.total : appState.marketSkills.length
-                appState.marketNextOffset = typeof data.nextOffset === 'number' ? data.nextOffset : null
-                if (Array.isArray(data.sources)) appState.sources = data.sources
-            }
-            marketLastSettledSig = sig
-            marketLastSettledAt = Date.now()
             appState.lastErrorToast = null
             return data
         } catch (error) {
             if (requestId !== marketLatestRequestId) return null
-            if (sig !== marketCurrentSignature()) {
-                marketScheduleCorrection()
-                return null
-            }
-            reportError('market', error, t('error.loadMarket'))
+            reportError('market', error, t('error.read'))
             return null
         } finally {
             if (requestId === marketLatestRequestId) {
-                marketInFlightSig = ''
-                appState.marketLoading = false
+                setLoading('market', false)
                 rerender()
             }
         }
     }
 
     async function loadUpdates(force) {
-        if (appState.loadingUpdates === true && force !== true) return null
-        appState.loadingUpdates = true
+        if (isLoading('updates') === true && force !== true) return null
+        setLoading('updates', true)
         rerender()
         try {
             const data = await api('updates')
@@ -1545,194 +1401,215 @@
             rerender()
             return data
         } catch (error) {
-            reportError('updates', error, t('error.checkUpdates'), { silent: true })
+            reportError('updates', error, t('error.unexpected'), { silent: true })
             return null
         } finally {
-            appState.loadingUpdates = false
+            setLoading('updates', false)
             rerender()
         }
     }
 
-    async function checkUpdates(force) {
-        if (appState.updates !== null && typeof appState.updates === 'object' && appState.updates.checking === true) return null
-        appState.updates = Object.assign({}, appState.updates !== null && typeof appState.updates === 'object' ? appState.updates : {}, { checking: true })
-        appState.checkingUpdates = true
+    /**
+     * POST /check-updates { force: true }
+     * Refetches every enabled source index, recomputes updates and refreshes
+     * the installed scan. The spinner is kept for at least 400ms.
+     */
+    async function checkUpdates() {
+        if (appState.checking === true) return null
+        appState.checking = true
+        clearErrorScope('check')
         rerender()
+        const started = Date.now()
         try {
-            const data = await api('check-updates', { method: 'POST', body: { force: force === true } })
-            if (data !== null && typeof data === 'object') appState.updates = data
+            const data = await api('check-updates', { method: 'POST', body: { force: true } })
+            const remain = 400 - (Date.now() - started)
+            if (remain > 0) await delay(remain)
+            const sources = data !== null && typeof data === 'object' && Number.isFinite(Number(data.sources)) ? Number(data.sources) : 0
+            const updates = data !== null && typeof data === 'object' && Number.isFinite(Number(data.updates)) ? Number(data.updates) : 0
+            toast(updates > 0 ? t('toast.checkedSources', { sources: sources, updates: updates }) : t('toast.noUpdates', { sources: sources }))
             appState.lastErrorToast = null
-            const count = data !== null && typeof data === 'object' && Array.isArray(data.updates) ? data.updates.length : 0
-            toast(count > 0 ? t('update.toast', { count: count }) : t('update.none'))
+            await Promise.all([loadInstalled(true), loadSources(true)])
             return data
         } catch (error) {
-            reportError('updates', error, t('error.checkUpdates'))
+            /* Failures are surfaced by the inline check banner, not a toast. */
+            reportError('check', error, t('error.unexpected'), { silent: true })
             return null
         } finally {
-            appState.checkingUpdates = false
-            if (appState.updates !== null && typeof appState.updates === 'object') {
-                appState.updates = Object.assign({}, appState.updates, { checking: false })
-            }
+            appState.checking = false
             rerender()
         }
+    }
+
+    /* ------------------------------------------------------------------ *
+     * List scroll memory. The single restoreListScroll field doubles as   *
+     * the pending restore target (contract 3.5).                          *
+     * ------------------------------------------------------------------ */
+
+    function listScrollNode() {
+        if (typeof document === 'undefined' || document === null || typeof document.querySelector !== 'function') return null
+        const node = document.querySelector('.sm-root .sm-tab-view.sm-scroll')
+        return node !== null && node !== undefined && typeof node.scrollTop === 'number' ? node : null
+    }
+
+    function rememberListScroll() {
+        const node = listScrollNode()
+        if (node !== null) appState.restoreListScroll = node.scrollTop
+    }
+
+    function restoreListScroll() {
+        const pending = typeof appState.restoreListScroll === 'number' ? appState.restoreListScroll : null
+        if (pending === null) return
+        appState.restoreListScroll = null
+        const apply = function (attempt) {
+            const node = listScrollNode()
+            if (node !== null) {
+                node.scrollTop = pending
+                return
+            }
+            if (attempt < 2 && typeof requestAnimationFrame === 'function') {
+                requestAnimationFrame(function () { apply(attempt + 1) })
+            }
+        }
+        if (typeof requestAnimationFrame === 'function') requestAnimationFrame(function () { apply(0) })
+        else apply(0)
+    }
+
+    /* ------------------------------------------------------------------ *
+     * Shared source drag-and-drop namespace (contract 2 and 7.6).         *
+     *                                                                     *
+     * 30-source-dialog.js calls:                                         *
+     *   smDragSource.start(id, event)                                     *
+     *   smDragSource.over(id, event)   -> { id, after } | null            *
+     *   smDragSource.drop()            -> { from, to, after } | null      *
+     *   smDragSource.end()                                                *
+     * The current drop target is exposed as smDragSource.over.target      *
+     * (also mirrored as smDragSource.overId / smDragSource.overAfter).    *
+     * ------------------------------------------------------------------ */
+
+    function smDragOver(targetId, event) {
+        const dragging = smDragSource.dragging
+        const target = String(targetId === undefined || targetId === null ? '' : targetId)
+        if (dragging === null || target === '' || target === dragging) {
+            smDragSource.over.target = null
+            smDragSource.overId = null
+            smDragSource.overAfter = null
+            return null
+        }
+        let after = false
+        const node = event !== null && event !== undefined ? event.currentTarget : null
+        if (node !== null && node !== undefined && typeof node.getBoundingClientRect === 'function') {
+            const rect = node.getBoundingClientRect()
+            after = (Number(event.clientY) || 0) > rect.top + rect.height / 2
+        }
+        const result = { id: target, after: after }
+        smDragSource.over.target = result
+        smDragSource.overId = target
+        smDragSource.overAfter = after
+        if (event !== null && event !== undefined) {
+            if (typeof event.preventDefault === 'function') event.preventDefault()
+            if (event.dataTransfer !== null && event.dataTransfer !== undefined) {
+                try { event.dataTransfer.dropEffect = 'move' } catch { /* ignore */ }
+            }
+        }
+        return result
+    }
+
+    const smDragSource = {
+        key: DRAG_KEY,
+        dragging: null,
+        over: smDragOver,
+        overId: null,
+        overAfter: null,
+        start: function (id, event) {
+            const key = String(id === undefined || id === null ? '' : id)
+            if (key === '') return false
+            smDragSource.dragging = key
+            smDragSource.over.target = null
+            smDragSource.overId = null
+            smDragSource.overAfter = null
+            if (event !== null && event !== undefined && event.dataTransfer !== null && event.dataTransfer !== undefined) {
+                try {
+                    event.dataTransfer.effectAllowed = 'move'
+                    event.dataTransfer.setData(DRAG_KEY, key)
+                    event.dataTransfer.setData('text/plain', key)
+                } catch {
+                    /* some environments reject custom types; dragging still works */
+                }
+            }
+            return true
+        },
+        drop: function () {
+            const from = smDragSource.dragging
+            const target = smDragSource.over.target
+            smDragSource.dragging = null
+            smDragSource.over.target = null
+            smDragSource.overId = null
+            smDragSource.overAfter = null
+            if (from === null || target === null) return null
+            return { from: from, to: target.id, after: target.after === true }
+        },
+        end: function () {
+            smDragSource.dragging = null
+            smDragSource.over.target = null
+            smDragSource.overId = null
+            smDragSource.overAfter = null
+        },
     }
 
     /* ------------------------------------------------------------------ *
      * Page shell.                                                         *
      * ------------------------------------------------------------------ */
 
-    function installedIssues() {
-        const data = appState.installed
-        return data !== null && typeof data === 'object' && Array.isArray(data.issues) ? data.issues : []
-    }
-
-    function issueAttentionCount() {
-        return installedIssues().filter(function (issue) {
-            return issue !== null && typeof issue === 'object' && (issue.severity === 'error' || issue.severity === 'warning')
-        }).length
-    }
-
-    function updateAttentionCount() {
-        const updates = appState.updates !== null && typeof appState.updates === 'object'
-            ? appState.updates
-            : appState.installed !== null && typeof appState.installed === 'object'
-                ? appState.installed.updates
-                : null
-        return updates !== null && typeof updates === 'object' && Array.isArray(updates.updates) ? updates.updates.length : 0
-    }
-
-    function sourceErrorCount() {
-        return appState.sources.filter(function (source) {
-            return source !== null && typeof source === 'object' && source.status === 'error'
-        }).length
-    }
-
     function switchTab(tab) {
-        if (tab !== 'installed' && tab !== 'market' && tab !== 'sources') return
-        setState({ tab: tab, view: 'list', detail: null, rowMenu: null })
-        if (tab === 'market' && appState.marketSkills.length === 0 && appState.marketLoading !== true) void loadMarket({ q: appState.search })
-        if (tab === 'sources' && appState.sources.length === 0 && appState.sourcesLoading !== true) void loadSources()
+        if (tab !== 'skills' && tab !== 'market') return
+        if (appState.tab === tab && appState.view === 'list') return
+        setState({ tab: tab, view: 'list', detail: null, menu: null })
+        if (tab === 'market' && appState.marketSources.length === 0 && isLoading('market') !== true) void loadMarket()
     }
 
-    let searchTimer = null
-
-    function onSearchChange(event) {
-        const value = event !== null && event !== undefined && event.target !== undefined && event.target !== null ? String(event.target.value) : ''
-        if (appState.tab === 'market') {
-            /* 顶栏搜索与市场内搜索共用 appState.marketLoading；防抖窗口内
-               也保持骨架，直到最新请求落定。 */
-            setState({ search: value, marketLoading: true })
-            if (searchTimer !== null) clearTimeout(searchTimer)
-            searchTimer = setTimeout(function () {
-                searchTimer = null
-                void loadMarket({ q: appState.search })
-            }, 300)
-            return
+    function renderStatusIcons() {
+        const broken = brokenSkillCount()
+        const updates = updateSkillCount()
+        if (broken === 0 && updates === 0) return null
+        const checking = appState.checking === true || (appState.updates !== null && typeof appState.updates === 'object' && appState.updates.checking === true)
+        const items = []
+        if (broken > 0) {
+            const label = t('status.brokenTooltip', { count: broken })
+            items.push(h('button', {
+                key: 'broken',
+                type: 'button',
+                className: 'sm-icon-btn sm-status-icon sm-status-icon-warn',
+                'aria-label': label,
+                'data-tip': label,
+                onClick: function () {
+                    if (typeof openDiagnosticsDrawer === 'function') openDiagnosticsDrawer()
+                },
+            }, icon('alert', 16)))
         }
-        setState({ search: value })
-    }
-
-    function clearSearch() {
-        if (searchTimer !== null) {
-            clearTimeout(searchTimer)
-            searchTimer = null
+        if (updates > 0) {
+            const label = checking
+                ? t('status.checking')
+                : t('status.updatesTooltip', { count: updates, time: lastCheckedLabel() })
+            items.push(h('button', {
+                key: 'updates',
+                type: 'button',
+                className: 'sm-icon-btn sm-status-icon sm-status-icon-update',
+                'aria-label': label,
+                'data-tip': label,
+                disabled: checking,
+                'aria-busy': checking ? 'true' : undefined,
+                onClick: function () {
+                    if (typeof openModal === 'function') openModal('update', { all: true })
+                },
+            }, icon('arrow-up-dot', 16)))
         }
-        if (appState.tab === 'market') {
-            setState({
-                search: '',
-                marketSkills: [],
-                marketTotal: 0,
-                marketNextOffset: null,
-            })
-            void loadMarket({ q: '' })
-            return
-        }
-        setState({ search: '' })
+        return h('div', { className: 'sm-status-icons' }, items)
     }
 
-    async function refreshCurrent() {
-        let result = null
-        if (appState.tab === 'market') result = await loadMarket({ q: appState.search, refresh: true })
-        else if (appState.tab === 'sources') result = await loadSources(true)
-        else result = await loadInstalled(true)
-        if (result !== null) toast(t('toast.refreshDone'))
-    }
-
-    function renderSearchBox() {
-        const placeholder = appState.tab === 'market' ? t('search.market') : t('search.installed')
-        return h('div', { className: 'sm-search' },
-            h('span', { className: 'sm-search-icon' }, icon('search', 15)),
-            h('input', {
-                className: 'sm-search-input',
-                type: 'search',
-                value: appState.search,
-                placeholder: placeholder,
-                'aria-label': placeholder,
-                onChange: onSearchChange,
-            }),
-            appState.search !== ''
-                ? h('button', {
-                    type: 'button',
-                    className: 'sm-search-clear',
-                    'aria-label': t('search.clear'),
-                    'data-tip': t('search.clear'),
-                    onClick: clearSearch,
-                }, icon('x', 14))
-                : null)
-    }
-
-    function renderPageHeader() {
-        const showSearch = appState.tab !== 'sources'
-        const checking = appState.checkingUpdates === true || (appState.updates !== null && typeof appState.updates === 'object' && appState.updates.checking === true)
-        return h('div', { className: 'sm-page-head' },
-            h('div', { className: 'sm-page-head-text' },
-                h('h1', { className: 'sm-page-title' }, t('panel.title')),
-                h('p', { className: 'sm-page-desc' }, t('panel.description'))),
-            h('div', { className: 'sm-toolbar' },
-                showSearch ? renderSearchBox() : null,
-                h('button', {
-                    type: 'button',
-                    className: 'sm-btn sm-btn-ghost sm-check-updates',
-                    disabled: checking,
-                    'data-tip': t('update.checkAll'),
-                    onClick: function () { void checkUpdates(true) },
-                }, icon('clock', 15), h('span', null, checking ? t('update.checkingShort') : t('update.checkNow'))),
-                h('button', {
-                    type: 'button',
-                    className: 'sm-icon-btn',
-                    'aria-label': t('action.refresh'),
-                    'data-tip': t('action.refresh'),
-                    onClick: function () { void refreshCurrent() },
-                }, icon('refresh', 16)),
-                appState.tab === 'installed'
-                    ? h('button', {
-                        type: 'button',
-                        className: 'sm-btn sm-btn-secondary',
-                        onClick: function () { if (typeof openModal === 'function') openModal('import', {}) },
-                    }, icon('import', 15), h('span', null, t('action.import')))
-                    : null,
-                appState.tab === 'installed'
-                    ? h('button', {
-                        type: 'button',
-                        className: 'sm-btn sm-btn-primary',
-                        onClick: function () { if (typeof openModal === 'function') openModal('new', {}) },
-                    }, icon('plus', 15), h('span', null, t('action.newSkill')))
-                    : h('button', {
-                        type: 'button',
-                        className: 'sm-btn sm-btn-primary',
-                        onClick: function () { if (typeof openModal === 'function') openModal('add-source', {}) },
-                    }, icon('plus', 15), h('span', null, t('action.addSource')))))
-    }
-
-    function renderTabs() {
-        const issueCount = issueAttentionCount()
-        const updateCount = updateAttentionCount()
-        const installedCount = issueCount > 0 ? issueCount : updateCount
-        const sourceCount = sourceErrorCount()
+    function renderPrimaryTabs() {
         const items = [
-            { id: 'installed', label: t('tab.installed'), count: installedCount, warn: issueCount > 0 },
-            { id: 'market', label: t('tab.market'), count: 0, warn: false },
-            { id: 'sources', label: t('tab.sources'), count: sourceCount, warn: true },
+            { id: 'skills', label: t('tab.skills') },
+            { id: 'market', label: t('tab.market') },
         ]
         return h('div', { className: 'sm-tabs', role: 'tablist' },
             items.map(function (item) {
@@ -1743,34 +1620,39 @@
                     role: 'tab',
                     className: cx('sm-tab', active && 'sm-tab-active'),
                     'aria-selected': active,
+                    tabIndex: active ? 0 : -1,
                     onClick: function () { switchTab(item.id) },
-                },
-                h('span', null, item.label),
-                item.count > 0
-                    ? h('span', {
-                        className: cx('sm-tab-count', item.warn && 'sm-tab-count-warn'),
-                        'data-tip': t('tab.attention', { count: item.count }),
-                    }, String(item.count))
-                    : null)
+                }, h('span', null, item.label))
             }))
+    }
+
+    function renderPageHeader() {
+        return h('div', { className: 'sm-header sm-page-head' },
+            h('h1', { className: 'sm-title sm-page-title' }, t('panel.title')),
+            h('p', { className: 'sm-desc sm-page-desc' }, t('panel.desc')))
     }
 
     function renderActiveTab() {
         if (appState.tab === 'market') return typeof renderMarketTab === 'function' ? renderMarketTab() : null
-        if (appState.tab === 'sources') return typeof renderSourcesTab === 'function' ? renderSourcesTab() : null
-        return typeof renderInstalledTab === 'function' ? renderInstalledTab() : null
+        return typeof renderSkillsTab === 'function' ? renderSkillsTab() : null
+    }
+
+    function renderCategoryTabsSlot() {
+        if (appState.tab !== 'skills') return null
+        return typeof renderCategoryTabs === 'function' ? renderCategoryTabs() : null
     }
 
     function renderOverlays() {
         return h(Fragment, null,
             typeof renderModalLayer === 'function' ? renderModalLayer() : null,
+            typeof renderSourceDialog === 'function' ? renderSourceDialog() : null,
             typeof renderDiagnosticsDrawer === 'function' ? renderDiagnosticsDrawer() : null,
             typeof renderTooltipLayer === 'function' ? renderTooltipLayer() : null,
             typeof renderToastHost === 'function' ? renderToastHost() : null)
     }
 
     /* ------------------------------------------------------------------ *
-     * List scroll memory and [data-tip] hover delegation.                 *
+     * [data-tip] hover delegation. 50-modals.js owns smTip/smHideTooltip. *
      * ------------------------------------------------------------------ */
 
     let tipNode = null
@@ -1805,35 +1687,6 @@
         }
     }
 
-    function listScrollNode() {
-        if (typeof document === 'undefined' || document === null || typeof document.querySelector !== 'function') return null
-        const node = document.querySelector('.sm-root .sm-tab-view.sm-scroll')
-        return node !== null && node !== undefined && typeof node.scrollTop === 'number' ? node : null
-    }
-
-    function rememberListScroll() {
-        const node = listScrollNode()
-        if (node !== null) appState.listScrollTop = node.scrollTop
-    }
-
-    function restoreListScroll() {
-        const pending = typeof appState.restoreListScroll === 'number' ? appState.restoreListScroll : null
-        if (pending === null) return
-        appState.restoreListScroll = null
-        const apply = function (attempt) {
-            const node = listScrollNode()
-            if (node !== null) {
-                node.scrollTop = pending
-                return
-            }
-            if (attempt < 2 && typeof requestAnimationFrame === 'function') {
-                requestAnimationFrame(function () { apply(attempt + 1) })
-            }
-        }
-        if (typeof requestAnimationFrame === 'function') requestAnimationFrame(function () { apply(0) })
-        else apply(0)
-    }
-
     function renderPage(props) {
         const source = props !== null && typeof props === 'object' ? props : {}
         if (typeof source.t === 'function') boundT = source.t
@@ -1844,7 +1697,6 @@
         const rootListeners = {
             onMouseOver: handlePageTipOver,
             onMouseOut: handlePageTipOut,
-            onClickCapture: rememberListScroll,
         }
         if (appState.view === 'detail' && typeof renderDetailPage === 'function') {
             return h('div', Object.assign({ className: 'sm-root sm-root-detail', style: rootStyle }, rootListeners),
@@ -1855,7 +1707,10 @@
         return h('div', Object.assign({ className: 'sm-root', style: rootStyle }, rootListeners),
             h('div', { className: 'sm-page' },
                 renderPageHeader(),
-                renderTabs(),
+                h('div', { className: 'sm-tabs-row' },
+                    renderPrimaryTabs(),
+                    renderStatusIcons()),
+                renderCategoryTabsSlot(),
                 h('div', { className: 'sm-tab-view sm-scroll' }, renderActiveTab())),
             renderOverlays())
     }

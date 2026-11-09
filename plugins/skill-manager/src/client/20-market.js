@@ -1,20 +1,20 @@
     /* ------------------------------------------------------------------ *
-     * C2 · 市场 Tab                                                       *
+     * C3 · 市场 Tab                                                       *
      *                                                                    *
-     * 数据来源：appState.marketSkills / appState.sources / appState.installed
-     * 所有跨 Tab 的状态写入都走 setState，避免直接操作 DOM。               *
+     * 数据来源：appState.marketSources（按源分区块，见契约 §3.4）。       *
+     * 每个源区块独立分页（cursor）；搜索 / 排序由 Host 完成，客户端只     *
+     * 负责渲染、按 sourceOrder 排序区块与按块追加下一页。                 *
      * ------------------------------------------------------------------ */
 
     const SM_MARKET_PAGE_SIZE = 20
 
-    /* 市场请求的瞬时状态（不承载数据）。搜索词、筛选、分页游标与列表全部以
-       appState.search / appState.market* 为唯一事实源。 */
-    let smMarketLoaded = false
-    let smMarketLoading = false
-    let smMarketAppending = false
-    let smMarketTimer = null
-    let smMarketTimerSig = ''
-    let smMarketLastSig = ''
+    /* 模块级瞬时状态：不进 appState，避免与 Host 数据竞争。 */
+    let smMarketBootStarted = false
+    let smMarketMenu = null
+    let smMarketMenuKeysBound = false
+    let smMarketAppending = Object.create(null)
+    let smMarketRefreshing = Object.create(null)
+    let smMarketSearchTimer = null
 
     function smMarketErrorText(err) {
         if (err === null || err === undefined) return ''
@@ -26,127 +26,393 @@
         return String(err)
     }
 
-    function smMarketSig() {
-        /* 来源增删改由 smMarketInvalidate 显式失效，不把 sources 计入 sig，
-           避免首次加载 sources 后多发一次请求。签名算法与 00-prelude 的
-           marketQuerySignature 完全一致，供 requestId 校验与去重复用。 */
-        return marketQuerySignature({
-            sourceId: appState.marketSourceId,
-            q: appState.search,
-            tag: appState.marketTag,
-            sort: appState.marketSort,
-        })
+    function smMarketVersionLabel(version) {
+        const text = String(version === undefined || version === null ? '' : version)
+        if (text === '') return ''
+        return text.charAt(0) === 'v' ? text : 'v' + text
+    }
+
+    function smMarketSortValue() {
+        const sort = String(appState.marketSort === undefined || appState.marketSort === null ? '' : appState.marketSort)
+        if (sort === 'updated' || sort === 'name' || sort === 'recommend') return sort
+        return 'recommend'
     }
 
     function smMarketSourceList() {
-        /* appState.sources 是唯一事实源；即使为空也不回退旧缓存。 */
         return Array.isArray(appState.sources) ? appState.sources : []
     }
 
-    function smMarketEnabledSources(sources) {
-        return (Array.isArray(sources) ? sources : []).filter(function (src) {
-            return src !== null && typeof src === 'object' && src.enabled !== false
-        })
-    }
-
-    function smMarketTotalValue(enabledSources) {
-        if (typeof appState.marketTotal === 'number' && appState.marketTotal > 0) return appState.marketTotal
-        let sum = 0
-        let hasCount = false
-        ;(Array.isArray(enabledSources) ? enabledSources : []).forEach(function (src) {
-            if (src !== null && typeof src === 'object' && typeof src.skillCount === 'number') {
-                sum += src.skillCount
-                hasCount = true
-            }
-        })
-        if (hasCount && sum > 0) return sum
-        return smMarketSharedSkills().length
-    }
-
-    function smMarketNextValue() {
-        return typeof appState.marketNextOffset === 'number' ? appState.marketNextOffset : null
-    }
-
-    /* 共享缓存 appState.marketSkills 是唯一事实源：顶栏搜索/刷新（00-prelude.js）
-       与市场分页都读写同一份列表。 */
-    function smMarketSharedSkills() {
-        return Array.isArray(appState.marketSkills) ? appState.marketSkills : []
-    }
-
-    function smMarketCurrentSkills() {
-        /* 服务端已按 q/sourceId/tag/sort 过滤并排序，渲染直接用共享列表，
-           避免第二套本地过滤与分页结果不一致。 */
-        return smMarketSharedSkills()
-    }
-
-    function smMarketTopTags(skills) {
-        const counts = Object.create(null)
-        ;(Array.isArray(skills) ? skills : []).forEach(function (item) {
-            if (item === null || typeof item !== 'object' || !Array.isArray(item.tags)) return
-            item.tags.forEach(function (tag) {
-                if (typeof tag === 'string' && tag !== '') counts[tag] = (counts[tag] || 0) + 1
-            })
-        })
-        const tags = Object.keys(counts).sort(function (a, b) {
-            return (counts[b] - counts[a]) || a.localeCompare(b)
-        })
-        const selected = appState.marketTag
-        if (selected !== 'all' && tags.indexOf(selected) < 0) tags.unshift(selected)
-        return tags.slice(0, 12)
-    }
-
-    function smMarketInstalledInfo(item) {
-        if (item === null || typeof item !== 'object') return null
-        /* 优先读已安装列表（安装/更新后 C3 会刷新它），再退回市场条目自带的状态。
-           同名但来源不同的安装记录绝不能关联到本条目；只有安装记录缺 sourceId
-           时才按 name 回退。 */
-        const installed = appState.installed !== null && typeof appState.installed === 'object' &&
-            Array.isArray(appState.installed.skills) ? appState.installed.skills : []
-        let exact = null
-        let fallback = null
-        for (let i = 0; i < installed.length; i += 1) {
-            const skill = installed[i]
-            if (skill === null || typeof skill !== 'object') continue
-            if (skill.name !== item.name) continue
-            if (skill.status === 'disabled') continue
-            const recordSource = skill.market !== null && typeof skill.market === 'object' &&
-                typeof skill.market.sourceId === 'string' ? skill.market.sourceId : ''
-            if (recordSource !== '') {
-                if (recordSource === item.sourceId) {
-                    exact = skill
-                    break
-                }
-                continue
-            }
-            if (fallback === null) fallback = skill
-        }
-        const found = exact !== null ? exact : fallback
-        if (found !== null) {
-            const market = found.market !== null && typeof found.market === 'object' ? found.market : {}
-            return {
-                version: typeof market.version === 'string' ? market.version : '',
-                location: found.location,
-                /* 最新检查结果优先：checkedAt>0 且无条目时必须为空，不能回退旧字段。 */
-                updateAvailable: skillUpdateVersion(found),
-            }
-        }
-        if (item.installed !== null && typeof item.installed === 'object') {
-            const embedded = {
-                name: item.name,
-                location: item.installed.location,
-                market: { updateAvailable: item.installed.updateAvailable },
-            }
-            return {
-                version: typeof item.installed.version === 'string' ? item.installed.version : (item.version || ''),
-                location: item.installed.location,
-                updateAvailable: skillUpdateVersion(embedded),
-            }
+    function smMarketSourceById(sourceId) {
+        const id = String(sourceId === undefined || sourceId === null ? '' : sourceId)
+        if (id === '') return null
+        const sources = smMarketSourceList()
+        for (let index = 0; index < sources.length; index += 1) {
+            const source = sources[index]
+            if (source !== null && typeof source === 'object' && String(source.id) === id) return source
         }
         return null
     }
 
-    /* 与 00-prelude.js 的 skillIconName 保持一致，确保同一技能在市场与已安装里图标相同。 */
-    function smMarketIconName(item, info) {
+    function smMarketBlocks() {
+        return Array.isArray(appState.marketSources) ? appState.marketSources : []
+    }
+
+    function smMarketBlockSkills(block) {
+        return block !== null && typeof block === 'object' && Array.isArray(block.skills) ? block.skills : []
+    }
+
+    function smMarketBlockErrorText(block) {
+        if (block === null || typeof block !== 'object' || block.error === null || block.error === undefined || block.error === '') return ''
+        return smMarketErrorText(block.error)
+    }
+
+    function smMarketBlockEnabled(block) {
+        if (block === null || typeof block !== 'object') return false
+        const source = smMarketSourceById(block.sourceId)
+        if (source === null) return true
+        return source.enabled !== false
+    }
+
+    /* 区块顺序 = sourceOrder；未出现在 order 里的源保持接口返回顺序并排最后。 */
+    function smMarketOrderedBlocks() {
+        const query = String(appState.search === undefined || appState.search === null ? '' : appState.search).trim()
+        const blocks = smMarketBlocks().filter(function (block) {
+            if (block === null || typeof block !== 'object') return false
+            if (!smMarketBlockEnabled(block)) return false
+            /* 搜索无命中的源区块连同区块头一起隐藏（ML-03）。 */
+            if (query !== '' && smMarketBlockSkills(block).length === 0) return false
+            return true
+        })
+        const order = Array.isArray(appState.sourceOrder) ? appState.sourceOrder : []
+        if (order.length === 0) return blocks
+        const rank = Object.create(null)
+        order.forEach(function (id, index) {
+            rank[String(id)] = index
+        })
+        return blocks
+            .map(function (block, index) { return { block: block, index: index } })
+            .sort(function (left, right) {
+                const leftId = String(left.block.sourceId)
+                const rightId = String(right.block.sourceId)
+                const leftRank = rank[leftId] === undefined ? Number.MAX_SAFE_INTEGER : rank[leftId]
+                const rightRank = rank[rightId] === undefined ? Number.MAX_SAFE_INTEGER : rank[rightId]
+                if (leftRank !== rightRank) return leftRank - rightRank
+                return left.index - right.index
+            })
+            .map(function (entry) { return entry.block })
+    }
+
+    function smMarketLoading() {
+        if (appState.loadingMarket === true) return true
+        if (appState.loading !== null && typeof appState.loading === 'object' && appState.loading.market === true) return true
+        return false
+    }
+
+    function smMarketScopedError() {
+        const error = appState.error
+        return error !== null && typeof error === 'object' && error.scope === 'market' ? error : null
+    }
+
+    function smMarketEnsureLoaded() {
+        if (smMarketBootStarted) return
+        smMarketBootStarted = true
+        if (smMarketBlocks().length > 0) return
+        /* switchTab 可能已经发起请求；不要在渲染里重复发一次。 */
+        if (smMarketLoading()) return
+        if (typeof loadMarket !== 'function') return
+        try {
+            const pending = loadMarket({ q: String(appState.search || ''), sort: smMarketSortValue() })
+            if (pending !== null && pending !== undefined && typeof pending.catch === 'function') {
+                pending.catch(function () { /* 页级错误态由 appState.error 呈现 */ })
+            }
+        } catch (err) {
+            void err
+        }
+    }
+
+    function smMarketReload(options) {
+        const opts = options !== null && typeof options === 'object' ? options : {}
+        if (typeof loadMarket !== 'function') return
+        smMarketBootStarted = true
+        try {
+            const pending = loadMarket({
+                q: String(appState.search || ''),
+                sort: smMarketSortValue(),
+                refresh: opts.refresh === true,
+            })
+            if (pending !== null && pending !== undefined && typeof pending.catch === 'function') {
+                pending.catch(function () { /* 错误由 appState.error 呈现 */ })
+            }
+        } catch (err) {
+            void err
+        }
+    }
+
+    function smMarketRetry() {
+        smMarketCancelSearchTimer()
+        smMarketReload({ refresh: true })
+    }
+
+    function smMarketCancelSearchTimer() {
+        if (smMarketSearchTimer !== null) {
+            clearTimeout(smMarketSearchTimer)
+            smMarketSearchTimer = null
+        }
+    }
+
+    function smMarketClearSearch() {
+        smMarketCancelSearchTimer()
+        if (typeof setState === 'function') setState({ search: '' })
+        smMarketReload({ refresh: true })
+    }
+
+    function smMarketOnSearchInput(event) {
+        const value = event !== null && event !== undefined && event.target !== null && event.target !== undefined
+            ? String(event.target.value || '')
+            : ''
+        if (value === appState.search) return
+        if (typeof setState === 'function') setState({ search: value })
+        smMarketCancelSearchTimer()
+        /* 市场搜索 300ms 防抖（交互稿 §3.3）。 */
+        smMarketSearchTimer = setTimeout(function () {
+            smMarketSearchTimer = null
+            smMarketReload()
+        }, 300)
+    }
+
+    function smMarketOnSortChange(event) {
+        const value = event !== null && event !== undefined && event.target !== null && event.target !== undefined
+            ? String(event.target.value || 'recommend')
+            : 'recommend'
+        if (value === smMarketSortValue()) return
+        smMarketCancelSearchTimer()
+        if (typeof setState === 'function') setState({ marketSort: value })
+        smMarketReload()
+    }
+
+    function smMarketManageSources() {
+        if (typeof openSourceDialog === 'function') openSourceDialog()
+    }
+
+    function smMarketOpenModal(kind, payload) {
+        if (typeof openModal === 'function') openModal(kind, payload)
+    }
+
+    function smMarketRefreshSource(sourceId) {
+        const id = String(sourceId === undefined || sourceId === null ? '' : sourceId)
+        if (id === '' || smMarketRefreshing[id] === true) return
+        smMarketRefreshing[id] = true
+        if (typeof setState === 'function') setState({})
+        const run = async function () {
+            try {
+                await api('sources/' + encodeURIComponent(id) + '/refresh', { method: 'POST' })
+                if (typeof loadSources === 'function') {
+                    try { await loadSources(true) } catch (err) { void err }
+                }
+                smMarketReload({ refresh: true })
+            } catch (err) {
+                void err
+                toast(t('source.error.refreshFailed'), { tone: 'error' })
+            } finally {
+                delete smMarketRefreshing[id]
+                if (typeof setState === 'function') setState({})
+            }
+        }
+        void run()
+    }
+
+    /* ------------------------------------------------------------------ *
+     * 卡片 / 区块菜单                                                     *
+     * ------------------------------------------------------------------ */
+
+    function smMarketMenuKeydown(event) {
+        if (event === null || event === undefined || event.key !== 'Escape') return
+        if (typeof event.preventDefault === 'function') event.preventDefault()
+        if (typeof event.stopPropagation === 'function') event.stopPropagation()
+        smMarketCloseMenu()
+    }
+
+    function smMarketBindMenuKeys() {
+        if (smMarketMenuKeysBound) return
+        if (typeof document === 'undefined' || document === null || typeof document.addEventListener !== 'function') return
+        document.addEventListener('keydown', smMarketMenuKeydown, true)
+        smMarketMenuKeysBound = true
+    }
+
+    function smMarketUnbindMenuKeys() {
+        if (!smMarketMenuKeysBound) return
+        if (typeof document !== 'undefined' && document !== null && typeof document.removeEventListener === 'function') {
+            document.removeEventListener('keydown', smMarketMenuKeydown, true)
+        }
+        smMarketMenuKeysBound = false
+    }
+
+    function smMarketOpenMenu(kind, event, payload) {
+        if (event !== null && event !== undefined) {
+            if (typeof event.stopPropagation === 'function') event.stopPropagation()
+            if (typeof event.preventDefault === 'function') event.preventDefault()
+        }
+        let rect = null
+        if (event !== null && event !== undefined && event.currentTarget !== null && event.currentTarget !== undefined &&
+            typeof event.currentTarget.getBoundingClientRect === 'function') {
+            rect = event.currentTarget.getBoundingClientRect()
+        }
+        const width = 200
+        const viewportWidth = typeof window !== 'undefined' && window !== null && typeof window.innerWidth === 'number'
+            ? window.innerWidth
+            : 1024
+        const viewportHeight = typeof window !== 'undefined' && window !== null && typeof window.innerHeight === 'number'
+            ? window.innerHeight
+            : 768
+        const anchorX = rect !== null ? rect.right - width : viewportWidth - width - 24
+        const anchorY = rect !== null ? rect.bottom + 4 : 120
+        const x = Math.max(8, Math.min(viewportWidth - width - 8, anchorX))
+        const y = Math.max(8, Math.min(viewportHeight - 240, anchorY))
+        smMarketMenu = Object.assign({ kind: kind, x: x, y: y }, payload !== null && typeof payload === 'object' ? payload : {})
+        smMarketBindMenuKeys()
+        if (typeof setState === 'function') setState({})
+    }
+
+    function smMarketCloseMenu() {
+        if (smMarketMenu === null) return
+        smMarketMenu = null
+        smMarketUnbindMenuKeys()
+        if (typeof setState === 'function') setState({})
+    }
+
+    function smMarketMenuItem(key, iconName, label, onClick, options) {
+        const opts = options !== null && typeof options === 'object' ? options : {}
+        const disabled = opts.disabled === true
+        return h('button', {
+            key: key,
+            type: 'button',
+            role: 'menuitem',
+            className: cx('sm-menu-item', opts.danger === true && 'sm-menu-item-danger'),
+            disabled: disabled,
+            'aria-disabled': disabled,
+            onClick: function (event) {
+                if (event !== null && event !== undefined && typeof event.stopPropagation === 'function') event.stopPropagation()
+                if (disabled) return
+                smMarketCloseMenu()
+                if (typeof onClick === 'function') onClick()
+            },
+        },
+        iconName ? icon(iconName, 15) : null,
+        h('span', null, label))
+    }
+
+    function smMarketRenderMenu() {
+        if (smMarketMenu === null || typeof smMarketMenu !== 'object') return null
+        const items = []
+        if (smMarketMenu.kind === 'source') {
+            const sourceId = String(smMarketMenu.sourceId || '')
+            const name = String(smMarketMenu.name || '')
+            items.push(smMarketMenuItem('refresh', 'refresh', t('action.refresh'), function () {
+                smMarketRefreshSource(sourceId, name)
+            }))
+            items.push(smMarketMenuItem('delete', 'trash', t('action.deleteSource'), function () {
+                const source = smMarketSourceById(sourceId)
+                smMarketOpenModal('confirm-remove-source', source !== null
+                    ? { source: source, sourceId: sourceId, name: name }
+                    : { sourceId: sourceId, name: name })
+            }, { danger: true }))
+            items.push(h('div', { key: 'sep', className: 'sm-menu-sep' }))
+            items.push(smMarketMenuItem('manage', 'sliders', t('action.manageSources'), smMarketManageSources))
+        } else if (smMarketMenu.kind === 'card') {
+            const item = smMarketMenu.item
+            if (item !== null && typeof item === 'object') {
+                items.push(smMarketMenuItem('detail', 'skill', t('action.viewDetail'), function () {
+                    smMarketOpenDetail(item)
+                }))
+                if (smMarketCardUpdate(item) !== '') {
+                    items.push(smMarketMenuItem('update', 'arrow-up-dot', t('action.update'), function () {
+                        smMarketUpdate(item)
+                    }))
+                } else if (smMarketCardInstalled(item)) {
+                    items.push(smMarketMenuItem('installed', 'check', t('market.installed'), null, { disabled: true }))
+                } else {
+                    items.push(smMarketMenuItem('install', 'download', t('action.install'), function () {
+                        smMarketInstall(item)
+                    }))
+                }
+            }
+        }
+        if (items.length === 0) return null
+        return h(Fragment, null,
+            h('div', {
+                key: 'menu-backdrop',
+                className: 'sm-menu-backdrop',
+                style: { position: 'fixed', inset: 0, zIndex: 1290 },
+                onClick: smMarketCloseMenu,
+                onContextMenu: function (event) {
+                    if (event !== null && event !== undefined && typeof event.preventDefault === 'function') event.preventDefault()
+                    smMarketCloseMenu()
+                },
+            }),
+            h('div', {
+                key: 'menu',
+                className: 'sm-menu',
+                role: 'menu',
+                style: {
+                    position: 'fixed',
+                    left: smMarketMenu.x + 'px',
+                    top: smMarketMenu.y + 'px',
+                    width: '200px',
+                    zIndex: 1300,
+                },
+            }, items))
+    }
+
+    /* ------------------------------------------------------------------ *
+     * 市场卡片                                                            *
+     * ------------------------------------------------------------------ */
+
+    function smMarketCardInstalled(item) {
+        if (item === null || typeof item !== 'object') return false
+        if (item.installed === true) return true
+        return item.installed !== null && typeof item.installed === 'object'
+    }
+
+    /* 市场条目只带 installed 布尔值；更新模态还需要安装位置，从已安装列表补齐。 */
+    function smMarketInstalledSkill(item) {
+        if (item === null || typeof item !== 'object') return null
+        const skills = Array.isArray(appState.skills) ? appState.skills : []
+        const name = String(item.name || '')
+        const sourceId = String(item.sourceId || '')
+        if (name === '') return null
+        for (let index = 0; index < skills.length; index += 1) {
+            const skill = skills[index]
+            if (skill === null || typeof skill !== 'object' || String(skill.name || '') !== name) continue
+            const recordSource = typeof skill.sourceId === 'string' && skill.sourceId !== ''
+                ? skill.sourceId
+                : (skill.market !== null && typeof skill.market === 'object' && typeof skill.market.sourceId === 'string'
+                    ? skill.market.sourceId
+                    : '')
+            if (recordSource === '' || recordSource === sourceId) return skill
+        }
+        return null
+    }
+
+    function smMarketCardInstalledVersion(item) {
+        if (item === null || typeof item !== 'object') return ''
+        if (typeof item.installedVersion === 'string' && item.installedVersion !== '') return item.installedVersion
+        if (item.installed !== null && typeof item.installed === 'object' && typeof item.installed.version === 'string') {
+            return item.installed.version
+        }
+        const installed = smMarketInstalledSkill(item)
+        return installed !== null && typeof installed.version === 'string' ? installed.version : ''
+    }
+
+    function smMarketCardUpdate(item) {
+        if (item === null || typeof item !== 'object') return ''
+        if (typeof item.updateAvailable === 'string' && item.updateAvailable !== '') return item.updateAvailable
+        if (item.updateAvailable !== null && item.updateAvailable !== undefined && item.updateAvailable !== false) {
+            return String(item.updateAvailable)
+        }
+        return ''
+    }
+
+    function smMarketIconName(item) {
         const text = String(item !== null && typeof item === 'object' && item.name ? item.name : '').toLowerCase()
         if (text.includes('review') || text.includes('audit') || text.includes('security')) return 'shield'
         if (text.includes('sql') || text.includes('database') || text.includes('query') ||
@@ -157,8 +423,6 @@
         if (text.includes('script') || text.includes('python') || text.includes('bash')) return 'script'
         if (text.includes('plugin') || text.includes('arch') || text.includes('cordis')) return 'puzzle'
         if (text.includes('creator') || text.includes('skill')) return 'skill'
-        const loc = info !== null && info !== undefined && typeof info === 'object' ? info.location : ''
-        if (loc === 'preset' || loc === 'bundled') return 'package'
         return 'folder'
     }
 
@@ -173,436 +437,393 @@
             'aria-hidden': 'true',
             focusable: 'false',
         },
-            h('circle', { cx: 12, cy: 12, r: 9 }),
-            h('path', {
-                d: 'M8.5 11.5L12 8m0 0l3.5 3.5M12 8v8',
-                strokeLinecap: 'round',
-                strokeLinejoin: 'round',
-            })
-        )
+        h('circle', { cx: 12, cy: 12, r: 9 }),
+        h('path', {
+            d: 'M8.5 11.5L12 8m0 0l3.5 3.5M12 8v8',
+            strokeLinecap: 'round',
+            strokeLinejoin: 'round',
+        }))
     }
 
-    /* 所有共享状态的写入（替换 / 追加 / 错误 / 加载态）都由 00-prelude 的
-       loadMarket 在 requestId + 查询签名校验之后完成；这里只负责发起请求与
-       维护按钮级瞬时状态。 */
-    async function smFetchMarket(options) {
-        const opts = options !== null && typeof options === 'object' ? options : {}
-        const append = opts.append === true
-        if (smMarketLoading) return
-        const sig = smMarketSig()
-        const offset = append ? smMarketNextValue() : 0
-        if (append && offset === null) return
-        smMarketLoading = true
-        smMarketAppending = append
-        /* 先登记本次 sig，避免渲染调度在请求期间重复补发。失败时同样保留，
-           由错误条提供显式重试，而不是自动循环重试。 */
-        smMarketLastSig = sig
-        setState({})
-        try {
-            const result = await loadMarket({
-                sourceId: appState.marketSourceId,
-                q: String(appState.search || ''),
-                tag: appState.marketTag,
-                sort: appState.marketSort,
-                offset: offset,
-                limit: SM_MARKET_PAGE_SIZE,
-                refresh: opts.refresh === true,
-            })
-            if (result !== null && result !== undefined && smMarketSig() === sig) smMarketLoaded = true
-        } finally {
-            smMarketLoading = false
-            smMarketAppending = false
-            rerender()
-        }
-    }
-
-    /* 去抖调度：顶栏搜索/清空由 00-prelude 直接发请求。共享的
-       marketRequestIsFresh 记录「在途 / 最近 300ms 内成功」的查询签名，
-       签名相同就跳过，避免同一次查询发两遍。 */
-    function smScheduleMarketLoad() {
-        const sig = smMarketSig()
-        if (smMarketLastSig === sig) return
-        if (marketRequestIsFresh(sig)) {
-            /* 外部请求已覆盖当前查询，采纳其结果，不再补发。 */
-            smMarketLastSig = sig
-            return
-        }
-        if (smMarketTimer !== null && smMarketTimerSig === sig) return
-        if (smMarketTimer !== null) clearTimeout(smMarketTimer)
-        smMarketTimerSig = sig
-        smMarketTimer = setTimeout(function () {
-            smMarketTimer = null
-            smMarketTimerSig = ''
-            if (smMarketSig() !== sig) return
-            if (smMarketLoading) return
-            if (smMarketLastSig === sig) return
-            if (marketRequestIsFresh(sig)) {
-                smMarketLastSig = sig
-                return
-            }
-            void smFetchMarket({ append: false })
-        }, 300)
-    }
-
-    function smMarketOpenSources() {
-        setState({ tab: 'sources', view: 'list', detail: null })
-        try {
-            const pending = loadSources()
-            if (pending !== null && pending !== undefined && typeof pending.catch === 'function') {
-                pending.catch(function () { /* 来源页会展示错误态 */ })
-            }
-        } catch (err) {
-            void err
-        }
-    }
-
-    function smMarketCancelPending() {
-        if (smMarketTimer !== null) {
-            clearTimeout(smMarketTimer)
-            smMarketTimer = null
-        }
-        smMarketTimerSig = ''
-    }
-
-    function smMarketChangeSource(event) {
-        const value = event !== null && event !== undefined && event.target !== null && event.target !== undefined
-            ? String(event.target.value || 'all')
-            : 'all'
-        if (value === appState.marketSourceId) return
-        smMarketCancelPending()
-        smMarketLastSig = ''
-        setState({ marketSourceId: value })
-        void smFetchMarket({ append: false })
-    }
-
-    function smMarketChangeTag(tag) {
-        if (tag === appState.marketTag) return
-        smMarketCancelPending()
-        smMarketLastSig = ''
-        setState({ marketTag: tag })
-        void smFetchMarket({ append: false })
-    }
-
-    function smMarketChangeSort(event) {
-        const value = event !== null && event !== undefined && event.target !== null && event.target !== undefined
-            ? String(event.target.value || 'relevance')
-            : 'relevance'
-        if (value === appState.marketSort) return
-        smMarketCancelPending()
-        smMarketLastSig = ''
-        setState({ marketSort: value })
-        void smFetchMarket({ append: false })
-    }
-
-    function smMarketOnSearchInput(event) {
-        const value = event !== null && event !== undefined && event.target !== null && event.target !== undefined
-            ? String(event.target.value || '')
-            : ''
-        if (value === appState.search) return
-        /* 顶栏与市场内搜索共用 appState.search；请求统一由
-           smScheduleMarketLoad 去抖，避免两套搜索词。 */
-        smMarketLastSig = ''
-        setState({ search: value })
-    }
-
-    function smMarketClearFilters() {
-        smMarketCancelPending()
-        smMarketLastSig = ''
-        setState({ search: '', marketTag: 'all' })
-        /* 清空搜索必须重新请求第 1 页（不能只清本地输入）。 */
-        void smFetchMarket({ append: false })
-    }
-
-    function smMarketRetry() {
-        smMarketCancelPending()
-        smMarketLastSig = ''
-        void smFetchMarket({ append: false, refresh: true })
-    }
-
-    /** 供来源 Tab 在源增删改/启停后让市场列表失效并重新读取。 */
-    function smMarketInvalidate() {
-        smMarketCancelPending()
-        smMarketLastSig = ''
-        smScheduleMarketLoad()
-    }
-
-    function smMarketLoadMore() {
-        if (smMarketNextValue() === null) return
-        void smFetchMarket({ append: true })
+    function smMarketCardKey(item) {
+        const sourceId = String(item !== null && typeof item === 'object' && item.sourceId ? item.sourceId : '')
+        const name = String(item !== null && typeof item === 'object' && item.name ? item.name : '')
+        return sourceId + '/' + name
     }
 
     function smMarketOpenDetail(item) {
         if (item === null || typeof item !== 'object') return
-        /* 键盘 Enter/Space 不会触发 renderPage 的 onClickCapture，需显式记录滚动位置。 */
         if (typeof rememberListScroll === 'function') rememberListScroll()
-        setState({
-            view: 'detail',
-            detail: { kind: 'market', id: item.id, sourceId: item.sourceId, name: item.name },
-        })
+        const key = smMarketCardKey(item)
+        const detailId = typeof item.id === 'string' && item.id !== '' ? item.id : key
+        if (typeof setState === 'function') {
+            setState({
+                view: 'detail',
+                detail: {
+                    kind: 'market',
+                    id: detailId,
+                    sourceId: item.sourceId,
+                    name: item.name,
+                },
+            })
+        }
     }
 
     function smMarketInstall(item) {
-        openModal('install', { sourceId: item.sourceId, name: item.name, version: item.version })
-    }
-
-    function smMarketUpdate(item, info) {
-        openModal('update', {
+        if (item === null || typeof item !== 'object') return
+        smMarketOpenModal('install', {
             sourceId: item.sourceId,
             name: item.name,
-            version: info.updateAvailable,
-            currentVersion: info.version,
-            /* 50-modals.js 的 SmUpdateModal 读取 available/current，这里同时给出。 */
-            available: info.updateAvailable,
-            current: info.version,
-            location: info.location,
+            version: item.version,
         })
     }
 
-    /* ------------------------------------------------------------------ *
-     * 渲染：工具栏 / 行 / 空态 / 骨架                                      *
-     * ------------------------------------------------------------------ */
-
-    function smMarketControls(sources, enabledSources, tags, total) {
-        const optionSources = enabledSources.slice()
-        if (appState.marketSourceId !== 'all') {
-            let hasSelected = false
-            for (let i = 0; i < optionSources.length; i += 1) {
-                if (optionSources[i].id === appState.marketSourceId) {
-                    hasSelected = true
-                    break
-                }
-            }
-            if (!hasSelected) {
-                for (let j = 0; j < sources.length; j += 1) {
-                    if (sources[j] !== null && typeof sources[j] === 'object' && sources[j].id === appState.marketSourceId) {
-                        optionSources.push(sources[j])
-                        break
-                    }
-                }
-            }
-        }
-
-        const sourceOptions = [
-            h('option', { key: 'all', value: 'all' }, t('market.allSources', {
-                count: enabledSources.length,
-                total: total,
-            })),
-        ]
-        optionSources.forEach(function (src) {
-            const dot = src.status === 'ok' ? '●' : src.status === 'checking' ? '◐' : '○'
-            const count = typeof src.skillCount === 'number' ? ' (' + src.skillCount + ')' : ''
-            const disabled = src.enabled === false ? ' · ' + t('source.disabled') : ''
-            sourceOptions.push(h('option', {
-                key: src.id || src.url || src.name,
-                value: src.id || src.url || src.name,
-            }, dot + ' ' + (src.name || src.url || '') + count + disabled))
-        })
-
-        const chips = [
-            h('button', {
-                key: 'all',
-                type: 'button',
-                className: cx('sm-chip', appState.marketTag === 'all' && 'sm-active'),
-                'aria-pressed': appState.marketTag === 'all',
-                onClick: function () { smMarketChangeTag('all') },
-            }, t('filter.all')),
-        ]
-        tags.forEach(function (tag) {
-            chips.push(h('button', {
-                key: tag,
-                type: 'button',
-                className: cx('sm-chip', appState.marketTag === tag && 'sm-active'),
-                'aria-pressed': appState.marketTag === tag,
-                onClick: function () { smMarketChangeTag(tag) },
-            }, tag))
-        })
-
-        return h('div', {
-            key: 'controls',
-            className: 'sm-market-controls',
-            style: { display: 'flex', flexDirection: 'column', gap: '10px' },
-        },
-            h('div', {
-                className: 'sm-market-controls-row',
-                style: {
-                    display: 'flex',
-                    alignItems: 'center',
-                    justifyContent: 'space-between',
-                    gap: '12px',
-                    flexWrap: 'wrap',
-                },
-            },
-                h('div', {
-                    className: 'sm-market-source-control',
-                    style: { display: 'flex', alignItems: 'center', gap: '8px', minWidth: 0, flexWrap: 'wrap' },
-                },
-                    h('span', { className: 'sm-label' }, t('market.sourceLabel')),
-                    h('select', {
-                        className: 'sm-select sm-market-source-select',
-                        value: appState.marketSourceId,
-                        'aria-label': t('market.sourceLabel'),
-                        onChange: smMarketChangeSource,
-                    }, sourceOptions),
-                    h('button', {
-                        type: 'button',
-                        className: 'sm-btn sm-btn-ghost sm-btn-sm',
-                        onClick: smMarketOpenSources,
-                    }, t('market.manageSources'))
-                ),
-                h('div', {
-                    className: 'sm-market-tools',
-                    style: { display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' },
-                },
-                    h('div', { className: 'sm-search sm-market-search' },
-                        icon('search', 14),
-                        h('input', {
-                            type: 'search',
-                            value: appState.search,
-                            placeholder: t('search.market'),
-                            'aria-label': t('search.market'),
-                            spellCheck: false,
-                            onChange: smMarketOnSearchInput,
-                        })
-                    ),
-                    h('span', { className: 'sm-label' }, t('sort.label')),
-                    h('select', {
-                        className: 'sm-select sm-market-sort',
-                        value: appState.marketSort,
-                        'aria-label': t('sort.label'),
-                        onChange: smMarketChangeSort,
-                    },
-                        h('option', { value: 'relevance' }, t('market.sortRecommended')),
-                        h('option', { value: 'published' }, t('market.sortUpdated')),
-                        h('option', { value: 'name' }, t('sort.name'))
-                    )
-                )
-            ),
-            h('div', { className: 'sm-chips sm-market-chips' }, chips)
+    function smMarketUpdate(item) {
+        if (item === null || typeof item !== 'object') return
+        const next = smMarketCardUpdate(item)
+        const installedSkill = smMarketInstalledSkill(item)
+        const embedded = item.installed !== null && typeof item.installed === 'object' ? item.installed : null
+        const current = smMarketCardInstalledVersion(item)
+        const location = installedSkill !== null && typeof installedSkill.location === 'string' && installedSkill.location !== ''
+            ? installedSkill.location
+            : embedded !== null && typeof embedded.location === 'string' ? embedded.location : ''
+        const localModified = installedSkill !== null && (
+            installedSkill.localModified === true ||
+            (installedSkill.market !== null && typeof installedSkill.market === 'object' && installedSkill.market.localModified === true)
         )
+        /* 50-modals 的更新模态通过 payload.skill 读取目标（smSkillUpdateVersion）。 */
+        const target = Object.assign({}, item, {
+            id: installedSkill !== null && typeof installedSkill.id === 'string' && installedSkill.id !== ''
+                ? installedSkill.id
+                : (typeof item.id === 'string' && item.id !== '' ? item.id : smMarketCardKey(item)),
+            location: location,
+            version: current !== '' ? current : item.version,
+            updateAvailable: next,
+            localModified: localModified,
+        })
+        smMarketOpenModal('update', {
+            skill: target,
+            sourceId: item.sourceId,
+            name: item.name,
+            version: next,
+            currentVersion: current,
+            available: next,
+            current: current,
+            location: location,
+        })
     }
 
-    function smMarketRow(item) {
-        const info = smMarketInstalledInfo(item)
-        const hasUpdate = !!(info !== null && info.updateAvailable)
-        const dotClass = hasUpdate ? 'sm-dot-update' : info !== null ? 'sm-dot-ok' : 'sm-dot-idle'
-        const dotTitle = hasUpdate ? t('market.dot.update') : info !== null ? t('market.dot.installed') : t('market.dot.notInstalled')
-        const tagNodes = []
-
-        if (hasUpdate) {
-            tagNodes.push(h('span', {
-                key: 'update',
-                className: 'sm-badge sm-badge-update',
-                title: t('badge.updateTip', { version: 'v' + info.updateAvailable }),
-            }, smMarketUpgradeGlyph(), h('span', null, 'v' + info.updateAvailable)))
-        }
-        const maxTags = hasUpdate ? 3 : 4
-        const itemTags = Array.isArray(item.tags) ? item.tags : []
-        itemTags.slice(0, maxTags).forEach(function (tag) {
-            tagNodes.push(h('span', { key: 'tag-' + tag, className: 'sm-badge' }, tag))
-        })
-
-        let byline = ''
-        if (item.author && item.sourceName) byline = t('market.by', { author: item.author, source: item.sourceName })
-
-        let action = null
-        if (info === null) {
-            action = h('button', {
+    function smMarketCardPrimary(item) {
+        const update = smMarketCardUpdate(item)
+        const installed = smMarketCardInstalled(item)
+        if (update !== '') {
+            return h('button', {
+                key: 'primary',
                 type: 'button',
                 className: 'sm-btn sm-btn-primary sm-btn-sm',
                 onClick: function (event) {
-                    if (event && event.stopPropagation) event.stopPropagation()
-                    smMarketInstall(item)
-                },
-            }, t('action.install'))
-        } else if (hasUpdate) {
-            action = h('button', {
-                type: 'button',
-                className: 'sm-btn sm-btn-primary sm-btn-sm',
-                onClick: function (event) {
-                    if (event && event.stopPropagation) event.stopPropagation()
-                    smMarketUpdate(item, info)
+                    if (event !== null && event !== undefined && typeof event.stopPropagation === 'function') event.stopPropagation()
+                    smMarketUpdate(item)
                 },
             }, t('action.update'))
-        } else {
-            /* v2.3：行尾只保留唯一按钮；已安装且最新时用弱化按钮，点击不安装，切到已安装页。 */
-            action = h('button', {
+        }
+        if (installed) {
+            return h('button', {
+                key: 'primary',
                 type: 'button',
                 className: 'sm-btn sm-btn-ghost sm-btn-sm sm-market-installed',
                 onClick: function (event) {
-                    if (event && event.stopPropagation) event.stopPropagation()
-                    setState({
-                        tab: 'installed',
-                        view: 'list',
-                        detail: null,
-                        filter: 'all',
-                        search: typeof item.name === 'string' ? item.name : '',
-                    })
+                    if (event !== null && event !== undefined && typeof event.stopPropagation === 'function') event.stopPropagation()
+                    smMarketOpenDetail(item)
                 },
-            }, t('market.installedState'))
+            }, t('market.installed'))
         }
+        return h('button', {
+            key: 'primary',
+            type: 'button',
+            className: 'sm-btn sm-btn-primary sm-btn-sm',
+            onClick: function (event) {
+                if (event !== null && event !== undefined && typeof event.stopPropagation === 'function') event.stopPropagation()
+                smMarketInstall(item)
+            },
+        }, t('action.install'))
+    }
 
-        const key = item.id || String(item.sourceId || '') + '/' + String(item.name || '')
+    function renderMarketCard(item) {
+        if (item === null || typeof item !== 'object') return null
+        const update = smMarketCardUpdate(item)
+        const installed = smMarketCardInstalled(item)
+        const dotClass = update !== '' ? 'sm-dot-update' : installed ? 'sm-dot-ok' : 'sm-dot-idle'
+        const dotTip = update !== ''
+            ? t('market.updateTo', { version: smMarketVersionLabel(update) })
+            : installed
+                ? t('market.installed')
+                : t('action.install')
+        const tags = []
+        if (update !== '') {
+            tags.push(h('span', {
+                key: 'update',
+                className: 'sm-badge sm-badge-update sm-mono',
+                'data-tip': t('badge.updateTip', { version: smMarketVersionLabel(update) }),
+            }, smMarketUpgradeGlyph(), h('span', null, smMarketVersionLabel(update))))
+        }
+        const maxTags = update !== '' ? 3 : 4
+        const itemTags = Array.isArray(item.tags) ? item.tags : []
+        itemTags.slice(0, maxTags).forEach(function (tag) {
+            if (typeof tag !== 'string' || tag === '') return
+            tags.push(h('span', { key: 'tag-' + tag, className: 'sm-badge' }, tag))
+        })
+        const version = smMarketVersionLabel(item.version)
+        const description = typeof item.description === 'string' ? item.description : ''
+        const openDetail = function () { smMarketOpenDetail(item) }
+
         return h('div', {
-            key: key,
-            className: 'sm-row sm-row-market',
+            key: smMarketCardKey(item),
+            className: 'sm-card-item sm-market-card',
             role: 'button',
             tabIndex: 0,
-            onClick: function () { smMarketOpenDetail(item) },
+            'data-market-key': smMarketCardKey(item),
+            onClick: openDetail,
             onKeyDown: function (event) {
-                if (event && (event.key === 'Enter' || event.key === ' ')) {
-                    if (event.preventDefault) event.preventDefault()
-                    smMarketOpenDetail(item)
+                if (event === null || event === undefined) return
+                /* 卡片内的 ⋯ / 主按钮是独立停靠点，不能触发整卡进入详情。 */
+                if (event.target !== event.currentTarget) return
+                if (event.key === 'Enter' || event.key === ' ') {
+                    if (typeof event.preventDefault === 'function') event.preventDefault()
+                    openDetail()
                 }
             },
         },
-            h('div', { className: 'sm-row-main' },
-                h('div', { className: 'sm-row-icon' },
-                    icon(smMarketIconName(item, info), 24),
-                    h('span', { className: cx('sm-dot', dotClass), title: dotTitle })
-                ),
-                h('div', {
-                    className: 'sm-row-text',
-                    style: { flex: '1 1 auto', minWidth: 0, display: 'flex', flexDirection: 'column', gap: '4px' },
-                },
-                    h('div', {
-                        className: 'sm-row-title',
-                        style: { display: 'flex', alignItems: 'center', gap: '8px', minWidth: 0, overflow: 'hidden' },
-                    },
-                        h('span', { className: 'sm-row-name sm-mono' }, item.name),
-                        h('span', { className: 'sm-row-version sm-mono' }, 'v' + String(item.version || '')),
-                        tagNodes.length > 0 ? h('div', { className: 'sm-row-badges' }, tagNodes) : null,
-                        byline !== '' ? h('span', { className: 'sm-row-by sm-caption sm-ellipsis' }, byline) : null
-                    ),
-                    h('div', { className: 'sm-row-desc', title: item.description || '' }, item.description || '')
-                )
-            ),
-            h('div', { className: 'sm-row-tail' }, action)
-        )
+        h('div', {
+            className: 'sm-card-icon',
+            style: {
+                width: '48px',
+                height: '48px',
+                borderRadius: 'var(--dsw-radius-lg)',
+                border: '0.5px solid var(--dsw-alias-border-l2)',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                flex: 'none',
+                position: 'relative',
+            },
+        },
+        icon(smMarketIconName(item), 24),
+        h('span', { className: cx('sm-dot', dotClass), title: dotTip, 'data-tip': dotTip })),
+        h('div', {
+            className: 'sm-card-main',
+            style: { flex: '1 1 auto', minWidth: 0, display: 'flex', flexDirection: 'column', gap: '4px' },
+        },
+        h('div', {
+            className: 'sm-card-title-row',
+            style: { display: 'flex', alignItems: 'center', gap: '8px', minWidth: 0, overflow: 'hidden' },
+        },
+        h('span', { className: 'sm-card-name sm-mono', title: String(item.name || '') }, String(item.name || '')),
+        version !== '' ? h('span', { className: 'sm-badge sm-mono' }, version) : null,
+        tags.length > 0
+            ? h('div', {
+                className: 'sm-tagbar',
+                style: { display: 'flex', alignItems: 'center', gap: '4px', maxWidth: '340px', overflow: 'hidden', flexWrap: 'nowrap' },
+            }, tags)
+            : null),
+        h('div', {
+            className: 'sm-card-desc',
+            title: description,
+            style: {
+                overflow: 'hidden',
+                display: '-webkit-box',
+                WebkitLineClamp: '2',
+                WebkitBoxOrient: 'vertical',
+            },
+        }, description)),
+        h('div', {
+            className: 'sm-card-tail',
+            style: { display: 'flex', alignItems: 'center', gap: '8px', flex: 'none', alignSelf: 'center' },
+            onClick: function (event) {
+                if (event !== null && event !== undefined && typeof event.stopPropagation === 'function') event.stopPropagation()
+            },
+        },
+        h('button', {
+            type: 'button',
+            className: 'sm-icon-btn sm-card-more',
+            'aria-label': t('action.more'),
+            'data-tip': t('action.more'),
+            onClick: function (event) {
+                smMarketOpenMenu('card', event, { item: item })
+            },
+        }, icon('more', 16)),
+        smMarketCardPrimary(item)))
     }
 
-    function smMarketSkeleton() {
-        const rows = []
-        for (let i = 0; i < 6; i += 1) {
-            rows.push(h('div', { key: 'sk-' + i, className: 'sm-row sm-row-market' },
-                h('div', { className: 'sm-row-main' },
-                    h('div', { className: 'sm-row-icon' },
-                        h('span', { className: 'sm-skeleton', style: { width: '24px', height: '24px' } })
-                    ),
-                    h('div', {
-                        className: 'sm-row-text',
-                        style: { flex: '1 1 auto', minWidth: 0, display: 'flex', flexDirection: 'column', gap: '8px' },
-                    },
-                        h('div', { className: 'sm-skeleton', style: { maxWidth: '220px' } }),
-                        h('div', { className: 'sm-skeleton', style: { maxWidth: '420px', minHeight: '12px' } })
-                    )
-                )
-            ))
+    /* ------------------------------------------------------------------ *
+     * 源区块                                                              *
+     * ------------------------------------------------------------------ */
+
+    function smMarketLoadMore(block) {
+        if (block === null || typeof block !== 'object') return
+        const sourceId = String(block.sourceId || '')
+        const cursor = typeof block.cursor === 'string' && block.cursor !== '' ? block.cursor : null
+        if (sourceId === '' || cursor === null) return
+        if (smMarketAppending[sourceId] === true) return
+        smMarketAppending[sourceId] = true
+        if (typeof setState === 'function') setState({})
+        const run = async function () {
+            try {
+                if (typeof loadMarket !== 'function') return
+                /* 00-prelude 的 loadMarket 负责按 sourceId 追加并去重。 */
+                const pending = loadMarket({
+                    q: String(appState.search || ''),
+                    sort: smMarketSortValue(),
+                    cursor: cursor,
+                    limit: SM_MARKET_PAGE_SIZE,
+                    sourceId: sourceId,
+                    append: true,
+                })
+                if (pending !== null && pending !== undefined && typeof pending.then === 'function') await pending
+            } catch (err) {
+                void err
+                toast(t('error.unexpected'), { tone: 'error' })
+            } finally {
+                delete smMarketAppending[sourceId]
+                if (typeof setState === 'function') setState({})
+            }
         }
-        return h('div', { key: 'skeleton', className: 'sm-market-list sm-stack', 'aria-busy': 'true' },
-            h('div', { className: 'sm-caption sm-muted', style: { padding: '4px 8px' } }, t('market.loading')),
-            rows
-        )
+        void run()
     }
+
+    function smMarketBlockRetry(block) {
+        if (block === null || typeof block !== 'object') return
+        smMarketRefreshSource(block.sourceId, block.name)
+    }
+
+    function smMarketBlockEmpty(block) {
+        const sourceId = String(block !== null && typeof block === 'object' ? block.sourceId || '' : '')
+        return h('div', {
+            key: 'empty-' + sourceId,
+            className: 'sm-empty sm-market-empty',
+            style: { padding: '20px 12px' },
+        },
+        h('div', { className: 'sm-empty-icon' }, icon('package', 32)),
+        h('div', { className: 'sm-empty-title sm-card-title' }, t('empty.market.noSkills.title')),
+        h('div', { className: 'sm-empty-body sm-desc' }, t('empty.market.noSkills.body')),
+        h('div', {
+            className: 'sm-empty-actions',
+            style: { display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px', flexWrap: 'wrap' },
+        },
+        h('button', {
+            type: 'button',
+            className: 'sm-btn sm-btn-ghost sm-btn-sm',
+            onClick: smMarketManageSources,
+        }, t('action.manageSources'))))
+    }
+
+    function smMarketBlockError(block) {
+        const sourceId = String(block !== null && typeof block === 'object' ? block.sourceId || '' : '')
+        const detail = smMarketBlockErrorText(block)
+        return h('div', {
+            key: 'error-' + sourceId,
+            className: 'sm-banner sm-banner-error sm-error',
+            role: 'alert',
+            style: { display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' },
+        },
+        icon('alert', 16),
+        h('div', { className: 'sm-banner-main', style: { flex: '1 1 auto', minWidth: 0 } },
+            h('div', { className: 'sm-banner-title' }, t('market.error.source')),
+            h('div', { className: 'sm-caption sm-muted' },
+                detail !== '' ? detail : t('market.error.sourceHint'))),
+        h('button', {
+            type: 'button',
+            className: 'sm-btn sm-btn-ghost sm-btn-sm',
+            onClick: function () { smMarketBlockRetry(block) },
+        }, t('action.retry')))
+    }
+
+    function renderMarketSourceBlock(block) {
+        if (block === null || typeof block !== 'object') return null
+        const sourceId = String(block.sourceId || '')
+        const name = typeof block.name === 'string' && block.name !== '' ? block.name : sourceId
+        const skills = smMarketBlockSkills(block)
+        const errorText = smMarketBlockErrorText(block)
+        const source = smMarketSourceById(sourceId)
+        const status = source !== null && typeof source.status === 'string' ? source.status : 'ok'
+        const dotClass = status === 'error' ? 'sm-dot-error' : status === 'checking' ? 'sm-dot-warn' : 'sm-dot-ok'
+        const dotTip = status === 'error' ? t('source.status.error') : status === 'checking' ? t('source.status.checking') : t('source.status.ok')
+        const count = typeof block.total === 'number' ? block.total : skills.length
+        const cursor = typeof block.cursor === 'string' && block.cursor !== '' ? block.cursor : null
+        const appending = smMarketAppending[sourceId] === true
+        const refreshing = smMarketRefreshing[sourceId] === true
+        let body = null
+        if (errorText !== '') {
+            body = smMarketBlockError(block)
+        } else if (skills.length === 0) {
+            body = smMarketBlockEmpty(block)
+        } else {
+            body = h('div', { className: 'sm-card-grid' }, skills.map(function (item) {
+                return renderMarketCard(item)
+            }))
+        }
+        return h('section', {
+            key: sourceId,
+            className: 'sm-source-block',
+            'data-source-id': sourceId,
+            'aria-label': name + ' · ' + t('source.skillCount', { count: count }),
+        },
+        h('div', {
+            className: 'sm-source-block-head',
+            style: { display: 'flex', alignItems: 'center', gap: '8px', padding: '0 2px', minWidth: 0 },
+        },
+        h('span', { className: cx('sm-dot', dotClass), title: dotTip, 'data-tip': dotTip, style: { position: 'static', flex: 'none' } }),
+        h('span', {
+            className: 'sm-source-block-title',
+            title: name,
+            style: {
+                fontSize: 'var(--sm-fs)',
+                fontWeight: 500,
+                color: 'var(--dsw-alias-label-primary)',
+                whiteSpace: 'nowrap',
+                overflow: 'hidden',
+                textOverflow: 'ellipsis',
+            },
+        }, name),
+        h('span', {
+            className: 'sm-source-block-count',
+            style: { fontSize: 'calc(var(--sm-fs) - 2px)', color: 'var(--dsw-alias-label-caption)', whiteSpace: 'nowrap' },
+        }, t('source.skillCount', { count: count })),
+        h('div', {
+            className: 'sm-source-block-actions',
+            style: { marginLeft: 'auto', display: 'inline-flex', alignItems: 'center', gap: '2px', flexShrink: 0 },
+        },
+        h('button', {
+            type: 'button',
+            className: 'sm-icon-btn',
+            'aria-label': t('action.more'),
+            'data-tip': t('action.more'),
+            'aria-busy': refreshing ? 'true' : undefined,
+            disabled: refreshing,
+            style: { width: '28px', height: '28px' },
+            onClick: function (event) {
+                smMarketOpenMenu('source', event, { sourceId: sourceId, name: name })
+            },
+        }, icon('more', 16)))),
+        body,
+        cursor !== null && errorText === ''
+            ? h('div', {
+                key: 'more',
+                className: 'sm-market-more',
+                style: { display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '4px 0' },
+            },
+            h('button', {
+                type: 'button',
+                className: 'sm-btn sm-btn-ghost sm-btn-sm',
+                disabled: appending,
+                onClick: function () { smMarketLoadMore(block) },
+            }, appending ? t('market.loadingMore') : t('action.more')))
+            : null)
+    }
+
+    /* ------------------------------------------------------------------ *
+     * 空态 / 骨架 / 页级错误                                              *
+     * ------------------------------------------------------------------ */
 
     function smMarketEmptyBlock(iconName, title, body, actions, keyName) {
         return h('div', { key: keyName || 'empty', className: 'sm-empty sm-market-empty' },
@@ -614,99 +835,199 @@
                     className: 'sm-empty-actions',
                     style: { display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px', flexWrap: 'wrap' },
                 }, actions)
-                : null
-        )
+                : null)
     }
 
     function smMarketNoSourceState(hasAnySource) {
-        const title = hasAnySource ? t('empty.market.noEnabledSource') : t('source.empty')
-        const body = hasAnySource ? t('empty.market.noEnabledSourceBody') : t('empty.market.noSourceBody')
         const actions = [
             h('button', {
                 key: 'add',
                 type: 'button',
                 className: 'sm-btn sm-btn-primary sm-btn-sm',
-                onClick: function () { openModal('add-source') },
-            }, t('action.addSource')),
+                onClick: function () { smMarketOpenModal('add-source', {}) },
+            }, icon('plus', 15), t('action.addSource')),
         ]
         if (hasAnySource) {
             actions.push(h('button', {
                 key: 'manage',
                 type: 'button',
                 className: 'sm-btn sm-btn-ghost sm-btn-sm',
-                onClick: smMarketOpenSources,
-            }, t('market.manageSources')))
+                onClick: smMarketManageSources,
+            }, t('action.manageSources')))
         }
-        return smMarketEmptyBlock('sources', title, body, actions, 'no-source')
-    }
-
-    function smMarketNoSkillsState() {
-        const search = String(appState.search || '')
-        const hasQuery = search !== '' || appState.marketTag !== 'all'
-        if (hasQuery) {
-            return smMarketEmptyBlock('search', t('empty.search', {
-                query: search || appState.marketTag,
-            }), '', [
-                h('button', {
-                    key: 'clear',
-                    type: 'button',
-                    className: 'sm-btn sm-btn-ghost sm-btn-sm',
-                    onClick: smMarketClearFilters,
-                }, t('action.clearSearch')),
-            ], 'no-match')
-        }
-        return smMarketEmptyBlock('market', t('market.empty'), '', [
-            h('button', {
-                key: 'refresh',
-                type: 'button',
-                className: 'sm-btn sm-btn-ghost sm-btn-sm',
-                onClick: smMarketRetry,
-            }, t('action.refresh')),
-        ], 'no-skills')
-    }
-
-    function smMarketErrorState(error) {
-        const detail = smMarketErrorText(error)
-        return smMarketEmptyBlock('alert', t('error.loadMarket'), detail || t('source.error.fetch'), [
-            h('button', {
-                key: 'retry',
-                type: 'button',
-                className: 'sm-btn sm-btn-primary sm-btn-sm',
-                onClick: smMarketRetry,
-            }, t('action.retry')),
-            h('button', {
-                key: 'sources',
-                type: 'button',
-                className: 'sm-btn sm-btn-ghost sm-btn-sm',
-                onClick: smMarketOpenSources,
-            }, t('market.manageSources')),
-        ], 'error')
-    }
-
-    function smMarketErrorBanner(error) {
-        const detail = smMarketErrorText(error)
-        return h('div', { key: 'error-banner', className: 'sm-banner sm-error', role: 'alert' },
-            icon('alert', 16),
-            h('span', {
-                className: 'sm-banner-text',
-                style: { display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap', minWidth: 0 },
-            },
-                t('market.offline'),
-                h('span', { className: 'sm-badge sm-warn' }, t('source.stale')),
-                detail !== '' ? h('span', { className: 'sm-banner-detail sm-caption sm-muted' }, detail) : null
-            ),
-            h('button', {
-                type: 'button',
-                className: 'sm-btn sm-btn-ghost sm-btn-sm',
-                onClick: smMarketRetry,
-            }, t('action.retry'))
+        return smMarketEmptyBlock(
+            'sources',
+            t('empty.market.noSource.title'),
+            t('empty.market.noSource.body'),
+            actions,
+            'no-source'
         )
     }
 
-    function smMarketList(skills) {
-        return h('div', { key: 'list', className: 'sm-market-list sm-stack' }, skills.map(function (item) {
-            return smMarketRow(item)
-        }))
+    function smMarketNoResultsState() {
+        const query = String(appState.search === undefined || appState.search === null ? '' : appState.search)
+        if (query.trim() !== '') {
+            return smMarketEmptyBlock(
+                'search',
+                t('empty.market.noResults.title', { query: query }),
+                t('empty.market.noResults.body'),
+                [
+                    h('button', {
+                        key: 'clear',
+                        type: 'button',
+                        className: 'sm-btn sm-btn-ghost sm-btn-sm',
+                        onClick: smMarketClearSearch,
+                    }, t('action.clear')),
+                ],
+                'no-results'
+            )
+        }
+        return smMarketEmptyBlock(
+            'package',
+            t('empty.market.noSkills.title'),
+            t('empty.market.noSkills.body'),
+            [
+                h('button', {
+                    key: 'manage',
+                    type: 'button',
+                    className: 'sm-btn sm-btn-ghost sm-btn-sm',
+                    onClick: smMarketManageSources,
+                }, t('action.manageSources')),
+            ],
+            'no-skills'
+        )
+    }
+
+    function smMarketPageError(error) {
+        const detail = smMarketErrorText(error)
+        return smMarketEmptyBlock(
+            'alert',
+            t('state.error.market.title'),
+            detail !== '' ? detail : t('market.error.sourceHint'),
+            [
+                h('button', {
+                    key: 'retry',
+                    type: 'button',
+                    className: 'sm-btn sm-btn-primary sm-btn-sm',
+                    onClick: smMarketRetry,
+                }, t('action.retry')),
+                h('button', {
+                    key: 'sources',
+                    type: 'button',
+                    className: 'sm-btn sm-btn-ghost sm-btn-sm',
+                    onClick: smMarketManageSources,
+                }, t('action.manageSources')),
+            ],
+            'page-error'
+        )
+    }
+
+    function smMarketStaleBanner() {
+        return h('div', {
+            key: 'stale-banner',
+            className: 'sm-banner sm-banner-warn sm-warn',
+            role: 'status',
+            style: { display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' },
+        },
+        icon('alert', 16),
+        h('div', { className: 'sm-banner-main', style: { flex: '1 1 auto', minWidth: 0 } },
+            h('div', { className: 'sm-banner-title' }, t('market.error.offline')),
+            h('div', { className: 'sm-caption sm-muted' }, t('market.error.offlineHint'))),
+        h('button', {
+            type: 'button',
+            className: 'sm-btn sm-btn-ghost sm-btn-sm',
+            onClick: smMarketRetry,
+        }, t('action.retry')),
+        h('button', {
+            type: 'button',
+            className: 'sm-btn sm-btn-ghost sm-btn-sm',
+            onClick: smMarketManageSources,
+        }, t('action.manageSources')))
+    }
+
+    function smMarketSkeletonCard(index) {
+        return h('div', {
+            key: 'sk-' + String(index),
+            className: 'sm-card-item sm-market-card',
+            'aria-hidden': 'true',
+            style: { pointerEvents: 'none' },
+        },
+        h('div', { className: 'sm-card-icon', style: { width: '48px', height: '48px', flex: 'none' } },
+            h('span', { className: 'sm-skeleton', style: { width: '24px', height: '24px' } })),
+        h('div', {
+            className: 'sm-card-main',
+            style: { flex: '1 1 auto', minWidth: 0, display: 'flex', flexDirection: 'column', gap: '8px' },
+        },
+        h('div', { className: 'sm-skeleton', style: { maxWidth: '180px' } }),
+        h('div', { className: 'sm-skeleton', style: { maxWidth: '260px', minHeight: '12px' } })))
+    }
+
+    function smMarketSkeleton() {
+        const cards = []
+        for (let index = 0; index < 6; index += 1) cards.push(smMarketSkeletonCard(index))
+        return h('div', {
+            key: 'skeleton',
+            className: 'sm-market-skeleton',
+            'aria-busy': 'true',
+            style: { display: 'flex', flexDirection: 'column', gap: '12px' },
+        },
+        h('div', { className: 'sm-caption sm-muted', style: { padding: '4px 2px' } }, t('state.loadingMarket')),
+        h('div', { className: 'sm-card-grid' }, cards))
+    }
+
+    function smMarketToolbar(sources, loading) {
+        const hasSources = sources.length > 0
+        return h('div', {
+            key: 'toolbar',
+            className: 'sm-toolbar sm-market-toolbar',
+        },
+        h('div', { className: 'sm-search' },
+            icon('search', 15),
+            h('input', {
+                className: 'sm-search-input',
+                type: 'search',
+                value: String(appState.search === undefined || appState.search === null ? '' : appState.search),
+                placeholder: t('search.market.placeholder'),
+                'aria-label': t('search.market.placeholder'),
+                spellCheck: false,
+                disabled: !hasSources,
+                onChange: smMarketOnSearchInput,
+            }),
+            appState.search !== '' && appState.search !== undefined && appState.search !== null
+                ? h('button', {
+                    type: 'button',
+                    className: 'sm-search-clear',
+                    'aria-label': t('action.clear'),
+                    'data-tip': t('action.clear'),
+                    onClick: smMarketClearSearch,
+                }, icon('x', 14))
+                : null),
+        h('select', {
+            className: 'sm-select',
+            value: smMarketSortValue(),
+            'aria-label': t('sort.label'),
+            disabled: !hasSources,
+            onChange: smMarketOnSortChange,
+        },
+        h('option', { value: 'recommend' }, t('sort.recommended')),
+        h('option', { value: 'updated' }, t('sort.updated')),
+        h('option', { value: 'name' }, t('sort.name'))),
+        h('div', { className: 'sm-toolbar-icons' },
+            h('button', {
+                type: 'button',
+                className: 'sm-icon-btn',
+                'aria-label': t('action.refresh'),
+                'data-tip': t('action.refresh'),
+                disabled: !hasSources || loading === true,
+                onClick: smMarketRetry,
+            }, icon('refresh', 16)),
+            h('button', {
+                type: 'button',
+                className: 'sm-icon-btn',
+                'aria-label': t('action.manageSources'),
+                'data-tip': t('action.manageSources'),
+                onClick: smMarketManageSources,
+            }, icon('sources', 16))))
     }
 
     /* ------------------------------------------------------------------ *
@@ -714,66 +1035,38 @@
      * ------------------------------------------------------------------ */
 
     function renderMarketTab() {
-        smScheduleMarketLoad()
+        smMarketEnsureLoaded()
 
         const sources = smMarketSourceList()
-        const enabledSources = smMarketEnabledSources(sources)
-        const skills = smMarketCurrentSkills()
-        const tagSource = smMarketSharedSkills()
-        const tags = smMarketTopTags(tagSource)
-        const total = smMarketTotalValue(enabledSources)
-        const nextOffset = smMarketNextValue()
-        /* 顶栏与市场内请求共用 appState.marketLoading / appState.error。 */
-        const marketError = appState.error !== null && typeof appState.error === 'object' && appState.error.scope === 'market'
-            ? appState.error
-            : null
-        const sourceIssue = enabledSources.find(function (src) {
-            return src.stale === true || src.status === 'error'
+        const enabledSources = sources.filter(function (source) {
+            return source !== null && typeof source === 'object' && source.enabled !== false
         })
-        const failure = marketError !== null
-            ? marketError
-            : (sourceIssue !== undefined
-                ? { message: typeof sourceIssue.error === 'string' ? sourceIssue.error : '' }
-                : null)
-        const hasFailure = failure !== null
-        /* 清空/切换搜索会先清空列表并把 appState.marketLoading 置 true；此时
-           即使此前已加载过（smMarketLoaded），也必须优先显示骨架，等请求落定
-           后再走空态。列表非空（例如加载更多）时不打断已有内容。 */
-        const pending = !hasFailure && skills.length === 0 &&
-            (appState.marketLoading === true ||
-                (!smMarketLoaded && (smMarketLoading || appState.installed === null)))
+        const blocks = smMarketOrderedBlocks()
+        const scopedError = smMarketScopedError()
+        const loading = smMarketLoading()
+        const stale = appState.marketStale === true
+        const hasBlockError = blocks.some(function (block) { return smMarketBlockErrorText(block) !== '' })
+        const nodes = [smMarketToolbar(sources, loading)]
 
-        const nodes = []
-        if (hasFailure && skills.length > 0) nodes.push(smMarketErrorBanner(failure))
-        if (sources.length > 0) nodes.push(smMarketControls(sources, enabledSources, tags, total))
+        if (blocks.length > 0 && (stale || hasBlockError || scopedError !== null)) nodes.push(smMarketStaleBanner())
 
-        if (pending) {
+        if (blocks.length > 0) {
+            blocks.forEach(function (block) { nodes.push(renderMarketSourceBlock(block)) })
+        } else if (loading) {
             nodes.push(smMarketSkeleton())
         } else if (sources.length === 0) {
             nodes.push(smMarketNoSourceState(false))
+        } else if (scopedError !== null) {
+            nodes.push(smMarketPageError(scopedError))
         } else if (enabledSources.length === 0) {
             nodes.push(smMarketNoSourceState(true))
-        } else if (hasFailure && skills.length === 0) {
-            nodes.push(smMarketErrorState(failure))
-        } else if (skills.length === 0) {
-            nodes.push(smMarketNoSkillsState())
         } else {
-            nodes.push(smMarketList(skills))
-            if (nextOffset !== null && nextOffset !== undefined) {
-                nodes.push(h('div', {
-                    key: 'more',
-                    className: 'sm-market-more',
-                    style: { display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '12px 0' },
-                },
-                    h('button', {
-                        type: 'button',
-                        className: 'sm-btn sm-btn-ghost sm-btn-sm',
-                        disabled: smMarketAppending,
-                        onClick: smMarketLoadMore,
-                    }, smMarketAppending ? t('state.loading') : t('market.loadMore'))
-                ))
-            }
+            nodes.push(smMarketNoResultsState())
         }
+
+        /* 管理源弹窗由 00-prelude 的 renderOverlays 挂载（与原型一致），
+           这里不重复渲染，避免两层遮罩。 */
+        nodes.push(smMarketRenderMenu())
 
         return h('div', { className: 'sm-page sm-market' }, nodes)
     }

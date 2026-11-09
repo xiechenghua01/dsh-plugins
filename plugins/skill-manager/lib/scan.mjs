@@ -48,6 +48,25 @@ const LOCATION_DEFS = [
   { id: 'bundled', label: '插件内置', rank: 600, layer: 'global', writable: false, order: 6 },
 ]
 
+/**
+ * Contract §3.1: the Host owns the category mapping, the Client only consumes it.
+ * `custom` is split by writability: a writable custom root is "mine", a read-only one
+ * (usually a package-mounted root) is "system".
+ */
+const CATEGORY_BY_LOCATION = Object.freeze({
+  'project-dsh': 'project',
+  'project-agents': 'project',
+  'preset': 'system',
+  'user-dsh': 'mine',
+  'user-agents': 'shared',
+  'bundled': 'system',
+})
+
+function categoryOf(location, writable) {
+  if (location === 'custom') return writable === true ? 'mine' : 'system'
+  return CATEGORY_BY_LOCATION[location] ?? (writable === true ? 'mine' : 'system')
+}
+
 let cache = { key: '', at: 0, value: null }
 
 function message(error) {
@@ -375,6 +394,7 @@ function makeSkill(input) {
     name: input.name,
     description: input.description,
     ...(typeof input.whenToUse === 'string' && input.whenToUse !== '' ? { whenToUse: input.whenToUse } : {}),
+    category: categoryOf(input.spec.id, input.spec.writable === true),
     location: input.spec.id,
     rootPath: input.spec.display,
     path: input.real,
@@ -765,6 +785,7 @@ async function globalSkills(globalInfo, specs, scannedPaths) {
         name: entry.name,
         description: typeof entry.description === 'string' ? entry.description : '',
         ...(typeof entry.whenToUse === 'string' && entry.whenToUse !== '' ? { whenToUse: entry.whenToUse } : {}),
+        category: 'system',
         location: 'bundled',
         rootPath: '插件内置',
         // Contract §3: bundled skills may have no file path (asar/provider assets).
@@ -822,6 +843,7 @@ async function globalSkills(globalInfo, specs, scannedPaths) {
       name: entry.name,
       description: typeof entry.description === 'string' ? entry.description : '',
       ...(typeof entry.whenToUse === 'string' && entry.whenToUse !== '' ? { whenToUse: entry.whenToUse } : {}),
+      category: categoryOf(location, root.writable === true),
       location,
       rootPath: root.display ?? abbreviate(root.path ?? ''),
       path: sourcePath,
@@ -1146,7 +1168,6 @@ function buildLocations(scans, skills, presetInfo, presetViews, globalInfo) {
 
 function attachMarket(skills, options) {
   const installed = Array.isArray(options?.installed) ? options.installed : []
-  if (installed.length === 0) return
   const sourceNames = new Map()
   if (Array.isArray(options?.sources)) {
     for (const source of options.sources) {
@@ -1165,15 +1186,28 @@ function attachMarket(skills, options) {
   }
 
   for (const skill of skills) {
+    // Contract §3.2: every view carries its market origin; `null` means local/builtin.
+    skill.sourceId = null
+    skill.sourceName = null
+    if (installed.length === 0) continue
     const record = installed.find((entry) => (
       entry !== null && typeof entry === 'object'
       && entry.name === skill.name && entry.location === skill.location
     ))
     if (record === undefined) continue
+    const sourceId = typeof record.sourceId === 'string' && record.sourceId !== '' ? record.sourceId : ''
+    const listed = sourceId === '' ? '' : sourceNames.get(sourceId)
+    const sourceName = sourceId === ''
+      ? ''
+      : (typeof listed === 'string' && listed !== ''
+          ? listed
+          : (typeof record.sourceName === 'string' ? record.sourceName : ''))
+    if (sourceId !== '') skill.sourceId = sourceId
+    if (sourceName !== '') skill.sourceName = sourceName
     const update = updates.get(`${skill.location}:${skill.name}`)
     skill.market = {
-      sourceId: typeof record.sourceId === 'string' ? record.sourceId : '',
-      sourceName: sourceNames.get(record.sourceId) ?? (typeof record.sourceName === 'string' ? record.sourceName : ''),
+      sourceId,
+      sourceName,
       version: typeof record.version === 'string' ? record.version : '',
       ...(typeof record.commit === 'string' && record.commit !== '' ? { commit: record.commit } : {}),
       ...(update !== undefined && typeof update.available === 'string' ? { updateAvailable: update.available } : {}),
@@ -1187,6 +1221,14 @@ function attachMarket(skills, options) {
 // Public API
 // ---------------------------------------------------------------------------
 
+/** Contract §3.2: only a `broken` skill carries a user-facing reason. */
+function brokenReasonOf(skill) {
+  if (skill === null || typeof skill !== 'object' || skill.status !== 'broken') return null
+  if (typeof skill.brokenReason === 'string' && skill.brokenReason !== '') return skill.brokenReason
+  if (typeof skill.path !== 'string' || skill.path === '') return '技能文件不存在'
+  return '指向的位置不存在'
+}
+
 function publicSkill(skill) {
   const {
     _baseName,
@@ -1197,7 +1239,78 @@ function publicSkill(skill) {
     _root,
     ...rest
   } = skill
-  return rest
+  return {
+    ...rest,
+    category: typeof rest.category === 'string'
+      ? rest.category
+      : categoryOf(rest.location, rest.writable === true),
+    sourceId: typeof rest.sourceId === 'string' && rest.sourceId !== '' ? rest.sourceId : null,
+    sourceName: typeof rest.sourceName === 'string' && rest.sourceName !== '' ? rest.sourceName : null,
+    brokenReason: brokenReasonOf(skill),
+  }
+}
+
+/**
+ * Group skill views by market origin (contract §3.3).
+ *
+ * Source groups follow `sourceOrder`; the `local` group (skills without a `sourceId`, or
+ * whose `sourceId` no longer exists in `sourceOrder`) is always last. Empty groups are
+ * omitted. `system`-category skills are never grouped: the Client renders that category
+ * flat, so they are excluded from the returned groups.
+ *
+ * @param {object[]} skills
+ * @param {string[]} [sourceOrder]
+ * @returns {Array<{ key: string, kind: 'source' | 'local', sourceId: string | null, label: string, count: number, skills: object[] }>}
+ */
+export function groupSkillsBySource(skills, sourceOrder = []) {
+  const list = Array.isArray(skills) ? skills : []
+  const order = []
+  const seen = new Set()
+  if (Array.isArray(sourceOrder)) {
+    for (const id of sourceOrder) {
+      if (typeof id !== 'string' || id === '' || seen.has(id)) continue
+      seen.add(id)
+      order.push(id)
+    }
+  }
+
+  const buckets = new Map(order.map((id) => [id, []]))
+  const local = []
+  for (const skill of list) {
+    if (skill === null || typeof skill !== 'object') continue
+    if (skill.category === 'system') continue
+    const sourceId = typeof skill.sourceId === 'string' && skill.sourceId !== '' ? skill.sourceId : null
+    const bucket = sourceId === null ? undefined : buckets.get(sourceId)
+    // A record whose source was removed has nowhere to render: fold it into `local`.
+    if (bucket === undefined) local.push(skill)
+    else bucket.push(skill)
+  }
+
+  const groups = []
+  for (const id of order) {
+    const items = buckets.get(id)
+    if (items.length === 0) continue
+    const named = items.find((skill) => typeof skill.sourceName === 'string' && skill.sourceName !== '')
+    groups.push({
+      key: `source:${id}`,
+      kind: 'source',
+      sourceId: id,
+      label: named !== undefined ? named.sourceName : id,
+      count: items.length,
+      skills: items,
+    })
+  }
+  if (local.length > 0) {
+    groups.push({
+      key: 'local',
+      kind: 'local',
+      sourceId: null,
+      label: '本地创建',
+      count: local.length,
+      skills: local,
+    })
+  }
+  return groups
 }
 
 function sortIssues(issues) {

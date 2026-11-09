@@ -200,10 +200,38 @@ function normalizeInstall(value) {
 }
 
 /**
+ * Reconcile a persisted `sourceOrder` with the live source list (contract §4.2):
+ * keep known ids in their saved order, drop stale/duplicate entries, and append any
+ * source that is not listed yet (creation order) so a newly added source lands last.
+ * @param {unknown} value
+ * @param {object[]} sources
+ * @returns {string[]}
+ */
+function normalizeSourceOrder(value, sources) {
+  const ids = sources.map((source) => source.id)
+  const known = new Set(ids)
+  const order = []
+  const seen = new Set()
+  if (Array.isArray(value)) {
+    for (const id of value) {
+      if (typeof id !== 'string' || id === '' || !known.has(id) || seen.has(id)) continue
+      seen.add(id)
+      order.push(id)
+    }
+  }
+  for (const id of ids) {
+    if (seen.has(id)) continue
+    seen.add(id)
+    order.push(id)
+  }
+  return order
+}
+
+/**
  * Coerce an arbitrary document into the current state shape.
  * Unknown fields are dropped; duplicate sources/records keep the last entry.
  * @param {unknown} value
- * @returns {{ version: number, sources: object[], installed: object[] }}
+ * @returns {{ version: number, sources: object[], installed: object[], sourceOrder: string[] }}
  */
 export function normalizeState(value) {
   const document = isObject(value) ? value : {}
@@ -235,12 +263,17 @@ export function normalizeState(value) {
       }
     }
   }
-  return { version: STATE_VERSION, sources, installed }
+  return {
+    version: STATE_VERSION,
+    sources,
+    installed,
+    sourceOrder: normalizeSourceOrder(document.sourceOrder, sources),
+  }
 }
 
 /** An empty state document. */
 export function emptyState() {
-  return { version: STATE_VERSION, sources: [], installed: [] }
+  return { version: STATE_VERSION, sources: [], installed: [], sourceOrder: [] }
 }
 
 /**
@@ -551,6 +584,46 @@ export function createState(options = {}) {
     return state.sources
   }
 
+  /**
+   * The persisted source display order. Missing entries are filled in creation order,
+   * so this always lists exactly the current source ids (contract §4.2).
+   * @returns {Promise<string[]>}
+   */
+  async function getSourceOrder() {
+    const state = await read()
+    return state.sourceOrder
+  }
+
+  /**
+   * Persist a full permutation of the current source ids.
+   * Missing, unknown, duplicate or non-string ids are rejected with `E_BAD_REQUEST`.
+   * @param {string[]} order
+   * @returns {Promise<string[]>} the persisted order
+   */
+  async function setSourceOrder(order) {
+    let saved = []
+    await write((state) => {
+      if (!Array.isArray(order)) {
+        throw skillError('E_BAD_REQUEST', 'source order must be an array of source ids')
+      }
+      const ids = state.sources.map((source) => source.id)
+      const known = new Set(ids)
+      if (order.length !== ids.length) {
+        throw skillError('E_BAD_REQUEST', 'source order must list every source exactly once')
+      }
+      const seen = new Set()
+      for (const id of order) {
+        if (typeof id !== 'string' || id === '' || !known.has(id) || seen.has(id)) {
+          throw skillError('E_BAD_REQUEST', 'source order must list every source exactly once')
+        }
+        seen.add(id)
+      }
+      state.sourceOrder = [...order]
+      saved = [...order]
+    })
+    return saved
+  }
+
   return {
     read,
     write,
@@ -561,6 +634,8 @@ export function createState(options = {}) {
     removeInstall,
     listInstalled,
     listSources,
+    getSourceOrder,
+    setSourceOrder,
     // Exposed for install/update modules and tests.
     home: dshHome,
     dir: stateDir,

@@ -166,6 +166,7 @@ function parseSort(sort, declarations) {
   if (base === 'index') return { kind: 'index', direction: direction || 'asc' }
   if (base === 'relevance') return { kind: 'relevance', direction: direction || 'desc' }
   if (base === 'published') return { kind: 'published', direction: direction || 'desc' }
+  if (base === 'name') return { kind: 'name', direction: direction || 'asc' }
 
   if (declarations && Object.prototype.hasOwnProperty.call(declarations, base)) {
     const declaration = declarations[base]
@@ -217,6 +218,11 @@ function compareEntries(left, right, sort, dshVersion) {
       left.position,
       right.position,
     )
+  }
+
+  if (sort.kind === 'name') {
+    const order = String(left.skill?.name ?? '').localeCompare(String(right.skill?.name ?? ''))
+    return sort.direction === 'desc' ? -order : order
   }
 
   if (sort.kind === 'key') {
@@ -366,6 +372,66 @@ export function searchIndex(index, query = {}) {
       defaultVersion: defaultVersionOf(skill, dshVersion),
     })),
   }
+}
+
+/**
+ * Search a set of per-source indexes and paginate each source independently.
+ *
+ * This is the grouped-market counterpart of `searchIndex`: the same text/sort rules apply
+ * inside every source, but offsets and page sizes are per source so one block's "load more"
+ * never shifts another block's page.
+ *
+ * @param {Array<{
+ *   sourceId?: string,
+ *   name?: string,
+ *   index?: object | null,
+ *   error?: string | null,
+ *   empty?: boolean,
+ *   query?: object,
+ * }>} sources one entry per market source, in display order
+ * @param {{ text?: string, category?: string, labels?: string[] | string, dshVersion?: string | null }} [query]
+ *   query shared by every source; an entry's own `query` overrides these fields
+ * @param {string} [sort] sort key (`relevance` / `index` / `published` / `name`)
+ * @param {Record<string, number> | null} [cursor] per-source offsets keyed by source id
+ * @param {number} [limit] page size, applied to each source
+ * @returns {Array<{
+ *   sourceId: string,
+ *   name: string,
+ *   total: number,
+ *   skills: Array<object>,
+ *   cursor: number | null,
+ *   error: string | null,
+ * }>} one block per input source; `cursor` is that source's next offset
+ */
+export function searchBySource(sources, query = {}, sort = 'relevance', cursor = null, limit = DEFAULT_LIMIT) {
+  const list = Array.isArray(sources) ? sources : []
+  const baseQuery = isObject(query) ? query : {}
+  const offsets = isObject(cursor) ? cursor : {}
+  const size = toLimit(limit)
+
+  return list.map((item) => {
+    const entry = isObject(item) ? item : {}
+    const source = isObject(entry.source) ? entry.source : {}
+    const sourceId = typeof entry.sourceId === 'string' && entry.sourceId !== ''
+      ? entry.sourceId
+      : (typeof source.id === 'string' ? source.id : '')
+    const name = typeof entry.name === 'string' && entry.name !== ''
+      ? entry.name
+      : (typeof source.name === 'string' ? source.name : '')
+    const error = typeof entry.error === 'string' && entry.error !== '' ? entry.error : null
+    const index = isObject(entry.index) ? entry.index : null
+
+    // A stale index is still searchable; `error` only reports the failed refresh.
+    if (entry.empty === true || index === null) {
+      return { sourceId, name, total: 0, skills: [], cursor: null, error }
+    }
+
+    const overrides = isObject(entry.query) ? entry.query : {}
+    const offset = toNonNegativeInteger(offsets[sourceId], 0)
+    const result = searchIndex(index, { ...baseQuery, ...overrides, sort, offset, limit: size })
+    const next = offset + size < result.total ? offset + size : null
+    return { sourceId, name, total: result.total, skills: result.skills, cursor: next, error }
+  })
 }
 
 /**

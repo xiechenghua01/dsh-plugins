@@ -453,6 +453,7 @@ export function createUpdateChecker(options = {}) {
   let view = { checking: false, checkedAt: 0, errors: [], updates: [] }
   let inflight = null
   let lastCheckMs = 0
+  let lastSourceCount = 0
   let abortController = null
   let effectDispose = null
   let timers = []
@@ -533,7 +534,7 @@ export function createUpdateChecker(options = {}) {
     return result
   }
 
-  async function runCheck(force) {
+  async function runCheck(force, refreshIndexes) {
     view = { ...view, checking: true }
     abortController = new AbortController()
     const errors = []
@@ -543,10 +544,13 @@ export function createUpdateChecker(options = {}) {
       const records = (await listInstalled()).filter((record) => (
         record !== null && typeof record === 'object' && typeof record.sourceId === 'string' && record.sourceId !== ''
       ))
+      lastSourceCount = sources.length
 
-      if (sources.length === 0 || records.length === 0) {
+      // Without install records there is nothing to compare. `/check-updates` still asks for a
+      // refresh of every enabled source's index, so `refreshIndexes` keeps the fetch loop alive.
+      if (sources.length === 0 || (records.length === 0 && refreshIndexes !== true)) {
         view = { checking: false, checkedAt: nowSeconds(), errors: [], updates: [], skipped: true }
-        return getState()
+        return { ...getState(), sources: sources.length, refreshNeeded: false }
       }
 
       for (const source of sources) {
@@ -609,7 +613,7 @@ export function createUpdateChecker(options = {}) {
         updates: deduped,
       }
       lastCheckMs = clock()
-      return getState()
+      return { ...getState(), sources: sources.length, refreshNeeded: true }
     } catch (error) {
       const failure = ensureErrorCode(error)
       errors.push({ sourceId: '', message: failure.message })
@@ -620,17 +624,31 @@ export function createUpdateChecker(options = {}) {
         updates: [],
       }
       lastCheckMs = clock()
-      return getState()
+      return { ...getState(), sources: lastSourceCount, refreshNeeded: true }
     } finally {
       abortController = null
     }
   }
 
+  /**
+   * Run one check.
+   *
+   * `force` bypasses the index-cache TTL and the 30-minute manual-check window.
+   * `refreshIndexes` makes the check fetch every enabled source even when there are no install
+   * records, which is what `/check-updates` needs (contract §4.3). A second caller while a check
+   * is running receives the in-flight result instead of queueing.
+   *
+   * The returned document is the usual update state plus `sources` (number of enabled sources
+   * checked) and `refreshNeeded` (whether `GET /installed` should drop its scan cache).
+   */
   async function check(checkOptions = {}) {
     const force = checkOptions.force === true
-    if (inflight !== null) return getState()
-    if (!force && lastCheckMs > 0 && clock() - lastCheckMs < MIN_CHECK_INTERVAL_MS) return getState()
-    inflight = runCheck(force).finally(() => {
+    const refreshIndexes = checkOptions.refreshIndexes === true
+    if (inflight !== null) return inflight
+    if (!force && !refreshIndexes && lastCheckMs > 0 && clock() - lastCheckMs < MIN_CHECK_INTERVAL_MS) {
+      return { ...getState(), sources: lastSourceCount, refreshNeeded: false }
+    }
+    inflight = runCheck(force, refreshIndexes).finally(() => {
       inflight = null
     })
     return inflight

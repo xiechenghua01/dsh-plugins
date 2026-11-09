@@ -1,782 +1,1010 @@
     /* ------------------------------------------------------------------ *
-     * C2 · 来源 Tab                                                       *
+     * C3 · 管理源弹窗                                                     *
      *                                                                    *
-     * 数据来源：appState.installed（locations / presets）与 appState.sources
-     * 「添加源」走 50-modals.js 的 add-source；编辑/删除在卡片内联确认，
-     * 因为该模态只实现了新增，没有 source 的编辑/删除分支。                 *
+     * 720px 居中弹窗；源列表支持拖动排序（HTML5 DnD + 4px 阈值）与        *
+     * Alt+↑/↓ 键盘替代。排序结果写入 appState.sourceOrder 并调用          *
+     * PUT /sources/order；dataTransfer key 与拖动钩子来自 00-prelude 的    *
+     * smDragSource。                                                      *
      * ------------------------------------------------------------------ */
 
-    let smSourcesCache = []
-    let smSourcesLoading = false
-    let smSourcesError = null
-    let smSourcesBootScheduled = false
-    let smSourcesBusy = Object.create(null)
-    let smSourcesEditing = null
-    let smSourcesEditName = ''
-    let smSourcesEditUrl = ''
-    let smSourcesEditError = ''
-    let smSourcesSaving = false
-    let smSourcesConfirmDelete = null
-    let smSourcesDeleting = false
+    let smSourceDialogDrag = null
+    let smSourceDialogPointer = null
+    let smSourceDialogAnnounce = ''
+    let smSourceDialogBusy = Object.create(null)
+    let smSourceDialogError = Object.create(null)
+    let smSourceDialogDragKeysBound = false
+    let smSourceDialogEscapeBound = false
+    let smSourceDialogReturnFocus = null
 
-    const SM_SOURCES_GRID_STYLE = {
-        display: 'grid',
-        gridTemplateColumns: 'repeat(auto-fill, minmax(min(300px, 100%), 1fr))',
-        gap: '12px',
+    function smSourceList() {
+        return Array.isArray(appState.sources) ? appState.sources : []
     }
 
-    function smSourcesErrorText(err) {
-        if (err === null || err === undefined) return ''
-        if (typeof err === 'string') return err
-        if (typeof err === 'object') {
-            if (typeof err.message === 'string' && err.message !== '') return err.message
-            if (typeof err.code === 'string' && err.code !== '') return err.code
-        }
-        return String(err)
-    }
-
-    function smSourcesCurrent() {
-        if (Array.isArray(appState.sources)) return appState.sources
-        return smSourcesCache
-    }
-
-    function smSourcesExtractList(result) {
-        if (result === null || result === undefined) return null
-        if (Array.isArray(result)) return result
-        if (typeof result === 'object') {
-            if (Array.isArray(result.sources)) return result.sources
-            if (result.data !== null && typeof result.data === 'object' && Array.isArray(result.data.sources)) {
-                return result.data.sources
-            }
-        }
-        return null
-    }
-
-    async function smSourcesReload(force) {
-        /* 00-prelude 的 loadSources 失败时返回 null 并写入 appState.error。 */
-        if (appState.loadingSources === true && force !== true) return true
-        try {
-            const result = await loadSources(force)
-            if (result === null || result === undefined) {
-                const scoped = appState.error !== null && typeof appState.error === 'object' && appState.error.scope === 'sources'
-                    ? appState.error
-                    : null
-                smSourcesError = scoped || { code: 'E_INTERNAL', message: t('error.loadSources') }
-                return false
-            }
-            const list = smSourcesExtractList(result)
-            if (list !== null) {
-                smSourcesCache = list
-                appState.sources = list
-            } else if (Array.isArray(appState.sources)) {
-                smSourcesCache = appState.sources.slice()
-            }
-            smSourcesError = null
-            return true
-        } catch (err) {
-            smSourcesError = err !== null && typeof err === 'object' ? err : { message: smSourcesErrorText(err) }
-            return false
-        }
-    }
-
-    async function smInstalledReload(force) {
-        if (appState.loadingInstalled === true && force !== true) return true
-        try {
-            const result = await loadInstalled(force)
-            if (result === null || result === undefined) {
-                const scoped = appState.error !== null && typeof appState.error === 'object' && appState.error.scope === 'installed'
-                    ? appState.error
-                    : null
-                if (scoped !== null && smSourcesError === null) smSourcesError = scoped
-                return false
-            }
-            return true
-        } catch (err) {
-            if (smSourcesError === null) {
-                smSourcesError = err !== null && typeof err === 'object' ? err : { message: smSourcesErrorText(err) }
-            }
-            return false
-        }
-    }
-
-    async function smSourcesPageLoad(force) {
-        if (smSourcesLoading) return
-        smSourcesLoading = true
-        smSourcesError = null
-        setState({ loading: true })
-        await Promise.all([smSourcesReload(force), smInstalledReload(force)])
-        smSourcesLoading = false
-        setState({ loading: false })
-    }
-
-    function smEnsureSourcesData() {
-        if (smSourcesBootScheduled) return
-        const hasInstalled = appState.installed !== null && typeof appState.installed === 'object'
-        const hasSources = Array.isArray(appState.sources) && appState.sources.length > 0
-        if (hasInstalled && hasSources) return
-        smSourcesBootScheduled = true
-        setTimeout(function () {
-            void smSourcesPageLoad(false)
-        }, 0)
-    }
-
-    function smRetrySources() {
-        smSourcesBootScheduled = true
-        void smSourcesPageLoad(true)
-    }
-
-    function smSetSourceBusy(id, busy) {
-        if (!id) return
-        if (busy) smSourcesBusy[id] = true
-        else delete smSourcesBusy[id]
-        /* 传一个真实字段，确保 setState 一定触发重渲染。 */
-        setState({ sources: smSourcesCurrent().slice() })
-    }
-
-    async function smRefreshOneSource(src) {
-        if (src === null || typeof src !== 'object' || !src.id) return
-        if (smSourcesBusy[src.id]) return
-        smSetSourceBusy(src.id, true)
-        try {
-            await api('sources/' + encodeURIComponent(src.id) + '/refresh', { method: 'POST' })
-            toast(t('toast.sourceRefreshed', { name: src.name || src.url || src.id }), { tone: 'ok' })
-        } catch (err) {
-            toast(t('toast.sourceRefreshFailed', { reason: smSourcesErrorText(err) }), { tone: 'error' })
-        }
-        await smSourcesReload()
-        smMarketInvalidate()
-        smSetSourceBusy(src.id, false)
-    }
-
-    async function smToggleSource(src) {
-        if (src === null || typeof src !== 'object' || !src.id) return
-        if (smSourcesBusy[src.id]) return
-        smSetSourceBusy(src.id, true)
-        const nextEnabled = src.enabled === false
-        try {
-            await api('/sources/' + encodeURIComponent(src.id), {
-                method: 'PUT',
-                body: { enabled: nextEnabled },
+    /* 源顺序 = sourceOrder；未出现在 order 里的源保持原顺序排最后。 */
+    function smSourceOrderedList() {
+        const sources = smSourceList().slice()
+        const order = Array.isArray(appState.sourceOrder) ? appState.sourceOrder : []
+        if (order.length === 0) return sources
+        const rank = Object.create(null)
+        order.forEach(function (id, index) {
+            rank[String(id)] = index
+        })
+        return sources
+            .map(function (source, index) { return { source: source, index: index } })
+            .sort(function (left, right) {
+                const leftId = String(left.source !== null && typeof left.source === 'object' ? left.source.id : '')
+                const rightId = String(right.source !== null && typeof right.source === 'object' ? right.source.id : '')
+                const leftRank = rank[leftId] === undefined ? Number.MAX_SAFE_INTEGER : rank[leftId]
+                const rightRank = rank[rightId] === undefined ? Number.MAX_SAFE_INTEGER : rank[rightId]
+                if (leftRank !== rightRank) return leftRank - rightRank
+                return left.index - right.index
             })
-            const message = nextEnabled
-                ? t('toast.sourceEnabled', { name: src.name || src.url || src.id })
-                : t('toast.sourceDisabled', { name: src.name || src.url || src.id })
-            toast(message, { tone: 'ok' })
-        } catch (err) {
-            toast(t('toast.sourceToggleFailed', { reason: smSourcesErrorText(err) }), { tone: 'error' })
-        }
-        await smSourcesReload()
-        smMarketInvalidate()
-        smSetSourceBusy(src.id, false)
+            .map(function (entry) { return entry.source })
     }
 
-    function smSourcesOpenFolder(path) {
-        const value = typeof path === 'string' ? path : ''
-        if (value === '') return
-        /* 宿主没有提供“打开目录”路由；与 00-prelude 的 openFolder 行为保持一致。 */
-        toast(t('toast.openedFolder', { path: value }), { tone: 'ok' })
+    function smSourceApplyOrder(sources, ids) {
+        const byId = Object.create(null)
+        const extras = []
+        ;(Array.isArray(sources) ? sources : []).forEach(function (source) {
+            if (source === null || typeof source !== 'object') return
+            const id = String(source.id)
+            if (ids.indexOf(id) === -1) extras.push(source)
+            else byId[id] = source
+        })
+        const ordered = []
+        ids.forEach(function (id) {
+            if (byId[id] !== undefined) ordered.push(byId[id])
+        })
+        return ordered.concat(extras)
     }
 
-    async function smSourcesCopyPath(path) {
-        const value = typeof path === 'string' ? path : ''
-        if (value === '') return
-        try {
-            if (typeof navigator !== 'undefined' && navigator !== null &&
-                navigator.clipboard && typeof navigator.clipboard.writeText === 'function') {
-                await navigator.clipboard.writeText(value)
-                toast(t('toast.copied'), { tone: 'ok' })
-                return
+    function smSourceFocusHandle(id) {
+        if (typeof document === 'undefined' || document === null || typeof document.querySelector !== 'function') return
+        const target = String(id === undefined || id === null ? '' : id)
+        if (target === '') return
+        const run = function () {
+            const node = document.querySelector('[data-source-handle="' + target.replace(/"/g, '\\"') + '"]')
+            if (node !== null && node !== undefined && typeof node.focus === 'function') {
+                try {
+                    node.focus({ preventScroll: true })
+                } catch (err) {
+                    try { node.focus() } catch (failure) { void failure }
+                }
             }
-            toast(t('toast.copyFailed'), { tone: 'error' })
+        }
+        if (typeof requestAnimationFrame === 'function') requestAnimationFrame(run)
+        else run()
+    }
+
+    function smSourceAnnounce(message) {
+        smSourceDialogAnnounce = String(message === undefined || message === null ? '' : message)
+        if (typeof setState === 'function') setState({})
+    }
+
+    function smSourceReloadMarket() {
+        if (typeof loadMarket !== 'function') return
+        try {
+            const pending = loadMarket({
+                q: String(appState.search || ''),
+                sort: String(appState.marketSort || 'recommend'),
+                refresh: true,
+            })
+            if (pending !== null && pending !== undefined && typeof pending.catch === 'function') {
+                pending.catch(function () { /* 市场区块自行展示错误 */ })
+            }
         } catch (err) {
-            toast(t('toast.copyFailed'), { tone: 'error' })
+            void err
         }
     }
 
-    function smStartSourceEdit(src) {
-        if (src === null || typeof src !== 'object' || !src.id) return
-        smSourcesEditing = src.id
-        smSourcesEditName = typeof src.name === 'string' ? src.name : ''
-        smSourcesEditUrl = typeof src.url === 'string' ? src.url : ''
-        smSourcesEditError = ''
-        smSourcesConfirmDelete = null
-        setState({})
+    /* 乐观重排 + PUT /sources/order；失败时回滚到服务端顺序。 */
+    function smSourcePersistOrder(ids, movedId) {
+        const order = Array.isArray(ids) ? ids.slice() : []
+        if (order.length === 0) return
+        const list = smSourceOrderedList()
+        const previousOrder = Array.isArray(appState.sourceOrder)
+            ? appState.sourceOrder.slice()
+            : list.map(function (source) { return String(source.id) })
+        let moved = null
+        list.forEach(function (source) {
+            if (source !== null && typeof source === 'object' && String(source.id) === String(movedId)) moved = source
+        })
+        const position = order.indexOf(String(movedId))
+        const nextSources = smSourceApplyOrder(list, order)
+        if (typeof setState === 'function') setState({ sourceOrder: order, sources: nextSources })
+        const run = async function () {
+            try {
+                await api('sources/order', { method: 'PUT', body: { order: order } })
+                if (moved !== null && position >= 0) {
+                    const name = typeof moved.name === 'string' && moved.name !== '' ? moved.name : String(moved.id)
+                    smSourceAnnounce(t('source.orderMoved', { name: name, n: position + 1 }))
+                }
+                smSourceFocusHandle(movedId)
+            } catch (err) {
+                void err
+                /* 回滚乐观重排，再向服务端对齐一次。 */
+                if (typeof setState === 'function') setState({ sourceOrder: previousOrder, sources: list })
+                toast(t('error.unexpected'), { tone: 'error' })
+                try {
+                    if (typeof loadSources === 'function') await loadSources(true)
+                } catch (failure) {
+                    void failure
+                }
+            }
+        }
+        void run()
     }
 
-    function smCancelSourceEdit() {
-        smSourcesEditing = null
-        smSourcesEditError = ''
-        setState({})
-    }
-
-    function smOnSourceEditName(event) {
-        smSourcesEditName = event !== null && event !== undefined && event.target !== null && event.target !== undefined
-            ? String(event.target.value || '')
-            : ''
-        setState({})
-    }
-
-    function smOnSourceEditUrl(event) {
-        smSourcesEditUrl = event !== null && event !== undefined && event.target !== null && event.target !== undefined
-            ? String(event.target.value || '')
-            : ''
-        setState({})
-    }
-
-    async function smSaveSourceEdit(src) {
-        if (smSourcesSaving || src === null || typeof src !== 'object' || !src.id) return
-        const name = smSourcesEditName.trim()
-        const url = smSourcesEditUrl.trim()
-        if (url === '') {
-            smSourcesEditError = t('form.urlRequired')
-            setState({})
+    /** 键盘替代：Alt+↑ / Alt+↓ 移动一位；首 / 末位不移动。 */
+    function moveSource(id, delta) {
+        const step = Number(delta)
+        if (!Number.isFinite(step) || step === 0) return
+        const ids = smSourceOrderedList().map(function (source) {
+            return source !== null && typeof source === 'object' ? String(source.id) : ''
+        })
+        const from = ids.indexOf(String(id))
+        if (from < 0) return
+        const to = from + (step < 0 ? -1 : 1)
+        if (to < 0 || to >= ids.length) {
+            smSourceAnnounce(t('source.orderBoundary'))
             return
         }
-        smSourcesSaving = true
-        smSourcesEditError = ''
-        setState({})
-        try {
-            const body = { url: url }
-            if (name !== '') body.name = name
-            await api('/sources/' + encodeURIComponent(src.id), { method: 'PUT', body: body })
-            smSourcesEditing = null
-            toast(t('toast.saved'), { tone: 'ok' })
-            await smSourcesReload(true)
-            smMarketInvalidate()
-        } catch (err) {
-            smSourcesEditError = smSourcesErrorText(err)
-        }
-        smSourcesSaving = false
-        setState({})
-    }
-
-    function smAskDeleteSource(src) {
-        if (src === null || typeof src !== 'object' || !src.id) return
-        smSourcesConfirmDelete = src.id
-        smSourcesEditing = null
-        setState({})
-    }
-
-    function smCancelDeleteSource() {
-        smSourcesConfirmDelete = null
-        setState({})
-    }
-
-    async function smDeleteSource(src) {
-        if (smSourcesDeleting || src === null || typeof src !== 'object' || !src.id) return
-        smSourcesDeleting = true
-        setState({})
-        try {
-            await api('/sources/' + encodeURIComponent(src.id), { method: 'DELETE' })
-            smSourcesConfirmDelete = null
-            toast(t('toast.deleted', { name: src.name || src.url || src.id }), { tone: 'ok' })
-            await smSourcesReload(true)
-            smMarketInvalidate()
-        } catch (err) {
-            toast(t('source.deleteFailed', { reason: smSourcesErrorText(err) }), { tone: 'error' })
-        }
-        smSourcesDeleting = false
-        setState({})
-    }
-
-    function smViewLocationSkills(loc) {
-        if (loc === null || typeof loc !== 'object') return
-        /* 已安装筛选按别名比较（10-installed.js:47），位置 id 必须先映射；
-           未知位置回退到「全部」，避免筛选到空列表。 */
-        const filter = locationFilterKey(loc.id) || 'all'
-        setState({ tab: 'installed', view: 'list', detail: null, filter: filter, search: '' })
+        ids.splice(from, 1)
+        ids.splice(to, 0, String(id))
+        smSourcePersistOrder(ids, id)
     }
 
     /* ------------------------------------------------------------------ *
-     * 渲染：规则卡 / 位置卡 / 预设卡 / 市场源卡                            *
+     * 打开 / 关闭                                                         *
      * ------------------------------------------------------------------ */
 
-    function smSourcesSectionHeader(title, extra) {
-        return h('div', { className: 'sm-group-head sm-sources-section-header' },
-            h('div', null, h('span', { className: 'sm-group-title' }, title)),
-            extra !== null && extra !== undefined ? extra : null
-        )
+    function smSourceDialogEscape(event) {
+        if (event === null || event === undefined || event.key !== 'Escape') return
+        if (appState.sourceDialogOpen !== true) return
+        if (smSourceDialogDrag !== null) return
+        /* 上层模态（添加源 / 删除确认）打开时，Esc 只关模态。 */
+        if (appState.modal !== null && appState.modal !== undefined) return
+        if (typeof document !== 'undefined' && document !== null && typeof document.querySelector === 'function' &&
+            document.querySelector('.sm-modal-backdrop') !== null) return
+        if (typeof event.preventDefault === 'function') event.preventDefault()
+        if (typeof event.stopPropagation === 'function') event.stopPropagation()
+        closeSourceDialog()
     }
 
-    function smSourcesRetryButton() {
-        return h('button', {
-            type: 'button',
-            className: 'sm-btn sm-btn-ghost sm-btn-sm',
-            onClick: smRetrySources,
-        }, t('action.retry'))
+    function smSourceBindEscape() {
+        if (smSourceDialogEscapeBound) return
+        if (typeof document === 'undefined' || document === null || typeof document.addEventListener !== 'function') return
+        document.addEventListener('keydown', smSourceDialogEscape, true)
+        smSourceDialogEscapeBound = true
     }
 
-    function smPriorityCard() {
-        return h('div', { key: 'priority', className: 'sm-card sm-priority-card' },
-            h('div', { className: 'sm-card-title' }, t('sources.priorityTitle')),
-            h('div', {
-                className: 'sm-caption',
-                style: { color: 'var(--dsw-alias-label-secondary)', lineHeight: 1.55 },
-            }, t('sources.priority')),
-            h('div', {
-                className: 'sm-caption',
-                style: { color: 'var(--dsw-alias-label-caption)', lineHeight: 1.55 },
-            }, t('sources.priorityDetail')),
-            h('div', null,
-                h('button', {
-                    type: 'button',
-                    className: 'sm-btn sm-btn-ghost sm-btn-sm',
-                    onClick: function () { openDiagnosticsDrawer() },
-                }, t('sources.viewOverrides'))
-            )
-        )
-    }
-
-    function smLocationCard(loc) {
-        const readable = loc.readable !== false
-        const exists = loc.exists === true
-        const dotClass = !readable ? 'sm-dot-error' : exists ? 'sm-dot-ok' : 'sm-dot-idle'
-        const statusText = !readable ? t('status.unreadable') : exists ? t('status.readable') : t('status.missing')
-        const pathText = typeof loc.path === 'string' && loc.path !== '' ? loc.path : (loc.absPath || '')
-        const canOpen = exists && typeof loc.absPath === 'string' && loc.absPath !== ''
-        const activeCount = typeof loc.skillCount === 'number' ? loc.skillCount : 0
-        const disabledCount = typeof loc.disabledCount === 'number' ? loc.disabledCount : 0
-        const actions = []
-
-        if (pathText !== '' || (typeof loc.absPath === 'string' && loc.absPath !== '')) {
-            actions.push(h('button', {
-                key: 'path',
-                type: 'button',
-                className: 'sm-btn sm-btn-ghost sm-btn-sm',
-                onClick: function () {
-                    if (canOpen) smSourcesOpenFolder(loc.absPath)
-                    else void smSourcesCopyPath(loc.absPath || pathText)
-                },
-            }, canOpen ? t('action.openFolder') : t('action.copyPath')))
+    function smSourceUnbindEscape() {
+        if (!smSourceDialogEscapeBound) return
+        if (typeof document !== 'undefined' && document !== null && typeof document.removeEventListener === 'function') {
+            document.removeEventListener('keydown', smSourceDialogEscape, true)
         }
-        actions.push(h('button', {
-            key: 'view',
-            type: 'button',
-            className: 'sm-btn sm-btn-ghost sm-btn-sm',
-            onClick: function () { smViewLocationSkills(loc) },
-        }, t('sources.viewSkills')))
-
-        return h('div', {
-            key: loc.id,
-            className: 'sm-card sm-source-card',
-            style: !exists ? { opacity: 0.72, borderStyle: 'dashed' } : undefined,
-        },
-            h('div', {
-                className: 'sm-source-card-head',
-                style: { display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap', minWidth: 0 },
-            },
-                h('span', { className: cx('sm-dot', dotClass), title: statusText }),
-                h('span', { className: 'sm-card-title' }, loc.label || loc.id),
-                h('span', { className: 'sm-badge sm-mono' }, 'rank ' + String(loc.rank)),
-                h('span', { className: 'sm-badge' }, loc.layer === 'preset' ? t('layer.preset') : t('layer.global')),
-                loc.writable ? null : h('span', { className: 'sm-badge' }, t('badge.readonly'))
-            ),
-            h('div', {
-                className: 'sm-source-path sm-mono sm-caption sm-ellipsis',
-                title: loc.absPath || pathText,
-            }, pathText),
-            !exists ? h('div', { className: 'sm-source-note sm-caption sm-muted' }, t('sources.missingDir')) : null,
-            h('div', {
-                className: 'sm-source-card-foot',
-                style: {
-                    display: 'flex',
-                    alignItems: 'center',
-                    justifyContent: 'space-between',
-                    gap: '8px',
-                    flexWrap: 'wrap',
-                },
-            },
-                h('span', { className: 'sm-source-count sm-caption sm-muted' },
-                    t('sources.skillCount', { count: activeCount }),
-                    disabledCount > 0 ? ' · ' + t('sources.disabledCount', { count: disabledCount }) : null
-                ),
-                h('div', {
-                    className: 'sm-source-actions',
-                    style: { display: 'flex', alignItems: 'center', gap: '6px', flexWrap: 'wrap' },
-                }, actions)
-            )
-        )
+        smSourceDialogEscapeBound = false
     }
 
-    function smPresetCard(preset) {
-        const mounted = preset.mounted === true
-        let desc = ''
-        if (preset.id === 'minimal' && !mounted) {
-            desc = t('sources.minimalNoSkills')
-        } else if (typeof preset.desc === 'string' && preset.desc !== '') {
-            desc = preset.desc
-        } else {
-            desc = t('source.preset.fallbackDesc')
+    function openSourceDialog() {
+        if (typeof document !== 'undefined' && document !== null && document.activeElement !== null &&
+            document.activeElement !== undefined) {
+            smSourceDialogReturnFocus = document.activeElement
         }
-        const stats = mounted
-            ? t('source.preset.stats', {
-                skills: typeof preset.presetSkills === 'number' ? preset.presetSkills : 0,
-                roots: typeof preset.localRoots === 'number' ? preset.localRoots : 0,
+        if (typeof setState === 'function') setState({ sourceDialogOpen: true })
+        smSourceBindEscape()
+        if (typeof requestAnimationFrame === 'function') {
+            requestAnimationFrame(function () {
+                if (typeof document === 'undefined' || document === null || typeof document.querySelector !== 'function') return
+                const node = document.querySelector('.sm-source-dialog')
+                if (node !== null && node !== undefined && typeof node.focus === 'function') {
+                    try { node.focus({ preventScroll: true }) } catch (err) { void err }
+                }
             })
-            : t('sources.minimalNoSkills')
-        return h('div', {
-            key: preset.id,
-            className: 'sm-card sm-preset-card',
-        },
-            h('div', {
-                className: 'sm-source-card-head',
-                style: {
-                    display: 'flex',
-                    alignItems: 'center',
-                    justifyContent: 'space-between',
-                    gap: '8px',
-                    flexWrap: 'wrap',
-                },
-            },
-                h('span', { className: 'sm-card-title sm-mono' }, preset.id),
-                h('span', {
-                    className: cx('sm-badge', mounted ? 'sm-success' : 'sm-warn'),
-                }, mounted ? t('source.preset.mounted') : t('source.preset.unmounted'))
-            ),
-            h('div', {
-                className: 'sm-caption',
-                style: { color: 'var(--dsw-alias-label-secondary)', lineHeight: 1.55 },
-            }, desc),
-            h('div', { className: 'sm-source-count sm-caption sm-muted' }, stats)
-        )
+        }
+        if (typeof loadSources === 'function') {
+            try {
+                const pending = loadSources()
+                if (pending !== null && pending !== undefined && typeof pending.catch === 'function') {
+                    pending.catch(function () { /* 弹窗内展示错误态 */ })
+                }
+            } catch (err) {
+                void err
+            }
+        }
     }
 
-    function smPresetCards(presets) {
-        const order = ['cordis', 'standard', 'ptc', 'minimal']
-        const byId = Object.create(null)
-        ;(Array.isArray(presets) ? presets : []).forEach(function (preset) {
-            if (preset !== null && typeof preset === 'object' && typeof preset.id === 'string') {
-                byId[preset.id] = preset
+    function closeSourceDialog() {
+        if (smSourceDialogDrag !== null) smSourceEndDrag(true)
+        smSourceUnbindEscape()
+        smSourceDialogAnnounce = ''
+        smSourceDialogPointer = null
+        smSourceDialogBusy = Object.create(null)
+        smSourceDialogError = Object.create(null)
+        if (typeof setState === 'function') setState({ sourceDialogOpen: false })
+        const target = smSourceDialogReturnFocus
+        smSourceDialogReturnFocus = null
+        if (target !== null && target !== undefined && typeof target.focus === 'function') {
+            try {
+                target.focus({ preventScroll: true })
+            } catch (err) {
+                try { target.focus() } catch (failure) { void failure }
+            }
+        }
+    }
+
+    /* ------------------------------------------------------------------ *
+     * 行内动作                                                            *
+     * ------------------------------------------------------------------ */
+
+    function smSourceRefresh(source) {
+        if (source === null || typeof source !== 'object' || !source.id) return
+        const id = String(source.id)
+        if (smSourceDialogBusy[id] === true) return
+        smSourceDialogBusy[id] = true
+        delete smSourceDialogError[id]
+        if (typeof setState === 'function') setState({})
+        const run = async function () {
+            try {
+                await api('sources/' + encodeURIComponent(id) + '/refresh', { method: 'POST' })
+                if (typeof loadSources === 'function') {
+                    try { await loadSources(true) } catch (err) { void err }
+                }
+                smSourceReloadMarket()
+            } catch (err) {
+                void err
+                smSourceDialogError[id] = t('source.error.refreshFailed')
+            } finally {
+                delete smSourceDialogBusy[id]
+                if (typeof setState === 'function') setState({})
+            }
+        }
+        void run()
+    }
+
+    function smSourceToggle(source) {
+        if (source === null || typeof source !== 'object' || !source.id) return
+        const id = String(source.id)
+        if (smSourceDialogBusy[id] === true) return
+        const nextEnabled = source.enabled === false
+        smSourceDialogBusy[id] = true
+        delete smSourceDialogError[id]
+        if (typeof setState === 'function') setState({})
+        const run = async function () {
+            try {
+                await api('sources/' + encodeURIComponent(id), {
+                    method: 'PUT',
+                    body: { enabled: nextEnabled },
+                })
+                if (typeof loadSources === 'function') {
+                    try { await loadSources(true) } catch (err) { void err }
+                }
+                smSourceReloadMarket()
+            } catch (err) {
+                void err
+                smSourceDialogError[id] = t('error.unexpected')
+            } finally {
+                delete smSourceDialogBusy[id]
+                if (typeof setState === 'function') setState({})
+            }
+        }
+        void run()
+    }
+
+    function smSourceDelete(source) {
+        if (source === null || typeof source !== 'object' || !source.id) return
+        if (typeof openModal === 'function') {
+            openModal('confirm-remove-source', {
+                source: source,
+                sourceId: source.id,
+                name: source.name,
+            })
+        }
+    }
+
+    /* ------------------------------------------------------------------ *
+     * 拖动排序                                                            *
+     * ------------------------------------------------------------------ */
+
+    function smSourceDragKey() {
+        if (typeof smDragSource !== 'undefined' && smDragSource !== null && typeof smDragSource === 'object' &&
+            typeof smDragSource.key === 'string' && smDragSource.key !== '') {
+            return smDragSource.key
+        }
+        return 'application/x-sm-source-id'
+    }
+
+    /* 00-prelude 的签名：start(id, event) / over(id, event) / drop() / end()。 */
+    function smSourceDragCall(name, first, second) {
+        if (typeof smDragSource === 'undefined' || smDragSource === null || typeof smDragSource !== 'object') return undefined
+        if (typeof smDragSource[name] !== 'function') return undefined
+        try {
+            return smDragSource[name](first, second)
+        } catch (err) {
+            void err
+            return undefined
+        }
+    }
+
+    function smSourceDragKeydown(event) {
+        if (event === null || event === undefined || event.key !== 'Escape') return
+        if (smSourceDialogDrag === null) return
+        if (typeof event.preventDefault === 'function') event.preventDefault()
+        if (typeof event.stopPropagation === 'function') event.stopPropagation()
+        if (typeof event.stopImmediatePropagation === 'function') event.stopImmediatePropagation()
+        smSourceEndDrag(true)
+    }
+
+    function smSourceBindDragKeys() {
+        if (smSourceDialogDragKeysBound) return
+        if (typeof document === 'undefined' || document === null || typeof document.addEventListener !== 'function') return
+        document.addEventListener('keydown', smSourceDragKeydown, true)
+        smSourceDialogDragKeysBound = true
+    }
+
+    function smSourceUnbindDragKeys() {
+        if (!smSourceDialogDragKeysBound) return
+        if (typeof document !== 'undefined' && document !== null && typeof document.removeEventListener === 'function') {
+            document.removeEventListener('keydown', smSourceDragKeydown, true)
+        }
+        smSourceDialogDragKeysBound = false
+    }
+
+    function smSourceMoveGhost(x, y) {
+        if (typeof document === 'undefined' || document === null || typeof document.getElementById !== 'function') return
+        const ghost = document.getElementById('sm-source-ghost')
+        if (ghost === null || ghost === undefined || ghost.style === null || ghost.style === undefined) return
+        ghost.style.left = (Number(x) || 0) + 12 + 'px'
+        ghost.style.top = (Number(y) || 0) + 12 + 'px'
+    }
+
+    function smSourceAutoScroll(clientY) {
+        if (typeof document === 'undefined' || document === null || typeof document.querySelector !== 'function') return
+        const list = document.querySelector('.sm-source-list')
+        if (list === null || list === undefined || typeof list.getBoundingClientRect !== 'function') return
+        const rect = list.getBoundingClientRect()
+        const current = Number(list.scrollTop) || 0
+        if (clientY < rect.top + 32) list.scrollTop = Math.max(0, current - 16)
+        else if (clientY > rect.bottom - 32) list.scrollTop = current + 16
+    }
+
+    function smSourceEndDrag(canceled) {
+        const drag = smSourceDialogDrag
+        smSourceDialogDrag = null
+        smSourceDialogPointer = null
+        smSourceUnbindDragKeys()
+        smSourceDragCall('end')
+        void drag
+        void canceled
+        if (typeof setState === 'function') setState({})
+    }
+
+    function smSourceRowDragStart(event, source) {
+        if (source === null || typeof source !== 'object' || !source.id) return
+        const id = String(source.id)
+        if (smSourceDialogBusy[id] === true) {
+            if (typeof event.preventDefault === 'function') event.preventDefault()
+            return
+        }
+        /* 4px 阈值：指针移动不足 4px 时不进入拖动，避免误触。 */
+        if (smSourceDialogPointer !== null) {
+            const dx = Math.abs((Number(event.clientX) || 0) - smSourceDialogPointer.x)
+            const dy = Math.abs((Number(event.clientY) || 0) - smSourceDialogPointer.y)
+            if (dx < 4 && dy < 4) {
+                if (typeof event.preventDefault === 'function') event.preventDefault()
+                return
+            }
+        }
+        const dataTransfer = event.dataTransfer
+        if (dataTransfer !== null && dataTransfer !== undefined) {
+            dataTransfer.effectAllowed = 'move'
+            try {
+                dataTransfer.setData(smSourceDragKey(), id)
+            } catch (err) {
+                void err
+            }
+        }
+        let width = 0
+        if (event.currentTarget !== null && event.currentTarget !== undefined &&
+            typeof event.currentTarget.getBoundingClientRect === 'function') {
+            width = event.currentTarget.getBoundingClientRect().width
+        }
+        smSourceDialogDrag = {
+            id: id,
+            overId: null,
+            after: false,
+            x: Number(event.clientX) || 0,
+            y: Number(event.clientY) || 0,
+            width: Number(width) || 0,
+        }
+        smSourceDialogAnnounce = ''
+        smSourceDragCall('start', id, event)
+        smSourceBindDragKeys()
+        if (typeof setState === 'function') setState({})
+    }
+
+    function smSourceRowDragOver(event, source) {
+        const drag = smSourceDialogDrag
+        if (drag === null || source === null || typeof source !== 'object') return
+        if (typeof event.preventDefault === 'function') event.preventDefault()
+        if (event.dataTransfer !== null && event.dataTransfer !== undefined) event.dataTransfer.dropEffect = 'move'
+        drag.x = Number(event.clientX) || drag.x
+        drag.y = Number(event.clientY) || drag.y
+        smSourceMoveGhost(drag.x, drag.y)
+        smSourceAutoScroll(drag.y)
+        const targetId = String(source.id)
+        if (targetId === drag.id) {
+            if (drag.overId !== null) {
+                drag.overId = null
+                drag.after = false
+                smSourceDragCall('over', targetId, event)
+                if (typeof setState === 'function') setState({})
+            }
+            return
+        }
+        let after = false
+        const shared = smSourceDragCall('over', targetId, event)
+        if (shared !== null && shared !== undefined && typeof shared === 'object' && typeof shared.after === 'boolean') {
+            after = shared.after
+        } else if (event.currentTarget !== null && event.currentTarget !== undefined &&
+            typeof event.currentTarget.getBoundingClientRect === 'function') {
+            const rect = event.currentTarget.getBoundingClientRect()
+            after = drag.y > rect.top + rect.height / 2
+        }
+        if (drag.overId !== targetId || drag.after !== after) {
+            drag.overId = targetId
+            drag.after = after
+            if (typeof setState === 'function') setState({})
+        }
+    }
+
+    function smSourceRowDrop(event, source) {
+        const drag = smSourceDialogDrag
+        if (drag === null || source === null || typeof source !== 'object') return
+        if (typeof event.preventDefault === 'function') event.preventDefault()
+        const shared = smSourceDragCall('drop')
+        const fromId = shared !== null && shared !== undefined && typeof shared === 'object' && shared.from !== undefined
+            ? String(shared.from)
+            : drag.id
+        const targetId = shared !== null && shared !== undefined && typeof shared === 'object' && shared.to !== undefined
+            ? String(shared.to)
+            : String(source.id)
+        const after = shared !== null && shared !== undefined && typeof shared === 'object'
+            ? shared.after === true
+            : drag.after
+        smSourceEndDrag(false)
+        if (fromId === targetId) return
+        const original = smSourceOrderedList().map(function (item) {
+            return item !== null && typeof item === 'object' ? String(item.id) : ''
+        })
+        const ids = original.slice()
+        const from = ids.indexOf(fromId)
+        if (from < 0) return
+        ids.splice(from, 1)
+        let to = ids.indexOf(targetId)
+        if (to < 0) to = ids.length
+        if (after) to += 1
+        ids.splice(to, 0, fromId)
+        if (ids.join('|') === original.join('|')) return
+        smSourcePersistOrder(ids, fromId)
+    }
+
+    function smSourceRowDragEnd(event) {
+        void event
+        if (smSourceDialogDrag === null) return
+        smSourceEndDrag(true)
+    }
+
+    /* ------------------------------------------------------------------ *
+     * 渲染                                                                *
+     * ------------------------------------------------------------------ */
+
+    function smSourceStatusDot(source) {
+        const id = source !== null && typeof source === 'object' ? String(source.id) : ''
+        if (id !== '' && smSourceDialogError[id] !== undefined) {
+            return { className: 'sm-dot-warn', tip: t('source.error.refreshFailed') }
+        }
+        if (source !== null && typeof source === 'object' && source.stale === true) {
+            return { className: 'sm-dot-warn', tip: t('source.error.refreshFailed') }
+        }
+        const status = source !== null && typeof source === 'object' && typeof source.status === 'string'
+            ? source.status
+            : 'ok'
+        if (status === 'error') return { className: 'sm-dot-error', tip: t('source.status.error') }
+        if (status === 'checking') return { className: 'sm-dot-warn', tip: t('source.status.checking') }
+        return { className: 'sm-dot-ok', tip: t('source.status.ok') }
+    }
+
+    function smSourceCheckedText(source) {
+        const value = source !== null && typeof source === 'object'
+            ? (typeof source.lastCheckedAt === 'number' ? source.lastCheckedAt
+                : typeof source.lastChecked === 'number' ? source.lastChecked : 0)
+            : 0
+        if (value > 0) return t('source.lastChecked', { time: fmtTime(value) })
+        return t('source.neverChecked')
+    }
+
+    function smSourceHandle(source, total) {
+        const id = String(source.id)
+        return h('span', {
+            key: 'handle',
+            className: 'sm-drag-handle sm-source-handle',
+            role: 'button',
+            tabIndex: 0,
+            'data-source-handle': id,
+            'aria-label': t('source.dragHandle'),
+            'data-tip': t('source.dragHandle'),
+            'aria-disabled': total <= 1 ? 'true' : undefined,
+            style: {
+                width: '16px',
+                height: '16px',
+                flex: 'none',
+                display: 'inline-flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                cursor: 'grab',
+                color: 'var(--dsw-alias-label-tertiary)',
+            },
+        }, icon('grip', 16))
+    }
+
+    function smSourceSwitch(source, frozen) {
+        const enabled = source.enabled !== false
+        const busy = frozen || smSourceDialogBusy[String(source.id)] === true
+        return h('button', {
+            key: 'switch',
+            type: 'button',
+            role: 'switch',
+            className: cx('sm-switch', !enabled && 'sm-switch-off'),
+            'aria-checked': enabled ? 'true' : 'false',
+            'aria-label': enabled ? t('action.disableSource') : t('action.enableSource'),
+            'data-tip': enabled ? t('action.disableSource') : t('action.enableSource'),
+            'aria-disabled': frozen ? 'true' : undefined,
+            disabled: busy,
+            draggable: 'false',
+            onClick: function (event) {
+                if (event !== null && event !== undefined && typeof event.stopPropagation === 'function') event.stopPropagation()
+                if (frozen) return
+                smSourceToggle(source)
+            },
+        }, h('span', { className: 'sm-switch-thumb' }))
+    }
+
+    function smSourceIconAction(key, iconName, label, onClick, frozen) {
+        return h('button', {
+            key: key,
+            type: 'button',
+            className: 'sm-icon-btn',
+            'aria-label': label,
+            'data-tip': label,
+            'aria-disabled': frozen ? 'true' : undefined,
+            disabled: frozen,
+            draggable: 'false',
+            style: { width: '28px', height: '28px' },
+            onClick: function (event) {
+                if (event !== null && event !== undefined && typeof event.stopPropagation === 'function') event.stopPropagation()
+                if (frozen) return
+                onClick()
+            },
+        }, icon(iconName, 14))
+    }
+
+    function smSourceRow(source, index, total) {
+        const id = String(source.id)
+        const frozen = smSourceDialogDrag !== null
+        const busy = smSourceDialogBusy[id] === true
+        const dot = smSourceStatusDot(source)
+        const name = typeof source.name === 'string' && source.name !== '' ? source.name : id
+        const count = typeof source.skillCount === 'number' ? source.skillCount : 0
+        const remoteError = (typeof source.error === 'string' && source.error !== '') || source.stale === true
+        const errorText = smSourceDialogError[id] !== undefined
+            ? String(smSourceDialogError[id])
+            : remoteError ? t('source.error.refreshFailed') : ''
+        const rowNode = h('div', {
+            key: 'row-' + id,
+            className: cx(
+                'sm-source-row',
+                'sm-source-item',
+                smSourceDialogDrag !== null && smSourceDialogDrag.id === id && 'is-dragging',
+                smSourceDialogDrag !== null && smSourceDialogDrag.id === id && 'sm-source-dragging'
+            ),
+            'data-source-row': id,
+            draggable: 'true',
+            'aria-label': name,
+            onMouseDown: function (event) {
+                smSourceDialogPointer = {
+                    x: Number(event !== null && event !== undefined ? event.clientX : 0) || 0,
+                    y: Number(event !== null && event !== undefined ? event.clientY : 0) || 0,
+                }
+            },
+            onDragStart: function (event) { smSourceRowDragStart(event, source) },
+            onDragOver: function (event) { smSourceRowDragOver(event, source) },
+            onDrop: function (event) { smSourceRowDrop(event, source) },
+            onDragEnd: function (event) { smSourceRowDragEnd(event) },
+            onKeyDown: function (event) {
+                if (event === null || event === undefined || event.altKey !== true) return
+                /* 只接受行本身或拖动手柄上的 Alt+↑/↓，避免在行内按钮上误触。 */
+                if (event.target !== event.currentTarget) {
+                    const target = event.target
+                    const isHandle = target !== null && target !== undefined &&
+                        typeof target.getAttribute === 'function' &&
+                        target.getAttribute('data-source-handle') !== null
+                    if (!isHandle) return
+                }
+                if (event.key === 'ArrowUp') {
+                    if (typeof event.preventDefault === 'function') event.preventDefault()
+                    moveSource(id, -1)
+                } else if (event.key === 'ArrowDown') {
+                    if (typeof event.preventDefault === 'function') event.preventDefault()
+                    moveSource(id, 1)
+                }
+            },
+            style: {
+                display: 'flex',
+                alignItems: 'center',
+                gap: '10px',
+                padding: '10px 12px',
+                borderBottom: '1px solid var(--dsw-alias-border-l2)',
+                minHeight: '56px',
+                opacity: smSourceDialogDrag !== null && smSourceDialogDrag.id === id ? 0.5 : 1,
+            },
+        },
+        smSourceHandle(source, total),
+        h('span', {
+            className: cx('sm-dot', dot.className),
+            'data-tip': dot.tip,
+            title: dot.tip,
+            style: { position: 'static', flex: 'none' },
+        }),
+        h('div', {
+            className: 'sm-source-name-wrap',
+            style: { flex: '1 1 auto', minWidth: 0, display: 'flex', flexDirection: 'column', gap: '2px' },
+        },
+        h('span', {
+            className: 'sm-source-name',
+            title: name,
+            style: {
+                fontSize: 'var(--sm-fs)',
+                fontWeight: 500,
+                color: 'var(--dsw-alias-label-primary)',
+                whiteSpace: 'nowrap',
+                overflow: 'hidden',
+                textOverflow: 'ellipsis',
+            },
+        }, name),
+        h('span', {
+            className: 'sm-source-meta',
+            style: { fontSize: 'calc(var(--sm-fs) - 3px)', color: 'var(--dsw-alias-label-caption)' },
+        }, smSourceCheckedText(source))),
+        h('span', {
+            className: 'sm-badge sm-mono',
+            style: { flex: 'none' },
+        }, t('source.skillCount', { count: count })),
+        h('div', {
+            className: 'sm-source-actions',
+            style: { display: 'flex', alignItems: 'center', gap: '4px', flexShrink: 0 },
+        },
+        smSourceSwitch(source, frozen),
+        smSourceIconAction('refresh', 'refresh', t('action.refresh'), function () {
+            smSourceRefresh(source)
+        }, frozen || busy),
+        smSourceIconAction('delete', 'trash', t('action.deleteSource'), function () {
+            smSourceDelete(source)
+        }, frozen)))
+        if (errorText === '') return rowNode
+        const errorNode = h('div', {
+            key: 'error-' + id,
+            className: 'sm-source-error sm-source-error-row',
+            role: 'alert',
+            style: {
+                display: 'flex',
+                alignItems: 'center',
+                gap: '8px',
+                padding: '4px 12px 10px 38px',
+                color: 'var(--dsw-alias-state-error-primary)',
+                fontSize: 'calc(var(--sm-fs) - 3px)',
+                lineHeight: 1.5,
+            },
+        },
+        icon('alert', 14),
+        h('span', { className: 'sm-ellipsis', style: { flex: '1 1 auto', minWidth: 0 } }, errorText),
+        h('button', {
+            type: 'button',
+            className: 'sm-btn sm-btn-ghost sm-btn-sm',
+            disabled: frozen || busy,
+            onClick: function (event) {
+                if (event !== null && event !== undefined && typeof event.stopPropagation === 'function') event.stopPropagation()
+                smSourceRefresh(source)
+            },
+        }, t('action.retry')))
+        return h(Fragment, { key: 'item-' + id }, rowNode, errorNode)
+    }
+
+    function smSourceDropIndicator(key) {
+        return h('div', {
+            key: key,
+            className: 'sm-drop-indicator sm-drop-line',
+            'aria-hidden': 'true',
+            style: {
+                height: '2px',
+                margin: '0 0 0 26px',
+                background: 'var(--dsw-alias-state-business-primary)',
+                flex: 'none',
+            },
+        })
+    }
+
+    function smSourceRows(list) {
+        const nodes = []
+        const drag = smSourceDialogDrag
+        list.forEach(function (source, index) {
+            if (source === null || typeof source !== 'object') return
+            const id = String(source.id)
+            if (drag !== null && drag.overId === id && drag.after !== true) {
+                nodes.push(smSourceDropIndicator('drop-before-' + id))
+            }
+            nodes.push(smSourceRow(source, index, list.length))
+            if (drag !== null && drag.overId === id && drag.after === true) {
+                nodes.push(smSourceDropIndicator('drop-after-' + id))
             }
         })
-        return order.map(function (id) {
-            return smPresetCard(byId[id] || {
-                id: id,
-                mounted: false,
-                presetSkills: 0,
-                localRoots: 0,
-                desc: '',
-            })
-        })
+        return nodes
     }
 
-    function smMarketSourceCard(src) {
-        const status = typeof src.status === 'string' ? src.status : 'ok'
-        const dotClass = status === 'ok' ? 'sm-dot-ok' : status === 'checking' ? 'sm-dot-warn' : 'sm-dot-error'
-        const enabled = src.enabled !== false
-        const busy = status === 'checking' || smSourcesBusy[src.id] === true
-        const checked = typeof src.lastCheckedAt === 'number' && src.lastCheckedAt > 0
-            ? t('source.lastChecked', { time: fmtTime(src.lastCheckedAt) })
-            : t('source.neverChecked')
-        const errorText = typeof src.error === 'string'
-            ? src.error
-            : (src.error ? smSourcesErrorText(src.error) : '')
-        const dotTitle = status === 'ok' ? t('source.enabled') : status === 'checking' ? t('state.loading') : t('state.loadFailed')
-        const isEditing = smSourcesEditing === src.id
-        const isConfirming = smSourcesConfirmDelete === src.id
-
-        const head = h('div', {
-            className: 'sm-source-card-head',
-            style: { display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap', minWidth: 0 },
-        },
-            h('span', { className: cx('sm-dot', dotClass), title: dotTitle }),
-            h('span', { className: 'sm-card-title' }, src.name || src.url || src.id),
-            h('span', { className: 'sm-badge sm-mono' }, src.type === 'local' ? t('source.type.local') : t('source.type.index')),
-            !enabled ? h('span', { className: 'sm-badge sm-warn' }, t('source.disabled')) : null,
-            src.stale ? h('span', { className: 'sm-badge sm-warn' }, t('source.stale')) : null
-        )
-
-        if (isEditing) {
-            return h('div', {
-                key: src.id || src.url,
-                className: 'sm-card sm-market-source-card',
-            },
-                head,
-                h('div', { style: { display: 'flex', flexDirection: 'column', gap: '8px' } },
-                    h('input', {
-                        type: 'text',
-                        className: 'sm-input',
-                        value: smSourcesEditName,
-                        placeholder: t('source.name'),
-                        onChange: smOnSourceEditName,
-                    }),
-                    h('input', {
-                        type: 'text',
-                        className: 'sm-input sm-mono',
-                        value: smSourcesEditUrl,
-                        placeholder: t('source.url'),
-                        onChange: smOnSourceEditUrl,
-                    }),
-                    smSourcesEditError !== ''
-                        ? h('div', {
-                            className: 'sm-caption',
-                            style: { color: 'var(--dsw-alias-state-error-primary)' },
-                        }, smSourcesEditError)
-                        : null,
-                    h('div', { style: { display: 'flex', alignItems: 'center', justifyContent: 'flex-end', gap: '6px' } },
-                        h('button', {
-                            type: 'button',
-                            className: 'sm-btn sm-btn-ghost sm-btn-sm',
-                            onClick: smCancelSourceEdit,
-                        }, t('action.cancel')),
-                        h('button', {
-                            type: 'button',
-                            className: 'sm-btn sm-btn-primary sm-btn-sm',
-                            disabled: smSourcesSaving,
-                            onClick: function () { void smSaveSourceEdit(src) },
-                        }, smSourcesSaving ? t('state.loading') : t('action.save'))
-                    )
-                )
-            )
-        }
-
-        if (isConfirming) {
-            return h('div', {
-                key: src.id || src.url,
-                className: 'sm-card sm-market-source-card',
-            },
-                head,
-                h('div', {
-                    className: 'sm-banner sm-warn',
-                    style: {
-                        display: 'flex',
-                        alignItems: 'center',
-                        justifyContent: 'space-between',
-                        gap: '8px',
-                        flexWrap: 'wrap',
-                    },
-                },
-                    h('span', { className: 'sm-caption' }, t('source.deleteConfirm', {
-                        name: src.name || src.url || src.id,
-                    })),
-                    h('div', { style: { display: 'flex', alignItems: 'center', gap: '6px' } },
-                        h('button', {
-                            type: 'button',
-                            className: 'sm-btn sm-btn-ghost sm-btn-sm',
-                            onClick: smCancelDeleteSource,
-                        }, t('action.cancel')),
-                        h('button', {
-                            type: 'button',
-                            className: 'sm-btn sm-btn-danger sm-btn-sm',
-                            disabled: smSourcesDeleting,
-                            onClick: function () { void smDeleteSource(src) },
-                        }, smSourcesDeleting ? t('state.loading') : t('action.delete'))
-                    )
-                )
-            )
-        }
-
+    function smSourceSkeletonRow(index) {
         return h('div', {
-            key: src.id || src.url,
-            className: 'sm-card sm-market-source-card',
+            key: 'sk-' + String(index),
+            className: 'sm-source-row',
+            'aria-hidden': 'true',
+            style: { display: 'flex', alignItems: 'center', gap: '10px', padding: '10px 12px', minHeight: '56px' },
         },
-            head,
-            h('div', {
-                className: 'sm-source-path sm-mono sm-caption sm-ellipsis',
-                title: src.url || '',
-            }, src.url || ''),
-            status === 'error' && errorText !== ''
-                ? h('div', {
-                    className: 'sm-source-error sm-caption',
-                    style: {
-                        color: 'var(--dsw-alias-state-error-primary)',
-                        display: 'flex',
-                        alignItems: 'center',
-                        gap: '6px',
-                        minWidth: 0,
-                    },
-                }, icon('alert', 14), h('span', { className: 'sm-ellipsis' }, errorText))
-                : null,
-            h('div', {
-                className: 'sm-source-card-foot',
+        h('span', { className: 'sm-skeleton', style: { width: '16px', height: '16px', flex: 'none' } }),
+        h('div', {
+            className: 'sm-source-name-wrap',
+            style: { flex: '1 1 auto', minWidth: 0, display: 'flex', flexDirection: 'column', gap: '6px' },
+        },
+        h('span', { className: 'sm-skeleton', style: { maxWidth: '180px' } }),
+        h('span', { className: 'sm-skeleton', style: { maxWidth: '120px', minHeight: '10px' } })))
+    }
+
+    function smSourceDialogBody(list, scopedError, loading) {
+        if (list.length > 0) {
+            return h('div', {
+                className: 'sm-source-list',
                 style: {
                     display: 'flex',
-                    alignItems: 'center',
-                    justifyContent: 'space-between',
-                    gap: '8px',
-                    flexWrap: 'wrap',
+                    flexDirection: 'column',
+                    overflowY: 'auto',
+                    minHeight: 0,
+                    flex: '1 1 auto',
+                    paddingRight: '2px',
+                    userSelect: smSourceDialogDrag !== null ? 'none' : 'auto',
                 },
+            }, smSourceRows(list))
+        }
+        if (loading) {
+            return h('div', {
+                className: 'sm-source-list',
+                'aria-busy': 'true',
+                style: { display: 'flex', flexDirection: 'column', overflowY: 'auto', minHeight: 0, flex: '1 1 auto' },
+            }, [smSourceSkeletonRow(0), smSourceSkeletonRow(1), smSourceSkeletonRow(2)])
+        }
+        if (scopedError !== null) {
+            return h('div', {
+                className: 'sm-empty',
+                style: { padding: '24px 12px' },
             },
-                h('span', { className: 'sm-source-count sm-caption sm-muted' },
-                    t('source.skillCount', { count: typeof src.skillCount === 'number' ? src.skillCount : 0 }),
-                    ' · ',
-                    checked
-                ),
-                h('div', {
-                    className: 'sm-source-actions',
-                    style: { display: 'flex', alignItems: 'center', gap: '6px', flexWrap: 'wrap' },
-                },
-                    h('button', {
-                        key: 'refresh',
-                        type: 'button',
-                        className: 'sm-btn sm-btn-ghost sm-btn-sm',
-                        disabled: busy,
-                        onClick: function () { void smRefreshOneSource(src) },
-                    }, t('action.refresh')),
-                    h('button', {
-                        key: 'edit',
-                        type: 'button',
-                        className: 'sm-btn sm-btn-ghost sm-btn-sm',
-                        onClick: function () { smStartSourceEdit(src) },
-                    }, t('action.edit')),
-                    h('button', {
-                        key: 'toggle',
-                        type: 'button',
-                        className: 'sm-btn sm-btn-ghost sm-btn-sm',
-                        disabled: busy,
-                        onClick: function () { void smToggleSource(src) },
-                    }, enabled ? t('source.disable') : t('source.enable')),
-                    h('button', {
-                        key: 'delete',
-                        type: 'button',
-                        className: 'sm-btn sm-btn-ghost sm-btn-sm sm-btn-danger',
-                        onClick: function () { smAskDeleteSource(src) },
-                    }, t('source.delete'))
-                )
-            )
-        )
-    }
-
-    function smSourcesSkeletonGrid(count) {
-        const cards = []
-        for (let i = 0; i < count; i += 1) {
-            cards.push(h('div', { key: 'sk-' + i, className: 'sm-card' },
-                h('div', { className: 'sm-skeleton', style: { maxWidth: '160px' } }),
-                h('div', { className: 'sm-skeleton', style: { maxWidth: '260px', minHeight: '12px' } }),
-                h('div', { className: 'sm-skeleton', style: { maxWidth: '120px', minHeight: '12px' } })
-            ))
-        }
-        return h('div', { className: 'sm-sources-grid', style: SM_SOURCES_GRID_STYLE }, cards)
-    }
-
-    function smSourcesStateCard(title, body, action) {
-        return h('div', { className: 'sm-card sm-empty' },
-            h('div', { className: 'sm-card-title' }, title),
-            body !== null && body !== undefined && body !== ''
-                ? h('div', { className: 'sm-caption sm-muted' }, body)
-                : null,
-            action !== null && action !== undefined
-                ? h('div', { style: { display: 'flex', justifyContent: 'center', gap: '8px' } }, action)
-                : null
-        )
-    }
-
-    function smSourcesErrorBanner(error) {
-        const detail = smSourcesErrorText(error)
-        return h('div', { key: 'error-banner', className: 'sm-banner sm-error', role: 'alert' },
-            icon('alert', 16),
-            h('span', {
-                className: 'sm-banner-text',
-                style: { display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap', minWidth: 0 },
-            },
-                t('error.loadSources'),
-                detail !== '' ? h('span', { className: 'sm-caption sm-muted' }, detail) : null
-            ),
-            h('button', {
-                type: 'button',
-                className: 'sm-btn sm-btn-ghost sm-btn-sm',
-                onClick: smRetrySources,
-            }, t('action.retry'))
-        )
-    }
-
-    /* ------------------------------------------------------------------ *
-     * 来源 Tab 入口                                                       *
-     * ------------------------------------------------------------------ */
-
-    function renderSourcesTab() {
-        smEnsureSourcesData()
-
-        const installed = appState.installed !== null && typeof appState.installed === 'object'
-            ? appState.installed
-            : null
-        const locations = installed !== null && Array.isArray(installed.locations) ? installed.locations : null
-        const presets = installed !== null && Array.isArray(installed.presets) ? installed.presets : null
-        const sources = smSourcesCurrent()
-        const fallbackError = installed === null &&
-            appState.error !== null && typeof appState.error === 'object' && appState.error.scope === 'installed'
-            ? appState.error
-            : null
-        const error = smSourcesError !== null ? smSourcesError : fallbackError
-        const hasError = error !== null && error !== undefined
-        const pending = installed === null && !hasError
-        const sections = []
-
-        if (hasError && (installed !== null || sources.length > 0)) {
-            sections.push(smSourcesErrorBanner(error))
-        }
-        sections.push(smPriorityCard())
-
-        let locationsBody = null
-        if (locations !== null) {
-            locationsBody = locations.length > 0
-                ? h('div', { className: 'sm-sources-grid', style: SM_SOURCES_GRID_STYLE }, locations.map(function (loc) {
-                    return smLocationCard(loc)
-                }))
-                : smSourcesStateCard(t('sources.noLocations'), '', smSourcesRetryButton())
-        } else if (pending) {
-            locationsBody = smSourcesSkeletonGrid(3)
-        } else {
-            locationsBody = smSourcesStateCard(
-                t('sources.noLocations'),
-                hasError ? smSourcesErrorText(error) : t('error.loadInstalled'),
-                smSourcesRetryButton()
-            )
-        }
-        sections.push(h('section', { key: 'locations', className: 'sm-group sm-sources-section' },
-            smSourcesSectionHeader(t('sources.locationsTitle')),
-            locationsBody
-        ))
-
-        let presetsBody = null
-        if (presets !== null) {
-            presetsBody = h('div', { className: 'sm-sources-grid sm-presets-grid', style: SM_SOURCES_GRID_STYLE }, smPresetCards(presets))
-        } else if (pending) {
-            presetsBody = smSourcesSkeletonGrid(4)
-        } else {
-            presetsBody = smSourcesStateCard(
-                t('sources.noPresets'),
-                hasError ? smSourcesErrorText(error) : t('error.loadInstalled'),
-                smSourcesRetryButton()
-            )
-        }
-        sections.push(h('section', { key: 'presets', className: 'sm-group sm-sources-section' },
-            smSourcesSectionHeader(t('sources.presetsTitle'),
-                h('span', { className: 'sm-sources-hint' }, t('sources.presetNote'))),
-            presetsBody
-        ))
-
-        let sourcesBody = null
-        if (sources.length > 0) {
-            sourcesBody = h('div', { className: 'sm-sources-grid', style: SM_SOURCES_GRID_STYLE }, sources.map(function (src) {
-                return smMarketSourceCard(src)
-            }))
-        } else if (pending || (smSourcesLoading && !hasError)) {
-            sourcesBody = smSourcesSkeletonGrid(3)
-        } else if (hasError) {
-            sourcesBody = smSourcesStateCard(
-                t('source.error.fetch'),
-                smSourcesErrorText(error),
-                smSourcesRetryButton()
-            )
-        } else {
-            sourcesBody = smSourcesStateCard(t('source.empty'), t('empty.market.noSourceBody'),
+            h('div', { className: 'sm-empty-icon' }, icon('alert', 32)),
+            h('div', { className: 'sm-empty-title' }, t('state.error.sources.title')),
+            h('div', { className: 'sm-empty-body' }, t('state.error.sources.body')),
+            h('div', { className: 'sm-empty-actions' },
                 h('button', {
                     type: 'button',
                     className: 'sm-btn sm-btn-primary sm-btn-sm',
-                    onClick: function () { openModal('add-source') },
-                }, t('action.addSource'))
-            )
+                    onClick: function () {
+                        if (typeof loadSources !== 'function') return
+                        try {
+                            const pending = loadSources(true)
+                            if (pending !== null && pending !== undefined && typeof pending.catch === 'function') {
+                                pending.catch(function () { /* 错误态保留 */ })
+                            }
+                        } catch (err) {
+                            void err
+                        }
+                    },
+                }, t('action.retry'))))
         }
-        sections.push(h('section', { key: 'sources', className: 'sm-group sm-sources-section' },
-            smSourcesSectionHeader(t('sources.marketTitle'),
-                h('button', {
-                    type: 'button',
-                    className: 'sm-btn sm-btn-ghost sm-btn-sm',
-                    onClick: function () { openModal('add-source') },
-                }, icon('plus', 14), t('action.addSource'))),
-            sourcesBody
-        ))
+        return h('div', {
+            className: 'sm-empty',
+            style: { padding: '24px 12px' },
+        },
+        h('div', { className: 'sm-empty-icon' }, icon('sources', 32)),
+        h('div', { className: 'sm-empty-title' }, t('empty.sources.title')),
+        h('div', { className: 'sm-empty-body' }, t('empty.sources.body')))
+    }
 
-        return h('div', { className: 'sm-page sm-sources-page' }, sections)
+    function smSourceGhost() {
+        if (smSourceDialogDrag === null) return null
+        let source = null
+        const list = smSourceOrderedList()
+        for (let index = 0; index < list.length; index += 1) {
+            if (list[index] !== null && typeof list[index] === 'object' && String(list[index].id) === smSourceDialogDrag.id) {
+                source = list[index]
+                break
+            }
+        }
+        if (source === null) return null
+        const name = typeof source.name === 'string' && source.name !== '' ? source.name : String(source.id)
+        const count = typeof source.skillCount === 'number' ? source.skillCount : 0
+        return h('div', {
+            key: 'ghost',
+            id: 'sm-source-ghost',
+            className: 'sm-source-ghost',
+            'aria-hidden': 'true',
+            style: {
+                position: 'fixed',
+                left: smSourceDialogDrag.x + 12 + 'px',
+                top: smSourceDialogDrag.y + 12 + 'px',
+                width: smSourceDialogDrag.width > 0 ? smSourceDialogDrag.width + 'px' : undefined,
+                zIndex: 1400,
+                pointerEvents: 'none',
+                display: 'flex',
+                alignItems: 'center',
+                gap: '8px',
+                padding: '6px 10px',
+                borderRadius: 'var(--dsw-radius-sm)',
+                border: '0.5px solid var(--dsw-alias-border-l2)',
+                background: 'var(--dsw-alias-bg-layer-2)',
+                fontSize: 'calc(var(--sm-fs) - 1px)',
+                color: 'var(--dsw-alias-label-primary)',
+            },
+        },
+        h('span', { className: 'sm-mono' }, name),
+        h('span', { className: 'sm-caption sm-muted' }, t('source.skillCount', { count: count })))
+    }
+
+    function renderSourceDialog() {
+        if (appState.sourceDialogOpen !== true) return null
+        const list = smSourceOrderedList()
+        const scopedError = appState.error !== null && typeof appState.error === 'object' && appState.error.scope === 'sources'
+            ? appState.error
+            : null
+        const loading = appState.loadingSources === true ||
+            (appState.loading !== null && typeof appState.loading === 'object' && appState.loading.sources === true)
+        const dragging = smSourceDialogDrag !== null
+
+        const head = h('div', {
+            key: 'head',
+            className: 'sm-dialog-head',
+            style: {
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'space-between',
+                gap: '8px',
+                padding: '16px 20px',
+                borderBottom: '0.5px solid var(--dsw-alias-border-l2)',
+                flex: 'none',
+            },
+        },
+        h('div', {
+            key: 'title',
+            className: 'sm-dialog-head-left',
+            style: { display: 'flex', alignItems: 'center', gap: '8px', minWidth: 0 },
+        },
+        h('span', {
+            className: 'sm-dialog-title',
+            style: { fontSize: 'calc(var(--sm-fs) + 2px)', fontWeight: 500, color: 'var(--dsw-alias-label-primary)' },
+        }, t('source.title')),
+        h('span', { className: 'sm-badge' }, String(list.length))),
+        h('button', {
+            key: 'close',
+            type: 'button',
+            className: 'sm-icon-btn',
+            'aria-label': t('action.close'),
+            'data-tip': t('action.close'),
+            onClick: closeSourceDialog,
+        }, icon('x', 16)))
+
+        const body = h('div', {
+            key: 'body',
+            className: 'sm-dialog-body',
+            style: {
+                display: 'flex',
+                flexDirection: 'column',
+                gap: '12px',
+                padding: '12px 20px 16px',
+                minHeight: 0,
+                flex: '1 1 auto',
+                overflow: 'hidden',
+            },
+        },
+        h('p', {
+            key: 'intro',
+            className: 'sm-dialog-intro',
+            style: {
+                margin: 0,
+                fontSize: 'calc(var(--sm-fs) - 1px)',
+                lineHeight: 1.55,
+                color: 'var(--dsw-alias-label-secondary)',
+            },
+        }, t('source.priorityHint')),
+        h('p', {
+            key: 'hint',
+            className: 'sm-source-drag-hint',
+            style: {
+                margin: 0,
+                fontSize: 'calc(var(--sm-fs) - 3px)',
+                lineHeight: 1.5,
+                color: 'var(--dsw-alias-label-caption)',
+            },
+        }, t('source.dragHint')),
+        smSourceDialogBody(list, scopedError, loading),
+        h('div', { key: 'live', className: 'sm-sr-only', 'aria-live': 'polite' }, smSourceDialogAnnounce))
+
+        const foot = h('div', {
+            key: 'foot',
+            className: 'sm-dialog-foot',
+            style: {
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'flex-start',
+                gap: '8px',
+                padding: '12px 20px',
+                borderTop: '0.5px solid var(--dsw-alias-border-l2)',
+                flex: 'none',
+            },
+        },
+        h('button', {
+            key: 'add',
+            type: 'button',
+            className: 'sm-btn sm-btn-secondary sm-btn-sm',
+            disabled: dragging,
+            onClick: function () {
+                if (typeof openModal === 'function') openModal('add-source', {})
+            },
+        }, icon('plus', 15), t('action.addSource')))
+
+        const dialog = h('div', {
+            key: 'dialog',
+            className: 'sm-source-dialog sm-dialog',
+            role: 'dialog',
+            'aria-modal': 'true',
+            'aria-label': t('source.title'),
+            tabIndex: -1,
+            style: {
+                width: 'min(720px, 100vw - 32px)',
+                maxHeight: 'min(720px, 100vh - 96px)',
+                boxSizing: 'border-box',
+                display: 'flex',
+                flexDirection: 'column',
+                overflow: 'hidden',
+                borderRadius: 'var(--dsw-radius-panel)',
+                border: '0.5px solid var(--dsw-alias-border-inverted)',
+                background: 'var(--dsw-alias-bg-layer-1)',
+                boxShadow: 'none',
+            },
+        }, head, body, foot)
+
+        const mask = h('div', {
+            key: 'mask',
+            className: 'sm-dialog-mask',
+            style: {
+                position: 'fixed',
+                inset: 0,
+                zIndex: 1200,
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                padding: '16px',
+                background: 'transparent',
+            },
+            onMouseDown: function (event) {
+                if (event === null || event === undefined) return
+                if (event.target !== event.currentTarget) return
+                if (smSourceDialogDrag !== null) return
+                closeSourceDialog()
+            },
+        }, dialog)
+
+        return h(Fragment, null, mask, smSourceGhost())
     }

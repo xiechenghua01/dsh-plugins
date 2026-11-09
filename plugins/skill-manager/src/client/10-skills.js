@@ -1,84 +1,454 @@
     /* ================================================================== *
-     * 10-installed.js                                                     *
-     * Installed tab: banners, filters, location groups, skill rows, menu. *
+     * 10-skills.js                                                        *
+     * Skills tab: category tabs, source groups, two-column card grid,     *
+     * card row menu, empty / loading / error states (contract v2 §3.3,    *
+     * §5.2, §7.2, §7.3; interaction spec SL-01 ~ SL-06).                  *
      * ================================================================== */
 
-    function findInstalledSkill(id) {
-        const data = appState.installed
-        if (data === null || typeof data !== 'object' || !Array.isArray(data.skills)) return null
-        return data.skills.find(function (skill) {
-            return skill !== null && typeof skill === 'object' && skill.id === id
-        }) || null
+    /* Fixed category order (interaction spec §3.2). Labels and empty-state
+     * copy live in the locale dictionary; nothing here is user-visible. */
+    const SKILL_CATEGORY_ORDER = ['mine', 'shared', 'project', 'system']
+
+    const SKILL_CATEGORY_LABEL = {
+        mine: 'tab.category.mine',
+        shared: 'tab.category.shared',
+        project: 'tab.category.project',
+        system: 'tab.category.system',
     }
 
-    function patchInstalledSkill(skill) {
-        const data = appState.installed
-        if (data === null || typeof data !== 'object' || !Array.isArray(data.skills)) return
-        if (skill === null || typeof skill !== 'object') return
-        const index = data.skills.findIndex(function (item) {
-            return item !== null && typeof item === 'object' && item.id === skill.id
-        })
-        if (index >= 0) data.skills[index] = skill
-        else data.skills.push(skill)
+    const SKILL_CATEGORY_EMPTY = {
+        mine: 'empty.tab.mine',
+        shared: 'empty.tab.shared',
+        project: 'empty.tab.project',
+        system: 'empty.tab.builtin',
     }
 
-    function skillMatchesQuery(skill, query) {
+    const SKILL_CATEGORY_ICON = {
+        mine: 'user',
+        shared: 'users',
+        project: 'folder',
+        system: 'package',
+    }
+
+    /* A skill mutation (enable / disable) is in flight; disables the row menu
+     * action and keeps the undo toast from firing twice. */
+    let skillsBusyId = null
+
+    /* ------------------------------------------------------------------ *
+     * Small data helpers.                                                 *
+     * ------------------------------------------------------------------ */
+
+    function skillsIsSkill(skill) {
+        return skill !== null && typeof skill === 'object'
+    }
+
+    function skillsQuery() {
+        return String(appState.search === undefined || appState.search === null ? '' : appState.search).trim().toLowerCase()
+    }
+
+    function skillsMatchesQuery(skill, query) {
         if (query === '') return true
-        const fields = [skill.name, skill.description, skill.whenToUse, skill.path, skill.rootPath]
+        if (!skillsIsSkill(skill)) return false
+        const fields = [skill.name, skill.description, skill.whenToUse]
         return fields.some(function (field) {
-            return typeof field === 'string' && field.toLowerCase().includes(query)
+            return typeof field === 'string' && field.toLowerCase().indexOf(query) !== -1
         })
     }
 
-    function sortInstalledSkills(items, sort) {
+    /** All skills, defensively copied. */
+    function skillsList() {
+        return Array.isArray(appState.skills) ? appState.skills.filter(skillsIsSkill) : []
+    }
+
+    /** Skills whose name / description / whenToUse match the current search. */
+    function skillsMatched() {
+        const query = skillsQuery()
+        return skillsList().filter(function (skill) { return skillsMatchesQuery(skill, query) })
+    }
+
+    /** Host-provided category count, with a local fallback. */
+    function skillsCategoryTotal(category) {
+        const counts = appState.categories
+        if (counts !== null && typeof counts === 'object' && typeof counts[category] === 'number') {
+            return counts[category]
+        }
+        return skillsList().filter(function (skill) { return skill.category === category }).length
+    }
+
+    /**
+     * Categories that currently exist. "project" is hidden when there is no
+     * project context (no cwd) and no project skills; the contract does not
+     * expose a dedicated flag, so cwd + count is the signal.
+     */
+    function skillsAvailableCategories() {
+        const hasCwd = String(appState.cwd === undefined || appState.cwd === null ? '' : appState.cwd) !== ''
+        return SKILL_CATEGORY_ORDER.filter(function (key) {
+            if (key !== 'project') return true
+            return hasCwd || skillsCategoryTotal('project') > 0
+        })
+    }
+
+    /**
+     * The category actually shown. Search is cross-category: when the current
+     * category has no hit but another one does, jump to the first matching
+     * category (tab order) without overwriting the remembered selection.
+     */
+    function skillsEffectiveCategory() {
+        const available = skillsAvailableCategories()
+        const fallback = available.indexOf(appState.category) !== -1 ? appState.category : 'mine'
+        const query = skillsQuery()
+        if (query === '') return fallback
+        const matched = skillsMatched()
+        for (let index = 0; index < available.length; index += 1) {
+            const key = available[index]
+            const hit = matched.some(function (skill) { return skill.category === key })
+            if (hit) return key
+        }
+        return fallback
+    }
+
+    function skillsSort(items) {
         const copy = items.slice()
-        if (sort === 'name') {
-            copy.sort(function (left, right) {
-                return String(left.name || '').localeCompare(String(right.name || ''))
-            })
-        } else if (sort === 'modified') {
+        if (appState.sort === 'recent') {
             copy.sort(function (left, right) {
                 return (Number(right.mtime) || 0) - (Number(left.mtime) || 0)
+            })
+        } else if (appState.sort === 'source') {
+            const order = skillsSourceOrder()
+            const rank = function (skill) {
+                const id = typeof skill.sourceId === 'string' ? skill.sourceId : ''
+                const index = order.indexOf(id)
+                return index === -1 ? order.length : index
+            }
+            copy.sort(function (left, right) {
+                return rank(left) - rank(right)
+                    || String(left.name || '').localeCompare(String(right.name || ''))
+            })
+        } else {
+            copy.sort(function (left, right) {
+                return String(left.name || '').localeCompare(String(right.name || ''))
             })
         }
         return copy
     }
 
-    function installedFilterMatches(skill, filter) {
-        if (filter === 'all') return true
-        if (filter === 'disabled') return skill.status === 'disabled'
-        return locationFilterKey(skill.location) === filter
+    /** Skills of one category, filtered by search and sorted. */
+    function skillsInCategory(category, query) {
+        const text = typeof query === 'string' ? query : skillsQuery()
+        return skillsSort(skillsList().filter(function (skill) {
+            return skill.category === category && skillsMatchesQuery(skill, text)
+        }))
     }
 
-    function selectInstalledFilter(filter) {
+    function skillsSourceOrder() {
+        const ids = []
+        const seen = Object.create(null)
+        const push = function (id) {
+            if (typeof id !== 'string' || id === '' || seen[id] === true) return
+            seen[id] = true
+            ids.push(id)
+        }
+        if (Array.isArray(appState.sourceOrder) && appState.sourceOrder.length > 0) {
+            appState.sourceOrder.forEach(push)
+        } else if (Array.isArray(appState.sources)) {
+            appState.sources.forEach(function (source) {
+                if (source !== null && typeof source === 'object') push(source.id)
+            })
+        }
+        return ids
+    }
+
+    function skillsFindSource(sourceId) {
+        if (!Array.isArray(appState.sources) || typeof sourceId !== 'string' || sourceId === '') return null
+        const found = appState.sources.find(function (source) {
+            return source !== null && typeof source === 'object' && source.id === sourceId
+        })
+        return found === undefined ? null : found
+    }
+
+    function skillsFindById(id) {
+        return skillsList().find(function (skill) { return skill.id === id }) || null
+    }
+
+    /* ------------------------------------------------------------------ *
+     * Grouping (contract §3.3).                                           *
+     *                                                                     *
+     * Each market source gets one group in `sourceOrder`; skills without  *
+     * a sourceId, or whose source no longer exists, fall into `local`,    *
+     * which is always last. Empty groups are omitted and system skills    *
+     * are never grouped. Mirrors lib/scan.mjs#groupSkillsBySource.        *
+     * ------------------------------------------------------------------ */
+
+    function groupSkills(skills, sourceOrder) {
+        const list = Array.isArray(skills) ? skills : []
+        const order = []
+        const seen = Object.create(null)
+        const rawOrder = Array.isArray(sourceOrder) && sourceOrder.length > 0 ? sourceOrder : skillsSourceOrder()
+        rawOrder.forEach(function (id) {
+            if (typeof id !== 'string' || id === '' || seen[id] === true) return
+            seen[id] = true
+            order.push(id)
+        })
+
+        const buckets = Object.create(null)
+        order.forEach(function (id) { buckets[id] = [] })
+        const local = []
+        list.forEach(function (skill) {
+            if (!skillsIsSkill(skill) || skill.category === 'system') return
+            const sourceId = typeof skill.sourceId === 'string' && skill.sourceId !== '' ? skill.sourceId : null
+            if (sourceId === null || buckets[sourceId] === undefined) local.push(skill)
+            else buckets[sourceId].push(skill)
+        })
+
+        const groups = []
+        order.forEach(function (id) {
+            const items = buckets[id]
+            if (items.length === 0) return
+            const named = items.find(function (skill) {
+                return typeof skill.sourceName === 'string' && skill.sourceName !== ''
+            })
+            const source = skillsFindSource(id)
+            groups.push({
+                key: 'source:' + id,
+                kind: 'source',
+                sourceId: id,
+                label: named !== undefined
+                    ? named.sourceName
+                    : source !== null && typeof source.name === 'string' && source.name !== ''
+                        ? source.name
+                        : id,
+                count: items.length,
+                skills: items,
+            })
+        })
+        if (local.length > 0) {
+            groups.push({
+                key: 'local',
+                kind: 'local',
+                sourceId: null,
+                label: t('group.local'),
+                count: local.length,
+                skills: local,
+            })
+        }
+        return groups
+    }
+
+    /* ------------------------------------------------------------------ *
+     * Navigation and row actions.                                         *
+     * ------------------------------------------------------------------ */
+
+    function skillsScrollTop() {
+        if (typeof document === 'undefined' || document === null || typeof document.querySelector !== 'function') return
+        const node = document.querySelector('.sm-root .sm-tab-view.sm-scroll')
+        if (node !== null && node !== undefined && typeof node.scrollTop === 'number') node.scrollTop = 0
+    }
+
+    function skillsSelectCategory(key) {
+        if (SKILL_CATEGORY_ORDER.indexOf(key) === -1) return
+        if (appState.category === key) return
+        setState({ category: key })
+        skillsScrollTop()
+        if (typeof requestAnimationFrame === 'function') requestAnimationFrame(skillsScrollTop)
+    }
+
+    function skillsFocusCategory(key) {
+        if (typeof document === 'undefined' || document === null || typeof document.querySelector !== 'function') return
+        const node = document.querySelector('.sm-subtabs [data-category="' + key + '"]')
+        if (node !== null && node !== undefined && typeof node.focus === 'function') node.focus()
+    }
+
+    function skillsOnCategoryKeyDown(event) {
+        const keys = skillsAvailableCategories()
+        const current = skillsEffectiveCategory()
+        const index = keys.indexOf(current)
+        let next = null
+        if (event.key === 'ArrowRight') next = keys[(index + 1) % keys.length]
+        else if (event.key === 'ArrowLeft') next = keys[(index - 1 + keys.length) % keys.length]
+        else if (event.key === 'Home') next = keys[0]
+        else if (event.key === 'End') next = keys[keys.length - 1]
+        else return
+        event.preventDefault()
+        skillsSelectCategory(next)
+        if (typeof requestAnimationFrame === 'function') requestAnimationFrame(function () { skillsFocusCategory(next) })
+    }
+
+    function skillsOpenDetail(skill) {
+        if (!skillsIsSkill(skill)) return
+        rememberListScroll()
+        setState({ view: 'detail', detail: { kind: 'installed', id: skill.id }, menu: null })
+    }
+
+    function skillsGoMarket() {
+        if (typeof switchTab === 'function') {
+            switchTab('market')
+            return
+        }
+        setState({ tab: 'market', view: 'list', detail: null, menu: null })
+    }
+
+    function skillsOpenMenu(event, skill) {
+        if (event !== null && event !== undefined) {
+            if (typeof event.stopPropagation === 'function') event.stopPropagation()
+            if (typeof event.preventDefault === 'function') event.preventDefault()
+        }
+        if (!skillsIsSkill(skill)) return
+        let rect = null
+        if (event !== null && event !== undefined && event.currentTarget !== null && event.currentTarget !== undefined
+            && typeof event.currentTarget.getBoundingClientRect === 'function') {
+            rect = event.currentTarget.getBoundingClientRect()
+        }
+        const width = 200
+        const height = 186
+        const viewportWidth = typeof window !== 'undefined' && window !== null && typeof window.innerWidth === 'number' ? window.innerWidth : 1024
+        const viewportHeight = typeof window !== 'undefined' && window !== null && typeof window.innerHeight === 'number' ? window.innerHeight : 768
+        const anchorX = rect !== null ? rect.right - width : viewportWidth - width - 24
+        let y = rect !== null ? rect.bottom + 4 : 120
+        if (y + height > viewportHeight - 8) y = rect !== null ? rect.top - height - 4 : y
         setState({
-            filter: filter,
-            disabledExpanded: filter === 'disabled' ? true : appState.disabledExpanded,
+            menu: {
+                type: 'skill',
+                id: skill.id,
+                x: Math.max(8, Math.min(viewportWidth - width - 8, anchorX)),
+                y: Math.max(8, Math.min(viewportHeight - height - 8, y)),
+            },
         })
     }
 
-    function setInstalledSort(sort) {
-        setState({ sort: sort })
+    function skillsCloseMenu() {
+        if (appState.menu !== null && typeof appState.menu === 'object' && appState.menu.type === 'skill') {
+            setState({ menu: null })
+        }
     }
 
-    function toggleDisabledGroup() {
-        if (appState.filter === 'disabled') return
-        setState({ disabledExpanded: appState.disabledExpanded !== true })
+    function skillsFocusMore(id) {
+        if (typeof document === 'undefined' || document === null || typeof document.querySelectorAll !== 'function') return
+        const cards = document.querySelectorAll('.sm-card-item[data-skill-id]')
+        for (let index = 0; index < cards.length; index += 1) {
+            const card = cards[index]
+            if (card.getAttribute('data-skill-id') !== id) continue
+            const button = typeof card.querySelector === 'function' ? card.querySelector('.sm-card-more') : null
+            if (button !== null && button !== undefined && typeof button.focus === 'function') button.focus()
+            return
+        }
     }
 
-    function clearInstalledSearch() {
-        setState({ search: '' })
+    function skillsMenuKeyDown(event) {
+        if (event.key === 'Escape') {
+            event.preventDefault()
+            event.stopPropagation()
+            const id = appState.menu !== null && typeof appState.menu === 'object' ? appState.menu.id : ''
+            skillsCloseMenu()
+            if (typeof id === 'string' && id !== '') skillsFocusMore(id)
+            return
+        }
+        if (event.key !== 'ArrowDown' && event.key !== 'ArrowUp') return
+        const root = event.currentTarget
+        if (root === null || root === undefined || typeof root.querySelectorAll !== 'function') return
+        event.preventDefault()
+        const items = Array.prototype.slice.call(root.querySelectorAll('[role="menuitem"]:not(:disabled)'))
+        if (items.length === 0) return
+        const active = typeof document !== 'undefined' && document !== null ? document.activeElement : null
+        const index = items.indexOf(active)
+        let next = 0
+        if (event.key === 'ArrowDown') next = index < 0 ? 0 : (index + 1) % items.length
+        else next = index < 0 ? items.length - 1 : (index - 1 + items.length) % items.length
+        if (typeof items[next].focus === 'function') items[next].focus()
     }
 
-    async function toggleSkillEnabled(skill, enabled, options) {
+    function skillsMenuItem(key, label, iconName, options) {
         const opts = options !== null && typeof options === 'object' ? options : {}
-        if (skill === null || typeof skill !== 'object') return
+        return h('button', {
+            key: key,
+            type: 'button',
+            role: 'menuitem',
+            className: cx('sm-menu-item', opts.danger === true && 'sm-menu-item-danger'),
+            disabled: opts.disabled === true,
+            'data-tip': opts.disabled === true ? opts.tip : undefined,
+            autoFocus: opts.autoFocus === true,
+            onClick: opts.onClick,
+        },
+        h('span', { className: 'sm-menu-icon' }, icon(iconName, 15)),
+        h('span', null, label))
+    }
+
+    /** Row menu: details / copy location / disable or restore / uninstall or delete. */
+    function renderSkillMenu() {
+        const menu = appState.menu
+        if (menu === null || typeof menu !== 'object' || menu.type !== 'skill') return null
+        const skill = skillsFindById(menu.id)
+        if (skill === null) return null
+        const disabled = skill.status === 'disabled'
+        const readonly = skill.writable === false
+        const isMarket = typeof skill.sourceId === 'string' && skill.sourceId !== ''
+        const hasPath = typeof skill.path === 'string' && skill.path !== ''
+        const run = function (action) {
+            return function (event) {
+                if (event !== null && event !== undefined) {
+                    if (typeof event.stopPropagation === 'function') event.stopPropagation()
+                    if (typeof event.preventDefault === 'function') event.preventDefault()
+                }
+                skillsCloseMenu()
+                if (typeof action === 'function') action()
+            }
+        }
+        const destructiveLabel = isMarket ? t('action.uninstall') : t('action.delete')
+        const itemStyle = { left: menu.x + 'px', top: menu.y + 'px', width: '200px' }
+        return [
+            h('div', {
+                key: 'backdrop',
+                className: 'sm-menu-backdrop',
+                onClick: skillsCloseMenu,
+                onContextMenu: function (event) {
+                    event.preventDefault()
+                    skillsCloseMenu()
+                },
+            }),
+            h('div', {
+                key: 'menu',
+                className: 'sm-menu',
+                role: 'menu',
+                style: itemStyle,
+                onClick: function (event) { event.stopPropagation() },
+                onKeyDown: skillsMenuKeyDown,
+            },
+            skillsMenuItem('view', t('action.viewDetail'), 'file', {
+                autoFocus: true,
+                onClick: run(function () { skillsOpenDetail(skill) }),
+            }),
+            skillsMenuItem('copy', t('action.copyPath'), 'copy', {
+                disabled: !hasPath,
+                tip: readonly ? t('detail.location.builtin') : t('error.notFound'),
+                onClick: run(function () { copyPath(skill.path) }),
+            }),
+            skillsMenuItem('toggle', disabled ? t('action.enable') : t('action.disable'), 'power', {
+                disabled: readonly,
+                tip: t('error.readonly'),
+                onClick: run(function () { void skillsToggleEnabled(skill, disabled) }),
+            }),
+            h('div', { key: 'sep', className: 'sm-menu-sep' }),
+            skillsMenuItem('destructive', destructiveLabel, 'trash', {
+                danger: true,
+                disabled: readonly,
+                tip: t('error.readonly'),
+                onClick: run(function () {
+                    if (typeof openModal === 'function') {
+                        openModal(isMarket ? 'uninstall' : 'delete', { skill: skill, id: skill.id, name: skill.name })
+                    }
+                }),
+            })),
+        ]
+    }
+
+    async function skillsToggleEnabled(skill, enabled, options) {
+        const opts = options !== null && typeof options === 'object' ? options : {}
+        if (!skillsIsSkill(skill)) return
         if (skill.writable === false) {
             toast(t('error.readonly'), { tone: 'error' })
             return
         }
-        if (appState.busySkillId === skill.id) return
-        appState.busySkillId = skill.id
+        if (skillsBusyId === skill.id) return
+        skillsBusyId = skill.id
         rerender()
         try {
             const data = await api('skill/state', {
@@ -88,571 +458,300 @@
             const updated = data !== null && typeof data === 'object' && data.skill !== null && typeof data.skill === 'object'
                 ? data.skill
                 : Object.assign({}, skill, { status: enabled === true ? 'active' : 'disabled' })
-            patchInstalledSkill(updated)
+            const list = Array.isArray(appState.skills) ? appState.skills : []
+            const index = list.findIndex(function (item) { return skillsIsSkill(item) && item.id === skill.id })
+            if (index >= 0) {
+                const next = list.slice()
+                next[index] = updated
+                appState.skills = next
+            }
             if (opts.silent !== true) {
                 toast(enabled === true ? t('toast.enabled', { name: skill.name }) : t('toast.disabled', { name: skill.name }), {
                     tone: 'ok',
                     actionLabel: t('action.undo'),
                     onAction: function () {
-                        void toggleSkillEnabled(updated, enabled !== true, { silent: true })
+                        void skillsToggleEnabled(updated, enabled !== true, { silent: true })
                     },
                 })
             }
             await loadInstalled(true)
         } catch (error) {
-            toast(t('error.toggleState', {
-                reason: error !== null && typeof error === 'object' && error.message ? error.message : t('error.generic'),
-            }), { tone: 'error' })
+            toast(error !== null && typeof error === 'object' && error.message ? error.message : t('error.generic'), { tone: 'error' })
         } finally {
-            appState.busySkillId = null
+            skillsBusyId = null
             rerender()
         }
     }
 
-    function openRowMenu(event, skill) {
-        if (event !== null && event !== undefined) {
-            if (typeof event.stopPropagation === 'function') event.stopPropagation()
-            if (typeof event.preventDefault === 'function') event.preventDefault()
-        }
-        if (skill === null || typeof skill !== 'object') {
-            toast(t('error.notFound'), { tone: 'error' })
-            return
-        }
-        let rect = null
-        if (event !== null && event !== undefined && event.currentTarget !== null && event.currentTarget !== undefined && typeof event.currentTarget.getBoundingClientRect === 'function') {
-            rect = event.currentTarget.getBoundingClientRect()
-        }
-        const width = 208
-        const height = 258
-        const viewportWidth = typeof window !== 'undefined' && window !== null && typeof window.innerWidth === 'number' ? window.innerWidth : 1024
-        const viewportHeight = typeof window !== 'undefined' && window !== null && typeof window.innerHeight === 'number' ? window.innerHeight : 768
-        const anchorX = rect !== null ? rect.right - width : viewportWidth - width - 24
-        const anchorY = rect !== null ? rect.bottom + 4 : 120
-        const x = Math.max(8, Math.min(viewportWidth - width - 8, anchorX))
-        const y = Math.max(8, Math.min(viewportHeight - height - 8, anchorY))
-        setState({ rowMenu: { id: skill.id, x: x, y: y } })
-    }
+    /* ------------------------------------------------------------------ *
+     * Category tabs (contract §7.2, interaction spec §4.1).               *
+     * ------------------------------------------------------------------ */
 
-    function closeRowMenu() {
-        if (appState.rowMenu !== null) setState({ rowMenu: null })
-    }
-
-    function menuButton(label, onClick, options) {
-        const opts = options !== null && typeof options === 'object' ? options : {}
-        return h('button', {
-            type: 'button',
-            role: 'menuitem',
-            className: cx('sm-menu-item', opts.danger === true && 'sm-menu-item-danger'),
-            disabled: opts.disabled === true,
-            'data-tip': opts.disabled === true ? t('badge.readonlyTip') : undefined,
-            onClick: onClick,
-        },
-        opts.iconName ? icon(opts.iconName, 15) : null,
-        h('span', null, label))
-    }
-
-    function renderRowMenu() {
-        const menu = appState.rowMenu
-        if (menu === null || typeof menu !== 'object') return null
-        const skill = findInstalledSkill(menu.id)
-        if (skill === null) return null
-        const disabled = skill.status === 'disabled'
-        const readonly = skill.writable === false
-        const isMarket = skill.market !== null && typeof skill.market === 'object' && typeof skill.market.sourceId === 'string'
-        const run = function (action) {
-            return function (event) {
-                if (event !== null && event !== undefined && typeof event.stopPropagation === 'function') event.stopPropagation()
-                closeRowMenu()
-                if (typeof action === 'function') action()
-            }
-        }
-        return h(Fragment, null,
+    function renderCategoryTabs() {
+        const categories = skillsAvailableCategories()
+        const selected = skillsEffectiveCategory()
+        const loading = isLoading('installed') === true && skillsList().length === 0
+        return h('div', { className: 'sm-subtabs-row' },
             h('div', {
-                className: 'sm-menu-backdrop',
-                style: { position: 'fixed', inset: 0 },
-                onClick: run(null),
-                onContextMenu: function (event) {
-                    event.preventDefault()
-                    closeRowMenu()
-                },
-            }),
-            h('div', {
-                className: 'sm-menu',
-                role: 'menu',
-                style: { position: 'fixed', left: menu.x + 'px', top: menu.y + 'px' },
+                className: 'sm-subtabs',
+                role: 'tablist',
+                'aria-label': t('tab.skills.label'),
+                onKeyDown: skillsOnCategoryKeyDown,
             },
-            menuButton(t('action.viewDetails'), run(function () {
-                rememberListScroll()
-                setState({ view: 'detail', detail: { kind: 'installed', id: skill.id } })
-            }), { iconName: 'file' }),
-            menuButton(t('action.editContent'), run(function () {
-                rememberListScroll()
-                setState({ view: 'detail', detail: { kind: 'installed', id: skill.id, edit: true } })
-            }), { iconName: 'edit', disabled: readonly }),
-            skill.path ? menuButton(t('action.openFolder'), run(function () { openFolder(skill.path) }), { iconName: 'folder' }) : null,
-            skill.path ? menuButton(t('action.copyPath'), run(function () { copyPath(skill.path) }), { iconName: 'copy' }) : null,
-            h('div', { className: 'sm-menu-sep' }),
-            menuButton(disabled ? t('action.enable') : t('action.disable'), run(function () {
-                void toggleSkillEnabled(skill, disabled)
-            }), { iconName: 'power', disabled: readonly }),
-            menuButton(isMarket ? t('action.uninstall') : t('action.delete'), run(function () {
-                if (typeof openModal === 'function') openModal(isMarket ? 'uninstall' : 'delete', { skill: skill, id: skill.id, name: skill.name })
-            }), { iconName: 'trash', danger: true, disabled: readonly })))
-    }
-
-    function renderInstalledSkeleton() {
-        const rows = [0, 1, 2, 3, 4, 5].map(function (index) {
-            return h('div', { key: 'skeleton-row-' + String(index), className: 'sm-skeleton-row' },
-                h('div', { className: 'sm-skeleton sm-skeleton-icon' }),
-                h('div', { className: 'sm-skeleton-lines' },
-                    h('div', { className: 'sm-skeleton sm-skeleton-line sm-skeleton-line-lg' }),
-                    h('div', { className: 'sm-skeleton sm-skeleton-line' })))
-        })
-        return h('div', { className: 'sm-installed sm-installed-loading', 'aria-busy': 'true', 'aria-label': t('state.loading') },
-            h('div', { className: 'sm-skeleton sm-skeleton-banner' }),
-            h('div', { className: 'sm-skeleton-filters' },
-                h('div', { className: 'sm-skeleton sm-skeleton-chip' }),
-                h('div', { className: 'sm-skeleton sm-skeleton-chip' }),
-                h('div', { className: 'sm-skeleton sm-skeleton-chip' }),
-                h('div', { className: 'sm-skeleton sm-skeleton-chip' })),
-            h('div', { className: 'sm-skeleton-rows' }, rows),
-            h('div', { className: 'sm-sr-only' }, t('state.loadingInstalled')))
-    }
-
-    function renderInstalledError(error) {
-        const unauthorized = error !== null && typeof error === 'object' && error.code === 'E_UNAUTHORIZED'
-        return h('div', { className: 'sm-empty sm-empty-error', 'aria-label': t('state.error') },
-            h('div', { className: 'sm-empty-icon' }, icon('alert', 40)),
-            h('div', { className: 'sm-empty-title' }, unauthorized ? t('state.unauthorized') : t('error.loadInstalled')),
-            h('div', { className: 'sm-empty-body' }, error !== null && typeof error === 'object' && error.message ? error.message : t('error.retryHint')),
-            h('div', { className: 'sm-empty-actions' },
-                h('button', {
+            categories.map(function (key) {
+                const active = key === selected
+                const count = skillsCategoryTotal(key)
+                return h('button', {
+                    key: key,
                     type: 'button',
-                    className: 'sm-btn sm-btn-primary',
-                    onClick: function () { void loadInstalled(true) },
-                }, t('action.retry'))))
-    }
-
-    function renderInstalledBanners(data, updates, issues) {
-        const banners = []
-        const updateState = updates !== null && typeof updates === 'object' ? updates : {}
-        const updateItems = Array.isArray(updateState.updates) ? updateState.updates : []
-        const updateErrors = Array.isArray(updateState.errors) ? updateState.errors : []
-
-        if (updateState.checking === true) {
-            banners.push(h('div', { key: 'banner-checking', className: 'sm-banner sm-banner-update', 'aria-label': t('state.loadingUpdates'), title: t('update.checking') },
-                h('div', { className: 'sm-banner-main' },
-                    icon('clock', 16),
-                    h('span', null, t('banner.checking')))))
-        } else if (updateErrors.length > 0) {
-            banners.push(h('div', { key: 'banner-update-error', className: 'sm-banner sm-banner-warn' },
-                h('div', { className: 'sm-banner-main' },
-                    icon('alert', 16),
-                    h('span', null, t('update.failed'))),
-                h('button', {
-                    type: 'button',
-                    className: 'sm-btn sm-btn-ghost sm-btn-sm',
-                    onClick: function () { void checkUpdates(true) },
-                }, t('action.retry'))))
-        } else if (updateItems.length > 0) {
-            const list = updateItems.map(function (item, index) {
-                const name = item !== null && typeof item === 'object' && item.name ? String(item.name) : ''
-                const current = item !== null && typeof item === 'object' ? versionLabel(item.current) : ''
-                const available = item !== null && typeof item === 'object' ? versionLabel(item.available) : ''
-                return h('code', {
-                    key: 'update-' + String(index) + '-' + name,
-                    className: 'sm-mono sm-banner-code',
-                    title: item !== null && typeof item === 'object' && item.localModified === true ? t('update.localModified') : undefined,
-                }, t('update.item', { name: name, current: current, available: available }))
-            })
-            banners.push(h('div', { key: 'banner-updates', className: 'sm-banner sm-banner-update' },
-                h('div', { className: 'sm-banner-main' },
-                    icon('arrow-up', 16),
-                    h('span', { className: 'sm-banner-title', 'data-tip': t('update.count', { count: updateItems.length }) }, t('update.banner', { count: updateItems.length })),
-                    h('span', { className: 'sm-banner-items' }, list)),
-                h('button', {
-                    type: 'button',
-                    className: 'sm-btn sm-btn-ghost sm-btn-sm',
-                    onClick: function () { void checkUpdates(true) },
-                }, t('action.checkUpdates'))))
-        } else if (updateState.checkedAt) {
-            banners.push(h('div', { key: 'banner-uptodate', className: 'sm-banner sm-banner-quiet' },
-                h('div', { className: 'sm-banner-main' },
-                    icon('check', 16),
-                    h('span', null, t('banner.upToDate') + ' · ' + t('update.lastChecked', { time: fmtTime(updateState.checkedAt) })))))
-        }
-
-        const issueList = issues.filter(function (issue) {
-            return issue !== null && typeof issue === 'object' && (issue.severity === 'error' || issue.severity === 'warning')
-        })
-        if (issueList.length > 0) {
-            const errors = issueList.filter(function (issue) { return issue.severity === 'error' }).length
-            const warnings = issueList.length - errors
-            const summary = t('diag.issuesCount', { errors: errors, warnings: warnings })
-            const summaryTip = t('diag.error') + ': ' + String(errors) + ' · ' + t('diag.warning') + ': ' + String(warnings)
-            banners.push(h('div', { key: 'banner-issues', className: 'sm-banner sm-banner-warn' },
-                h('div', { className: 'sm-banner-main' },
-                    icon('alert', 16),
-                    h('span', null, t('banner.issues', { count: issueList.length })),
-                    h('span', { className: 'sm-banner-meta', 'data-tip': summaryTip }, summary)),
-                h('button', {
-                    type: 'button',
-                    className: 'sm-btn sm-btn-ghost sm-btn-sm',
-                    'aria-label': t('diag.open'),
-                    'data-tip': t('diag.viewReasons'),
-                    title: t('diag.title'),
-                    onClick: function () {
-                        if (typeof openDiagnosticsDrawer === 'function') openDiagnosticsDrawer()
-                        else toast(t('diag.none'))
-                    },
-                }, t('banner.viewIssues') + ' →')))
-        }
-
-        const locations = data !== null && typeof data === 'object' && Array.isArray(data.locations) ? data.locations : []
-        locations.forEach(function (location) {
-            if (location === null || typeof location !== 'object' || location.readable !== false) return
-            banners.push(h('div', { key: 'banner-location-' + String(location.id), className: 'sm-banner sm-banner-error', 'aria-label': t('error.readLocation', { path: String(location.path || '') }) },
-                h('div', { className: 'sm-banner-main' },
-                    icon('alert', 16),
-                    h('span', null, t('banner.unreadable', { path: String(location.path || '') }))),
-                h('button', {
-                    type: 'button',
-                    className: 'sm-btn sm-btn-ghost sm-btn-sm',
-                    onClick: function () { void loadInstalled(true) },
-                }, t('action.retry'))))
-        })
-
-        if (appState.error !== null && typeof appState.error === 'object' && appState.error.scope === 'installed') {
-            banners.push(h('div', { key: 'banner-load-error', className: 'sm-banner sm-banner-error' },
-                h('div', { className: 'sm-banner-main' },
-                    icon('alert', 16),
-                    h('span', null, appState.error.message || t('error.loadInstalled'))),
-                h('button', {
-                    type: 'button',
-                    className: 'sm-btn sm-btn-ghost sm-btn-sm',
-                    onClick: function () { void loadInstalled(true) },
-                }, t('action.retry'))))
-        }
-
-        return banners.length > 0 ? h('div', { className: 'sm-banners' }, banners) : null
-    }
-
-    function renderInstalledFilters() {
-        const chips = [
-            { key: 'all', label: t('filter.all') },
-            { key: 'project', label: t('filter.project') },
-            { key: 'projectShared', label: t('filter.projectShared') },
-            { key: 'custom', label: t('filter.custom') },
-            { key: 'user', label: t('filter.user') },
-            { key: 'userShared', label: t('filter.userShared') },
-            { key: 'builtin', label: t('filter.builtin') },
-            { key: 'disabled', label: t('filter.disabled') },
-        ]
-        return h('div', { className: 'sm-filter-row' },
-            h('div', { className: 'sm-chips', role: 'radiogroup', 'aria-label': t('filter.label') },
-                chips.map(function (chip) {
-                    const active = appState.filter === chip.key
-                    return h('button', {
-                        key: chip.key,
-                        type: 'button',
-                        role: 'radio',
-                        'aria-checked': active,
-                        className: cx('sm-chip', active && 'sm-chip-active'),
-                        onClick: function () { selectInstalledFilter(chip.key) },
-                    }, chip.label)
-                })),
-            h('label', { className: 'sm-sort' },
-                h('span', { className: 'sm-sort-label' }, t('sort.label')),
-                h('select', {
-                    className: 'sm-select',
-                    value: appState.sort,
-                    'aria-label': t('sort.label'),
-                    onChange: function (event) { setInstalledSort(event.target.value) },
+                    role: 'tab',
+                    className: 'sm-subtab',
+                    'aria-selected': active,
+                    tabIndex: active ? 0 : -1,
+                    'data-category': key,
+                    disabled: loading,
+                    onClick: function () { skillsSelectCategory(key) },
                 },
-                h('option', { value: 'location' }, t('sort.location')),
-                h('option', { value: 'name' }, t('sort.name')),
-                h('option', { value: 'modified' }, t('sort.modified')))))
+                h('span', null, t(SKILL_CATEGORY_LABEL[key])),
+                h('span', { className: 'sm-count-badge sm-subtab-count', 'aria-label': t('group.count', { count: count }) }, String(count)))
+            })))
     }
 
-    function renderLocationGroup(location, meta, items) {
-        const writable = location.writable !== false && (meta === null || meta.writable !== false)
-        const exists = location.exists !== false
-        const rank = typeof location.rank === 'number' ? location.rank : meta !== null ? meta.rank : 0
-        const path = typeof location.path === 'string' ? location.path : ''
-        const canOpen = exists && path !== '' && location.absPath !== ''
+    /* ------------------------------------------------------------------ *
+     * Group rendering (contract §3.3 / §7.3, interaction spec §4.10).      *
+     * ------------------------------------------------------------------ */
+
+    function skillsGroupTitleId(group) {
+        return 'sm-group-' + String(group.key).replace(/[^A-Za-z0-9_-]/g, '-')
+    }
+
+    function renderSkillGroup(group) {
+        const source = group.sourceId !== null ? skillsFindSource(group.sourceId) : null
+        const sourceDisabled = group.kind === 'source' && source !== null && typeof source === 'object' && source.enabled === false
+        const titleId = skillsGroupTitleId(group)
         return h('section', {
-            key: location.id,
+            key: group.key,
             className: 'sm-group',
-            'aria-label': locationLabel(location),
+            role: 'group',
+            'aria-labelledby': titleId,
         },
         h('div', { className: 'sm-group-head' },
             h('div', { className: 'sm-group-head-left' },
-                h('span', { className: 'sm-group-title' }, locationLabel(location)),
-                path !== '' ? h('span', { className: 'sm-group-path sm-mono', title: path }, path) : null,
-                h('span', { className: 'sm-badge sm-mono' }, t('loc.rank', { rank: rank })),
-                h('span', { className: 'sm-group-count' }, t('loc.groupCount', { count: items.length }))),
-            h('div', { className: 'sm-group-head-right' },
-                writable !== true
-                    ? h('span', { className: 'sm-badge', 'data-tip': t('badge.readonlyTip') }, t('badge.readonly'))
-                    : null,
-                canOpen
-                    ? h('button', {
-                        type: 'button',
-                        className: 'sm-btn sm-btn-ghost sm-btn-sm',
-                        onClick: function (event) {
-                            if (event !== null && event !== undefined && typeof event.stopPropagation === 'function') event.stopPropagation()
-                            openFolder(path)
-                        },
-                    }, t('action.openFolder'))
-                    : null)),
-        h('div', { className: 'sm-rows', role: 'list' }, items.map(function (skill) {
-            return renderInstalledSkillRow(skill, location)
-        })))
+                h('span', { className: 'sm-group-title', id: titleId }, group.label),
+                sourceDisabled ? h('span', { className: 'sm-badge sm-badge-idle' }, t('source.disabled')) : null,
+                h('span', { className: 'sm-group-count' }, t('group.count', { count: group.count })))),
+        h('div', { className: 'sm-card-grid' }, group.skills.map(renderSkillCard)))
     }
 
-    function renderInstalledSkillRow(skill, location) {
+    function renderSkillGroups() {
+        const category = skillsEffectiveCategory()
+        const items = skillsInCategory(category)
+        /* System built-ins all come from the Harness: flat grid, no source groups. */
+        if (category === 'system') {
+            return h('div', { className: 'sm-card-grid' }, items.map(renderSkillCard))
+        }
+        const groups = groupSkills(items, skillsSourceOrder())
+        return h('div', { className: 'sm-groups sm-skill-groups' }, groups.map(renderSkillGroup))
+    }
+
+    /* ------------------------------------------------------------------ *
+     * Card (contract §7.3, interaction spec §4.2).                        *
+     * ------------------------------------------------------------------ */
+
+    function renderSkillCard(skill) {
         const disabled = skill.status === 'disabled'
+        const broken = skill.status === 'broken' || skill.status === 'invalid'
         const readonly = skill.writable === false
-        const busy = appState.busySkillId === skill.id
         const updateVersion = skillUpdateVersion(skill)
-        const version = skill.market !== null && typeof skill.market === 'object' && skill.market.version
-            ? versionLabel(skill.market.version)
-            : ''
-        const tags = []
-        if (updateVersion) {
-            tags.push(renderUpgradeBadge(updateVersion, {
-                key: 'upgrade',
+        const description = typeof skill.description === 'string' ? skill.description : ''
+        const badges = []
+        /* Upgrade badge sits first in the tag bar (interaction spec §4.2). */
+        if (updateVersion !== '') {
+            badges.push(renderUpgradeBadge(updateVersion, { key: 'update' }))
+        }
+        if (broken) {
+            badges.push(h('span', {
+                key: 'issue',
+                className: 'sm-badge sm-badge-warn',
+                'data-tip': typeof skill.brokenReason === 'string' && skill.brokenReason !== '' ? skill.brokenReason : t('badge.issue'),
+            }, t('badge.issue')))
+        }
+        if (disabled) {
+            badges.push(h('span', { key: 'disabled', className: 'sm-badge sm-badge-idle' }, t('badge.disabled')))
+        }
+        /* The skills page lists installed skills: no install / installed action.
+         * Only an available update offers a primary button, and read-only or
+         * disabled cards never show a write action. */
+        const primary = updateVersion !== '' && !disabled && !readonly
+            ? h('button', {
+                key: 'update',
+                type: 'button',
+                className: 'sm-btn sm-btn-primary sm-btn-sm',
                 onClick: function (event) {
                     event.stopPropagation()
                     if (typeof openModal === 'function') openModal('update', { skill: skill, id: skill.id })
                 },
-            }))
-        }
-        tags.push(badge(locationLabel(location !== null && location !== undefined ? location : skill.location), null, skill.location, 'loc'))
-        if (skill.invocation !== null && typeof skill.invocation === 'object' && skill.invocation.modelInvocable === true) {
-            tags.push(badge(t('badge.model'), null, t('badge.modelTip'), 'model'))
-        }
-        if (skill.invocation !== null && typeof skill.invocation === 'object' && skill.invocation.userInvocable === true) {
-            tags.push(badge(t('badge.user'), null, t('badge.userTip'), 'user'))
-        }
-        if (readonly) tags.push(badge(t('badge.builtin'), null, t('badge.readonlyTip'), 'builtin'))
-        if (skill.status === 'shadowed') {
-            tags.push(badge(t('badge.shadowed'), 'warn', t('badge.shadowedTip', { path: skill.shadowedBy || '' }), 'shadowed'))
-        }
-        if (disabled) tags.push(badge(t('badge.disabled'), null, t('state.disabled'), 'disabled'))
-        if (skill.status === 'invalid') tags.push(badge(t('badge.invalid'), 'error', t('state.invalid'), 'invalid'))
-        const visibleTags = tags.slice(0, 4)
-        const openDetail = function () {
-            if (busy) return
-            rememberListScroll()
-            setState({ view: 'detail', detail: { kind: 'installed', id: skill.id } })
-        }
+            }, t('action.update'))
+            : null
         return h('div', {
             key: skill.id,
-            className: cx('sm-row', 'sm-skill-row', disabled && 'sm-row-disabled', appState.highlightId === skill.id && 'sm-row-highlight'),
+            className: cx('sm-card-item', disabled && 'is-disabled'),
+            role: 'button',
             tabIndex: 0,
-            role: 'listitem',
             'data-skill-id': skill.id,
-            onClick: openDetail,
+            onClick: function () { skillsOpenDetail(skill) },
             onKeyDown: function (event) {
                 if (event.key === 'Enter' || event.key === ' ') {
                     event.preventDefault()
-                    openDetail()
+                    skillsOpenDetail(skill)
                 }
             },
         },
-        h('div', { className: 'sm-row-main' },
-            renderSkillIconBox(skill),
-            h('div', { className: 'sm-row-text' },
-                h('div', { className: 'sm-row-title' },
-                    h('span', { className: cx('sm-row-name', 'sm-mono', disabled && 'sm-row-name-disabled') }, String(skill.name || '')),
-                    version !== '' ? h('span', { className: 'sm-row-version sm-mono' }, version) : null,
-                    h('div', { className: 'sm-row-badges' }, visibleTags)),
-                h('div', { className: 'sm-row-desc' }, typeof skill.description === 'string' && skill.description !== ''
-                    ? skill.description
-                    : t('state.emptyDescription')))),
-        h('div', { className: 'sm-row-tail', onClick: function (event) { event.stopPropagation() } },
-            readonly
-                ? h('span', { className: 'sm-row-builtin', 'data-tip': t('status.readonly') }, t('badge.builtin'))
-                : h('button', {
-                    type: 'button',
-                    className: cx('sm-switch', disabled && 'sm-switch-off'),
-                    role: 'switch',
-                    'aria-checked': disabled ? 'false' : 'true',
-                    'aria-label': disabled ? t('action.enableSkill') : t('action.disableSkill'),
-                    'data-tip': disabled ? t('action.enableSkill') : t('action.disableSkill'),
-                    disabled: busy,
-                    onClick: function (event) {
-                        event.stopPropagation()
-                        void toggleSkillEnabled(skill, disabled)
-                    },
-                }, h('span', { className: 'sm-switch-thumb' })),
-            h('button', {
-                type: 'button',
-                className: 'sm-icon-btn sm-row-more',
-                'aria-label': t('action.more'),
-                'data-tip': t('action.more'),
-                onClick: function (event) { openRowMenu(event, skill) },
-            }, icon('more', 16))))
-    }
-
-    function renderDisabledGroup(items) {
-        const expanded = appState.filter === 'disabled' || appState.disabledExpanded === true
-        const canToggle = appState.filter !== 'disabled'
-        return h('section', { key: 'disabled-group', className: 'sm-group sm-group-disabled' },
+        renderSkillIconBox(skill),
+        h('div', { className: 'sm-card-main' },
+            h('div', { className: 'sm-card-title-row' },
+                h('span', { className: 'sm-card-name sm-mono', title: String(skill.name || '') }, String(skill.name || '')),
+                badges.length > 0 ? h('span', { className: 'sm-tagbar' }, badges) : null),
             h('div', {
-                className: cx('sm-group-head', canToggle && 'sm-group-head-toggle'),
-                role: canToggle ? 'button' : undefined,
-                tabIndex: canToggle ? 0 : undefined,
-                'aria-expanded': expanded,
-                onClick: canToggle ? toggleDisabledGroup : undefined,
-                onKeyDown: canToggle
-                    ? function (event) {
-                        if (event.key === 'Enter' || event.key === ' ') {
-                            event.preventDefault()
-                            toggleDisabledGroup()
-                        }
-                    }
-                    : undefined,
-            },
-            h('div', { className: 'sm-group-head-left' },
-                icon(expanded ? 'chevron-down' : 'chevron-right', 14),
-                h('span', { className: 'sm-group-title' }, t('loc.disabledGroup')),
-                h('span', { className: 'sm-group-path sm-mono' }, t('loc.disabledPath')),
-                h('span', { className: 'sm-badge' }, t('loc.groupCount', { count: items.length }))),
-            canToggle
-                ? h('button', {
-                    type: 'button',
-                    className: 'sm-btn sm-btn-ghost sm-btn-sm',
-                    onClick: function (event) {
-                        event.stopPropagation()
-                        toggleDisabledGroup()
-                    },
-                }, expanded ? t('action.collapse') : t('action.expand'))
-                : null),
-            expanded
-                ? h('div', { className: 'sm-rows', role: 'list' }, items.map(function (skill) {
-                    return renderInstalledSkillRow(skill, locationById(skill.location))
-                }))
-                : null)
+                className: 'sm-card-desc',
+                'data-tip': description !== '' ? description : undefined,
+            }, description)),
+        h('div', {
+            className: 'sm-card-tail',
+            onClick: function (event) { event.stopPropagation() },
+        },
+        h('button', {
+            type: 'button',
+            className: 'sm-icon-btn plain sm-card-more',
+            'aria-label': t('action.more'),
+            'data-tip': t('action.more'),
+            onClick: function (event) { skillsOpenMenu(event, skill) },
+        }, icon('more', 16)),
+        primary))
     }
 
-    function renderInstalledEmpty(kind, query) {
-        if (kind === 'search') {
-            return h('div', { className: 'sm-empty' },
-                h('div', { className: 'sm-empty-icon' }, icon('search', 40)),
-                h('div', { className: 'sm-empty-title' }, t('empty.search', { query: query })),
-                h('div', { className: 'sm-empty-actions' },
-                    h('button', {
-                        type: 'button',
-                        className: 'sm-btn sm-btn-secondary',
-                        onClick: clearInstalledSearch,
-                    }, t('action.clearSearch'))))
-        }
-        if (kind === 'filter') {
-            return h('div', { className: 'sm-empty' },
-                h('div', { className: 'sm-empty-icon' }, icon('folder', 40)),
-                h('div', { className: 'sm-empty-title' }, t('empty.filter')),
-                h('div', { className: 'sm-empty-actions' },
-                    h('button', {
-                        type: 'button',
-                        className: 'sm-btn sm-btn-secondary',
-                        onClick: function () { setState({ filter: 'all' }) },
-                    }, t('action.clearFilter'))))
+    /* ------------------------------------------------------------------ *
+     * Empty / loading / error states (interaction spec SL-04 ~ SL-06).    *
+     * ------------------------------------------------------------------ */
+
+    function renderSkillSearchEmpty() {
+        const query = String(appState.search === undefined || appState.search === null ? '' : appState.search).trim()
+        return h('div', { className: 'sm-empty' },
+            h('div', { className: 'sm-empty-icon' }, icon('search', 40)),
+            h('div', { className: 'sm-empty-title' }, t('empty.search', { query: query })),
+            h('div', { className: 'sm-empty-body' }, t('empty.search.body')),
+            h('div', { className: 'sm-empty-actions' },
+                h('button', {
+                    type: 'button',
+                    className: 'sm-btn sm-btn-secondary',
+                    onClick: function () { setState({ search: '' }) },
+                }, t('search.clear'))))
+    }
+
+    function renderSkillCategoryEmpty(category) {
+        const key = SKILL_CATEGORY_EMPTY[category] !== undefined ? SKILL_CATEGORY_EMPTY[category] : SKILL_CATEGORY_EMPTY.mine
+        const actions = [
+            h('button', {
+                key: 'market',
+                type: 'button',
+                className: category === 'system' ? 'sm-btn sm-btn-secondary' : 'sm-btn sm-btn-primary',
+                onClick: skillsGoMarket,
+            }, t('action.goMarket')),
+        ]
+        /* Built-in skills cannot be created, so that category has one exit. */
+        if (category !== 'system') {
+            actions.push(h('button', {
+                key: 'new',
+                type: 'button',
+                className: 'sm-btn sm-btn-secondary',
+                onClick: function () {
+                    if (typeof openModal === 'function') openModal('new-skill', {})
+                },
+            }, t('action.newSkill')))
         }
         return h('div', { className: 'sm-empty sm-empty-installed' },
-            h('div', { className: 'sm-empty-icon' }, icon('skill', 48)),
-            h('div', { className: 'sm-empty-title' }, t('empty.installed.title')),
-            h('div', { className: 'sm-empty-body' }, t('empty.installed.body')),
+            h('div', { className: 'sm-empty-icon' }, icon(SKILL_CATEGORY_ICON[category] || 'skill', 48)),
+            h('div', { className: 'sm-empty-title' }, t(key)),
+            h('div', { className: 'sm-empty-actions' }, actions))
+    }
+
+    function renderSkillSkeleton() {
+        const cards = [0, 1, 2, 3, 4, 5].map(function (index) {
+            return h('div', { key: 'skeleton-' + String(index), className: 'sm-card-item', 'aria-hidden': 'true' },
+                h('div', { className: 'sm-skeleton sm-skeleton-icon' }),
+                h('div', { className: 'sm-card-main' },
+                    h('div', { className: 'sm-skeleton sm-skeleton-line sm-skeleton-line-lg' }),
+                    h('div', { className: 'sm-skeleton sm-skeleton-line' })))
+        })
+        const headStyle = { height: '22px', width: '160px' }
+        return h('div', { className: 'sm-installed sm-installed-loading', 'aria-busy': 'true', 'aria-label': t('state.loading') },
+            h('div', { className: 'sm-skeleton', style: headStyle }),
+            h('div', { className: 'sm-card-grid' }, cards.slice(0, 3)),
+            h('div', { className: 'sm-skeleton', style: { height: '22px', width: '160px', marginTop: '20px' } }),
+            h('div', { className: 'sm-card-grid' }, cards.slice(3, 6)),
+            h('div', { className: 'sm-sr-only' }, t('state.loading')))
+    }
+
+    function renderSkillError(error) {
+        const code = error !== null && typeof error === 'object' && error.code ? String(error.code) : ''
+        const unauthorized = code === 'E_UNAUTHORIZED'
+        const service = code.indexOf('SERVICE') !== -1 || code === 'E_NOT_LOADED'
+        const title = unauthorized
+            ? t('error.unauthorized')
+            : service
+                ? t('error.service')
+                : t('state.error.skills.title')
+        const body = service
+            ? t('error.service.body')
+            : unauthorized
+                ? t('state.error.skills.body')
+                : error !== null && typeof error === 'object' && error.message
+                    ? String(error.message)
+                    : t('state.error.skills.body')
+        return h('div', { className: 'sm-empty sm-empty-error', 'aria-label': title },
+            h('div', { className: 'sm-empty-icon' }, icon('alert', 40)),
+            h('div', { className: 'sm-empty-title' }, title),
+            h('div', { className: 'sm-empty-body' }, body),
             h('div', { className: 'sm-empty-actions' },
                 h('button', {
                     type: 'button',
                     className: 'sm-btn sm-btn-primary',
-                    onClick: function () { switchTab('market') },
-                }, t('empty.marketAction')),
-                h('button', {
-                    type: 'button',
-                    className: 'sm-btn sm-btn-secondary',
-                    onClick: function () { if (typeof openModal === 'function') openModal('new', {}) },
-                }, t('empty.newAction')),
-                h('button', {
-                    type: 'button',
-                    className: 'sm-btn sm-btn-secondary',
-                    onClick: function () { if (typeof openModal === 'function') openModal('import', {}) },
-                }, t('empty.importAction'))))
+                    onClick: function () { void loadInstalled(true) },
+                }, t('action.retry'))))
     }
 
-    function renderInstalledTab() {
-        const data = appState.installed
-        if (data === null || typeof data !== 'object') {
-            if (appState.error !== null && typeof appState.error === 'object' && appState.error.scope === 'installed' && appState.loadingInstalled !== true) {
-                return renderInstalledError(appState.error)
-            }
-            return renderInstalledSkeleton()
+    /* ------------------------------------------------------------------ *
+     * Page content. The shell (00-prelude.js) renders the page header,     *
+     * primary tabs and category tabs, then calls renderSkillsTab() for    *
+     * the scrollable content.                                             *
+     * ------------------------------------------------------------------ */
+
+    function renderSkillsTab() {
+        const skills = skillsList()
+        if (isLoading('installed') === true && skills.length === 0) {
+            return renderSkillSkeleton()
+        }
+        if (skills.length === 0
+            && appState.error !== null && typeof appState.error === 'object'
+            && appState.error.scope === 'installed') {
+            return renderSkillError(appState.error)
         }
 
-        const locations = Array.isArray(data.locations) ? data.locations : []
-        const skills = Array.isArray(data.skills) ? data.skills : []
-        const issues = Array.isArray(data.issues) ? data.issues : []
-        const updates = appState.updates !== null && typeof appState.updates === 'object' ? appState.updates : data.updates
-        const query = String(appState.search || '').trim().toLowerCase()
-        const filter = appState.filter
-        const matchesQuery = function (skill) { return skillMatchesQuery(skill, query) }
-
-        const activeSkills = skills.filter(function (skill) {
-            return skill !== null && typeof skill === 'object'
-                && skill.status !== 'disabled'
-                && matchesQuery(skill)
-                && installedFilterMatches(skill, filter === 'disabled' ? 'all' : filter)
-        })
-        const disabledSkills = skills.filter(function (skill) {
-            return skill !== null && typeof skill === 'object' && skill.status === 'disabled' && matchesQuery(skill)
-        })
-        const visibleActive = filter === 'disabled' ? [] : activeSkills
-        const showDisabled = filter === 'all' || filter === 'disabled'
-        const visibleDisabled = showDisabled ? disabledSkills : []
-        const sortedActive = sortInstalledSkills(visibleActive, appState.sort)
-
-        const groups = []
-        if (filter !== 'disabled') {
-            LOCATION_ORDER.forEach(function (meta) {
-                const items = sortedActive.filter(function (skill) { return skill.location === meta.id })
-                if (items.length === 0) return
-                const found = locations.find(function (location) {
-                    return location !== null && typeof location === 'object' && location.id === meta.id
-                })
-                const location = found !== undefined
-                    ? found
-                    : Object.assign({}, meta, {
-                        path: '',
-                        absPath: '',
-                        exists: true,
-                        readable: true,
-                        skillCount: items.length,
-                        disabledCount: 0,
-                        presets: [],
-                    })
-                groups.push(renderLocationGroup(location, meta, items))
-            })
-        }
-        if (showDisabled && visibleDisabled.length > 0) {
-            groups.push(renderDisabledGroup(sortInstalledSkills(visibleDisabled, appState.sort)))
+        const query = skillsQuery()
+        if (query !== '' && skillsMatched().length === 0) {
+            return h('div', { className: 'sm-installed' },
+                renderSkillSearchEmpty(),
+                renderSkillMenu())
         }
 
-        let content = null
-        if (skills.length === 0) {
-            content = renderInstalledEmpty('installed', '')
-        } else if (query !== '' && visibleActive.length === 0 && visibleDisabled.length === 0) {
-            content = renderInstalledEmpty('search', appState.search)
-        } else if (groups.length === 0) {
-            content = renderInstalledEmpty('filter', '')
-        } else {
-            content = h('div', { className: 'sm-groups' }, groups)
+        const category = skillsEffectiveCategory()
+        if (skillsInCategory(category, query).length === 0) {
+            return h('div', { className: 'sm-installed' },
+                renderSkillCategoryEmpty(category),
+                renderSkillMenu())
         }
 
         return h('div', { className: 'sm-installed' },
-            renderInstalledBanners(data, updates, issues),
-            renderInstalledFilters(),
-            content,
-            renderRowMenu())
+            renderSkillGroups(),
+            renderSkillMenu())
     }

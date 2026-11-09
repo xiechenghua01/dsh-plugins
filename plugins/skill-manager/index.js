@@ -13,6 +13,7 @@
  *
  * Only `node:` builtins and relative modules are imported.
  */
+import { Buffer } from 'node:buffer'
 import { realpath } from 'node:fs/promises'
 import { basename, dirname, join, resolve } from 'node:path'
 
@@ -30,7 +31,7 @@ import {
 import { MarketIndexError, validateIndex } from './lib/market-index.mjs'
 import { createIndexFetcher } from './lib/fetch-index.mjs'
 import { compareVersions, satisfiesRange } from './lib/compat.mjs'
-import { defaultVersionOf as defaultMarketVersion, searchIndex } from './lib/search.mjs'
+import { defaultVersionOf as defaultMarketVersion, searchBySource } from './lib/search.mjs'
 import { createState } from './lib/state.mjs'
 import { createInstaller } from './lib/install.mjs'
 import { createWriter } from './lib/write.mjs'
@@ -56,7 +57,28 @@ const DEFAULTS = {
   home: '',
 }
 
-const MARKET_SORTS = new Set(['relevance', 'index', 'published', 'name'])
+const SKILL_CATEGORIES = ['mine', 'shared', 'project', 'system']
+
+/**
+ * Client-facing market sort names (`recommend` / `updated` / `name`) map onto the index
+ * sort keys understood by `search.mjs`.
+ */
+function normalizeMarketSort(value) {
+  switch (typeof value === 'string' ? value : '') {
+    case 'recommend':
+    case 'relevance':
+      return 'relevance'
+    case 'updated':
+    case 'published':
+      return 'published'
+    case 'name':
+      return 'name'
+    case 'index':
+      return 'index'
+    default:
+      return 'relevance'
+  }
+}
 
 // ---------------------------------------------------------------------------
 // Small helpers
@@ -275,16 +297,6 @@ function indexOfResult(result) {
   return result
 }
 
-function fetchedAtOf(result) {
-  const value = result?.fetchedAt ?? result?.index?.fetchedAt
-  if (typeof value === 'number' && Number.isFinite(value)) return Math.trunc(value)
-  if (typeof value === 'string' && value !== '') {
-    const parsed = Date.parse(value)
-    if (Number.isFinite(parsed)) return Math.floor(parsed / 1000)
-  }
-  return 0
-}
-
 function warningsOf(result) {
   return Array.isArray(result?.warnings) ? result.warnings.filter((entry) => typeof entry === 'string') : []
 }
@@ -381,38 +393,171 @@ function marketSkillView(entry, context) {
 }
 
 /**
- * `searchIndex` caps one page at 100; aggregation needs every match, so page
- * through the result set (bounded by the index's own 5000-skill ceiling).
+ * The market-list projection (contract §3.4 `MarketSkillView`). The richer
+ * `marketSkillView` above stays reserved for `GET /market/skill` details.
  */
-function searchEntries(index, query) {
-  const collected = []
-  let offset = 0
-  for (let guard = 0; guard < 60; guard += 1) {
-    const result = searchIndex(index, { ...query, offset, limit: 100 })
-    const page = Array.isArray(result)
-      ? result
-      : (isObject(result) && Array.isArray(result.skills)
-        ? result.skills
-        : (isObject(result) && Array.isArray(result.items) ? result.items : []))
-    collected.push(...page)
-    const total = isObject(result) && Number.isFinite(result.total) ? result.total : collected.length
-    if (page.length === 0 || collected.length >= total) break
-    offset += page.length
+function marketListView(entry, context) {
+  const version = defaultVersionOf(entry, context.dshVersion)
+  const metadata = isObject(entry?.metadata) ? entry.metadata : {}
+  const labels = Array.isArray(metadata.labels) ? metadata.labels.filter((label) => typeof label === 'string') : []
+  const tags = [...new Set([
+    ...(typeof metadata.category === 'string' && metadata.category !== '' ? [metadata.category] : []),
+    ...labels,
+  ])]
+  // Same-name skills from different sources are distinct: only match a record
+  // from this source. Legacy records without `sourceId` fall back to name.
+  const installed = Array.isArray(context.installed)
+    ? context.installed.find((record) => {
+        if (record?.name !== entry?.name) return false
+        const recordSourceId = typeof record?.sourceId === 'string' ? record.sourceId : ''
+        return recordSourceId === '' || recordSourceId === context.sourceId
+      })
+    : undefined
+  const update = Array.isArray(context.updates?.updates)
+    ? context.updates.updates.find((row) => (
+      row?.name === entry?.name && (installed === undefined || row?.location === installed.location)
+    ))
+    : undefined
+  const installedVersion = installed !== undefined && typeof installed.version === 'string' && installed.version !== ''
+    ? installed.version
+    : null
+  return {
+    sourceId: context.sourceId,
+    name: typeof entry?.name === 'string' ? entry.name : '',
+    version: typeof version?.version === 'string' ? version.version : '',
+    description: localized(entry?.description),
+    tags,
+    installed: installed !== undefined,
+    installedVersion,
+    updateAvailable: typeof update?.available === 'string' && update.available !== '' ? update.available : null,
   }
-  return collected
 }
 
-function sortMarketSkills(skills, sort) {
-  if (sort === 'name') {
-    skills.sort((left, right) => left.name.localeCompare(right.name))
-    return skills
+/**
+ * Resolve the `tag` query parameter against one index. A tag is a declared label or
+ * category; a source that declares neither contributes no rows (contract v1 §4).
+ * Returns `null` when the source must contribute nothing.
+ */
+function tagQueryFor(index, tag) {
+  if (tag === '' || tag === 'all') return {}
+  const categories = isObject(index?.metadata?.categories) ? index.metadata.categories : {}
+  const labels = isObject(index?.metadata?.labels) ? index.metadata.labels : {}
+  const tagIsCategory = Object.prototype.hasOwnProperty.call(categories, tag)
+  const tagIsLabel = Object.prototype.hasOwnProperty.call(labels, tag)
+  if (!tagIsCategory && !tagIsLabel) return null
+  return {
+    ...(tagIsLabel ? { labels: [tag] } : {}),
+    ...(tagIsCategory ? { category: tag } : {}),
   }
-  if (sort === 'published') {
-    skills.sort((left, right) => (
-      (right.publishTimestamp - left.publishTimestamp) || left.name.localeCompare(right.name)
-    ))
+}
+
+/**
+ * The market cursor is opaque to the client: a base64url JSON map of
+ * `sourceId -> next offset`, so every block pages independently.
+ */
+function encodeMarketCursor(offsets) {
+  const entries = Object.entries(offsets).filter(([, offset]) => (
+    Number.isFinite(offset) && Number(offset) > 0
+  ))
+  if (entries.length === 0) return null
+  const payload = { v: 1, o: Object.fromEntries(entries.map(([id, offset]) => [id, Math.trunc(offset)])) }
+  return Buffer.from(JSON.stringify(payload), 'utf8').toString('base64url')
+}
+
+function decodeMarketCursor(value) {
+  if (typeof value !== 'string' || value === '') return {}
+  try {
+    const parsed = JSON.parse(Buffer.from(value, 'base64url').toString('utf8'))
+    if (!isObject(parsed) || !isObject(parsed.o)) return {}
+    const offsets = {}
+    for (const [id, offset] of Object.entries(parsed.o)) {
+      const number = Number(offset)
+      if (Number.isFinite(number) && number >= 0) offsets[id] = Math.trunc(number)
+    }
+    return offsets
+  } catch {
+    return {}
   }
-  return skills
+}
+
+// ---------------------------------------------------------------------------
+// Installed view mapping (contract §3.1 / §3.2)
+// ---------------------------------------------------------------------------
+
+/** Category mapping is Host-owned; the scanner may already provide it. */
+function categoryForSkill(skill) {
+  if (typeof skill?.category === 'string' && SKILL_CATEGORIES.includes(skill.category)) return skill.category
+  const location = typeof skill?.location === 'string' ? skill.location : ''
+  const writable = skill?.writable === true
+  switch (location) {
+    case 'user-dsh':
+      return 'mine'
+    case 'custom':
+      return writable ? 'mine' : 'system'
+    case 'user-agents':
+      return 'shared'
+    case 'project-dsh':
+    case 'project-agents':
+      return 'project'
+    case 'preset':
+    case 'bundled':
+    default:
+      return 'system'
+  }
+}
+
+function sourceFieldsOf(skill) {
+  const market = isObject(skill?.market) ? skill.market : {}
+  const sourceId = typeof skill?.sourceId === 'string' && skill.sourceId !== ''
+    ? skill.sourceId
+    : (typeof market.sourceId === 'string' && market.sourceId !== '' ? market.sourceId : null)
+  const sourceName = typeof skill?.sourceName === 'string' && skill.sourceName !== ''
+    ? skill.sourceName
+    : (typeof market.sourceName === 'string' && market.sourceName !== '' ? market.sourceName : null)
+  return { sourceId, sourceName }
+}
+
+/**
+ * Normalise one scanner skill into the contract's `SkillView`. H1's scanner is the
+ * primary producer; this fills any field it has not added yet so the wire shape stays
+ * stable during the parallel rollout.
+ */
+function skillView(skill) {
+  const market = isObject(skill?.market) ? skill.market : {}
+  const { sourceId, sourceName } = sourceFieldsOf(skill)
+  const updateAvailable = typeof skill?.updateAvailable === 'string' && skill.updateAvailable !== ''
+    ? skill.updateAvailable
+    : (typeof market.updateAvailable === 'string' && market.updateAvailable !== '' ? market.updateAvailable : null)
+  const version = typeof skill?.version === 'string' && skill.version !== ''
+    ? skill.version
+    : (typeof market.version === 'string' && market.version !== '' ? market.version : null)
+  return {
+    ...skill,
+    id: typeof skill?.id === 'string' ? skill.id : '',
+    name: typeof skill?.name === 'string' ? skill.name : '',
+    description: typeof skill?.description === 'string' ? skill.description : '',
+    whenToUse: typeof skill?.whenToUse === 'string' && skill.whenToUse !== '' ? skill.whenToUse : null,
+    category: categoryForSkill(skill),
+    location: typeof skill?.location === 'string' ? skill.location : '',
+    sourceId,
+    sourceName,
+    version,
+    author: typeof skill?.author === 'string' && skill.author !== '' ? skill.author : null,
+    path: typeof skill?.path === 'string' && skill.path !== '' ? skill.path : null,
+    mtime: Number.isFinite(skill?.mtime) ? skill.mtime : 0,
+    status: typeof skill?.status === 'string' ? skill.status : 'active',
+    writable: skill?.writable === true,
+    updateAvailable,
+    brokenReason: typeof skill?.brokenReason === 'string' && skill.brokenReason !== '' ? skill.brokenReason : null,
+  }
+}
+
+function categoryCounts(skills) {
+  const counts = { mine: 0, shared: 0, project: 0, system: 0 }
+  for (const skill of skills) {
+    if (counts[skill.category] !== undefined) counts[skill.category] += 1
+  }
+  return counts
 }
 
 // ---------------------------------------------------------------------------
@@ -451,11 +596,11 @@ function updateStateOf(checker) {
   }
 }
 
-async function checkUpdatesOf(checker, force) {
+async function checkUpdatesOf(checker, options) {
   if (checker === null || checker === undefined || typeof checker.check !== 'function') {
     throw new ApiError('E_INTERNAL', 'the update module does not expose check()', {}, 500)
   }
-  const state = await checker.check(force === true ? { force: true } : {})
+  const state = await checker.check(isObject(options) ? options : {})
   return isObject(state) ? state : emptyUpdateState()
 }
 
@@ -596,6 +741,30 @@ export function apply(ctx, config) {
     dshVersion,
   })
   const sourceTracker = createSourceTracker()
+
+  // Contract §4.2: `state.mjs` owns persistence and reconciliation (missing ids append in
+  // creation order). The fallback only covers an older store without the source-order API.
+  const readSourceOrder = async () => {
+    if (typeof state.getSourceOrder === 'function') {
+      try {
+        const order = await state.getSourceOrder()
+        if (Array.isArray(order)) return order.filter((id) => typeof id === 'string')
+      } catch {
+        /* fall through to the source list order */
+      }
+    }
+    return (await readSources(state))
+      .map((source) => source?.id)
+      .filter((id) => typeof id === 'string' && id !== '')
+  }
+  const writeSourceOrder = async (order) => {
+    const setOrder = requireStoreMethod(state, 'setSourceOrder')
+    await setOrder(order)
+  }
+
+  // `/check-updates` is single-flight at the route level so the index-cache/scan refresh
+  // around the update check also runs at most once (contract §4.3).
+  let checkUpdatesInflight = null
 
   ctx.effect(() => () => indexFetcher.dispose(), 'skill-manager: index fetcher')
 
@@ -776,10 +945,11 @@ export function apply(ctx, config) {
   route('GET', `${API_PREFIX}/installed`, async (req) => {
     const query = queryOf(req)
     const cwd = await resolveCwd(ctx, query.cwd || settings.cwd)
-    const [installed, sources, updates] = await Promise.all([
+    const [installed, sources, updates, storedOrder] = await Promise.all([
       readInstalled(state),
       readSources(state),
       Promise.resolve(updateStateOf(updateChecker)),
+      readSourceOrder(),
     ])
     const scan = await scanAll(ctx, cwd, {
       force: truthyFlag(query.refresh),
@@ -787,12 +957,13 @@ export function apply(ctx, config) {
       sources,
       updates,
     })
+    const skills = scan.skills.map(skillView)
     return {
-      cwd,
-      locations: scan.locations,
-      skills: scan.skills,
-      issues: scan.issues,
-      presets: scan.presets,
+      categories: categoryCounts(skills),
+      skills,
+      sources: sourceTracker.viewAll(sources),
+      sourceOrder: storedOrder,
+      diagnostics: { issues: scan.issues, checkedAt: Date.now() },
       updates,
     }
   })
@@ -906,9 +1077,45 @@ export function apply(ctx, config) {
 
   // ---- sources ------------------------------------------------------------
 
-  route('GET', `${API_PREFIX}/sources`, async () => ({
-    sources: sourceTracker.viewAll(await readSources(state)),
-  }))
+  route('GET', `${API_PREFIX}/sources`, async () => {
+    const [sources, storedOrder] = await Promise.all([readSources(state), readSourceOrder()])
+    return {
+      sources: sourceTracker.viewAll(sources),
+      sourceOrder: storedOrder,
+    }
+  })
+
+  // Contract §4.2: `order` must be a permutation of every current source id.
+  route('PUT', `${API_PREFIX}/sources/order`, async (req) => {
+    const body = await readJsonBody(req, settings.maxBodyBytes)
+    const order = body.order
+    if (!Array.isArray(order)) {
+      throw new ApiError('E_BAD_REQUEST', 'order must be an array of source ids', {}, 400)
+    }
+    const ids = []
+    for (const value of order) {
+      if (typeof value !== 'string' || value.trim() === '') {
+        throw new ApiError('E_BAD_REQUEST', 'order must contain non-empty source ids', {}, 400)
+      }
+      ids.push(value.trim())
+    }
+    const sources = await readSources(state)
+    const known = new Set(
+      sources.map((source) => source?.id).filter((id) => typeof id === 'string' && id !== ''),
+    )
+    const seen = new Set()
+    for (const id of ids) {
+      if (!known.has(id)) throw new ApiError('E_BAD_REQUEST', `unknown source id "${id}"`, {}, 400)
+      if (seen.has(id)) throw new ApiError('E_BAD_REQUEST', `duplicate source id "${id}"`, {}, 400)
+      seen.add(id)
+    }
+    if (seen.size !== known.size) {
+      const missing = [...known].filter((id) => !seen.has(id))
+      throw new ApiError('E_BAD_REQUEST', `order is missing source ids: ${missing.join(', ')}`, {}, 400)
+    }
+    await writeSourceOrder(ids)
+    return { order: ids }
+  })
 
   route('POST', `${API_PREFIX}/sources`, async (req) => {
     const body = await readJsonBody(req, settings.maxBodyBytes)
@@ -979,73 +1186,67 @@ export function apply(ctx, config) {
       throw new ApiError('E_NOT_FOUND', `no source with id "${sourceId}"`, {}, 404)
     }
 
-    const sort = MARKET_SORTS.has(query.sort) ? query.sort : 'relevance'
+    const sort = normalizeMarketSort(query.sort)
     const limit = clampInt(parseInteger(query.limit, 50), 1, 100, 50)
-    const offset = Math.max(0, parseInteger(query.offset, 0))
+    const offsets = decodeMarketCursor(text(query.cursor))
     const tag = text(query.tag)
+    const q = text(query.q)
     const installed = await readInstalled(state)
     const updates = updateStateOf(updateChecker)
 
-    const rows = []
-    const failures = []
-    let fetchedAt = 0
+    // Fetch every source first; search/sort/pagination below stay per source.
+    const inputs = []
+    let stale = false
     for (const source of selected) {
+      const blockName = sourceNameOf(source, null) || source.id
+      sourceTracker.markChecking(source.id)
       try {
-        sourceTracker.markChecking(source.id)
         const result = await fetchIndex(source.url, { refresh: truthyFlag(query.refresh) })
-        if (result?.error) {
-          sourceTracker.markError(source.id, message(result.error))
-          if (!isObject(result.index)) throw result.error
-        }
         const index = normalizeIndex(result, source.url)
-        const count = Array.isArray(index?.skills) ? index.skills.length : 0
-        if (!result?.error) sourceTracker.markOk(source.id, count, nowSeconds())
-        fetchedAt = Math.max(fetchedAt, fetchedAtOf(result))
-        // `tag` is a label in the common case; accept a declared category too.
-        const categories = isObject(index?.metadata?.categories) ? index.metadata.categories : {}
-        const labels = isObject(index?.metadata?.labels) ? index.metadata.labels : {}
-        const tagIsCategory = tag !== '' && tag !== 'all' && Object.prototype.hasOwnProperty.call(categories, tag)
-        const tagIsLabel = tag !== '' && tag !== 'all' && Object.prototype.hasOwnProperty.call(labels, tag)
-        // A source that does not declare the selected tag contributes no rows.
-        // Dropping the filter here would leak unrelated skills into the result.
-        if (tag !== '' && tag !== 'all' && !tagIsCategory && !tagIsLabel) continue
-        const entries = searchEntries(index, {
-          text: text(query.q),
-          labels: tagIsLabel ? [tag] : [],
-          category: tagIsCategory ? tag : undefined,
-          sort,
-        })
-        for (const entry of entries) {
-          if (!isObject(entry) || typeof entry.name !== 'string' || entry.name === '') continue
-          rows.push({ entry, index, source })
+        if (result?.stale === true) stale = true
+        let error = null
+        if (result?.error) {
+          error = message(result.error)
+          sourceTracker.markError(source.id, error)
+          stale = true
+        } else {
+          const count = Array.isArray(index?.skills) ? index.skills.length : 0
+          sourceTracker.markOk(source.id, count, nowSeconds())
         }
+        // `tag` is a label in the common case; accept a declared category too.
+        // A source that declares neither contributes an empty block.
+        const tagQuery = tagQueryFor(index, tag)
+        inputs.push({
+          sourceId: source.id,
+          name: sourceNameOf(source, index) || blockName,
+          index,
+          error,
+          ...(tagQuery === null ? { empty: true } : { query: tagQuery }),
+        })
       } catch (error) {
-        sourceTracker.markError(source.id, message(error))
-        failures.push({ error, source })
+        const reason = message(error)
+        sourceTracker.markError(source.id, reason)
+        stale = true
+        inputs.push({ sourceId: source.id, name: blockName, index: null, error: reason })
       }
     }
-    if (rows.length === 0 && failures.length > 0 && failures.length === selected.length) {
-      throw failures[0].error
-    }
 
-    const views = sortMarketSkills(
-      rows.map(({ entry, index, source }) => marketSkillView(entry, {
-        source,
-        index,
+    const blocks = searchBySource(inputs, { text: q }, sort, offsets, limit).map((block) => ({
+      sourceId: block.sourceId,
+      name: block.name,
+      total: block.total,
+      skills: block.skills.map((entry) => marketListView(entry, {
+        sourceId: block.sourceId,
         installed,
         updates,
         dshVersion,
       })),
-      sort,
-    )
-    const page = views.slice(offset, offset + limit)
-    return {
-      sources: sourceTracker.viewAll(sources),
-      total: views.length,
-      nextOffset: offset + limit < views.length ? offset + limit : null,
-      skills: page,
-      fetchedAt,
-    }
+      cursor: block.cursor === null
+        ? null
+        : encodeMarketCursor({ ...offsets, [block.sourceId]: block.cursor }),
+      error: block.error,
+    }))
+    return { sources: blocks, stale }
   })
 
   route('GET', `${API_PREFIX}/market/skill`, async (req) => {
@@ -1175,7 +1376,45 @@ export function apply(ctx, config) {
 
   route('POST', `${API_PREFIX}/check-updates`, async (req) => {
     const body = await readJsonBody(req, settings.maxBodyBytes)
-    return checkUpdatesOf(updateChecker, body.force === true)
+    if (checkUpdatesInflight !== null) return checkUpdatesInflight
+
+    const force = body.force === true
+    const cwd = typeof body.cwd === 'string' && body.cwd !== '' ? body.cwd : settings.cwd
+    const run = async () => {
+      const sources = (await readSources(state)).filter((source) => source?.enabled !== false)
+      // Contract §4.3: re-pull every enabled index, recompute updates, refresh the scan.
+      const checked = await checkUpdatesOf(updateChecker, { force, refreshIndexes: true })
+      // The update checker refreshes its own cache; the market fetcher keeps a separate one,
+      // so drop it to make the next GET /market read upstream again.
+      for (const source of sources) {
+        if (typeof source?.url === 'string' && source.url !== '') {
+          try {
+            indexFetcher.invalidate(source.url)
+          } catch {
+            /* invalidation is best-effort */
+          }
+        }
+      }
+      if (checked.refreshNeeded === true) {
+        invalidateScanCache()
+        try {
+          await scanAll(ctx, await resolveCwd(ctx, cwd), { force: true })
+        } catch {
+          /* the next GET /installed retries the scan */
+        }
+      }
+      return {
+        sources: Number.isFinite(checked.sources) ? checked.sources : sources.length,
+        updates: Array.isArray(checked.updates)
+          ? checked.updates.length
+          : (Number.isFinite(checked.updates) ? checked.updates : 0),
+        errors: Array.isArray(checked.errors) ? checked.errors : [],
+      }
+    }
+    checkUpdatesInflight = run().finally(() => {
+      checkUpdatesInflight = null
+    })
+    return checkUpdatesInflight
   })
 
   // ---- validation / settings ---------------------------------------------

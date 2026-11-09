@@ -1,9 +1,11 @@
     /* ------------------------------------------------------------------ *
-     * 50-modals.js — six dialogs, the diagnostics drawer, toasts and the  *
-     * singleton tooltip.                                                  *
+     * 50-modals.js — 十类模态、诊断抽屉、toast 与 tooltip。               *
      *                                                                    *
-     * Playbook §2/§3: no glow, transparent backdrop, host-coloured body,  *
-     * layered Escape/backdrop handling, scrolling body with min-height:0. *
+     * 宽度档（契约 §5.3 / §7.7）：                                        *
+     *   488  new-skill / import-skill / install / add-source             *
+     *   480  update / uninstall / delete / confirm-remove-source         *
+     *   720  edit-content / preview                                      *
+     * 无阴影、遮罩透明、Escape 分层、dialogStack 式的最上层优先。         *
      * ------------------------------------------------------------------ */
 
     const SM_INPUT_STYLE = {
@@ -33,115 +35,206 @@
         resize: 'vertical',
         outline: 'none',
     }
-    const SM_SELECT_STYLE = {
-        width: '100%',
-        height: '32px',
-        boxSizing: 'border-box',
-        padding: '0 8px',
-        borderRadius: '10px',
-        border: '1px solid var(--dsw-alias-border-l2)',
-        background: 'var(--dsw-alias-bg-base)',
-        color: 'var(--dsw-alias-label-primary)',
-        fontSize: 'calc(var(--sm-fs) - 1px)',
-        outline: 'none',
+
+    const SM_MODAL_WIDTH = {
+        'new-skill': 488,
+        'import-skill': 488,
+        install: 488,
+        'add-source': 488,
+        update: 480,
+        uninstall: 480,
+        delete: 480,
+        'confirm-remove-source': 480,
+        'edit-content': 720,
+        preview: 720,
     }
 
     /* ------------------------------------------------------------------ *
-     * Layer state.                                                       *
+     * 模态栈、Escape 分层与滚动锁。                                       *
      * ------------------------------------------------------------------ */
 
-    const smModals = []
-    const dialogStack = []
+    const smModalStack = []
+    const smModalGuards = new Map()
     let smModalSeq = 0
+    let smScrollLockCount = 0
 
     const smDiagnostics = {
         open: false,
         loading: false,
         error: null,
         data: null,
-        checkedAt: 0,
     }
 
-    function smErrorMessage(failure) {
-        const code = failure !== null && failure !== undefined && typeof failure.code === 'string' ? failure.code : ''
-        const keys = {
-            E_UNAUTHORIZED: 'error.unauthorized',
-            E_PATH_OUTSIDE_ROOT: 'error.pathOutside',
-            E_READONLY_LOCATION: 'error.readonly',
-            E_NAME_TAKEN: 'form.nameTaken',
-            E_FRONTMATTER: 'error.frontmatter',
-            E_NAME_INVALID: 'form.nameInvalid',
-            E_NOT_FOUND: 'error.notFound',
-            E_CONFLICT_MTIME: 'detail.conflictMtime',
-            E_SOURCE_UNREACHABLE: 'source.error.fetch',
-            E_SOURCE_SCHEMA: 'source.error.schema',
-            E_CHECKSUM: 'error.checksum',
-            E_NOT_ENOUGH_SPACE: 'error.space',
-            E_CANCELED: 'error.canceled',
-            E_TOO_LARGE: 'error.tooLarge',
-            E_BAD_REQUEST: 'error.badRequest',
-            E_INTERNAL: 'error.generic',
+    function smLockScroll() {
+        if (typeof document === 'undefined' || document === null || document.body === undefined || document.body === null) return
+        smScrollLockCount += 1
+        if (smScrollLockCount === 1) document.body.style.overflow = 'hidden'
+    }
+
+    function smUnlockScroll() {
+        if (smScrollLockCount <= 0) return
+        smScrollLockCount -= 1
+        if (smScrollLockCount === 0 && typeof document !== 'undefined' && document !== null && document.body !== undefined && document.body !== null) {
+            document.body.style.overflow = ''
         }
-        if (code !== '' && keys[code] !== undefined) return t(keys[code])
-        if (failure !== null && failure !== undefined && typeof failure.message === 'string' && failure.message !== '') return failure.message
-        return t('error.generic')
     }
 
-    function smMarketFromPayload(payload) {
+    function smSyncModalState() {
+        const top = smModalStack.length > 0 ? smModalStack[smModalStack.length - 1] : null
+        appState.modal = top === null ? null : { kind: top.kind, payload: top.payload }
+    }
+
+    function smNormalizeModalKind(kind, payload) {
+        const name = String(kind === undefined || kind === null ? '' : kind)
+        if (name === 'new') return 'new-skill'
+        if (name === 'import') return 'import-skill'
+        if (name === 'confirm-uninstall') return 'uninstall'
+        if (name === 'remove-source' || name === 'delete-source') return 'confirm-remove-source'
+        if (name === 'confirm-delete') {
+            const mode = payload !== null && typeof payload === 'object' ? String(payload.mode === undefined ? payload.kind : payload.mode) : ''
+            if (mode === 'uninstall') return 'uninstall'
+            if (mode === 'delete') return 'delete'
+            const skill = payload !== null && typeof payload === 'object' ? payload.skill : null
+            if (skill !== null && typeof skill === 'object' && smText(skill.sourceId) !== '') return 'uninstall'
+            return 'delete'
+        }
+        return name
+    }
+
+    function openModal(kind, payload) {
         const source = payload !== null && typeof payload === 'object' ? payload : {}
-        const sourceId = typeof source.sourceId === 'string' ? source.sourceId : ''
-        /* 同源校验：payload 带 sourceId 时，任何候选条目（含 payload.skill）
-           都必须同源，缺 sourceId 的条目才允许按 name 回退。 */
-        const matchesSource = (item) => sourceId === ''
-            || typeof item.sourceId !== 'string'
-            || item.sourceId === ''
-            || item.sourceId === sourceId
-        if (source.skill !== null && typeof source.skill === 'object' && typeof source.skill.name === 'string' && matchesSource(source.skill)) return source.skill
-        if (source.marketSkill !== null && typeof source.marketSkill === 'object' && typeof source.marketSkill.name === 'string' && matchesSource(source.marketSkill)) return source.marketSkill
-        const list = Array.isArray(appState.marketSkills) ? appState.marketSkills : []
-        for (let index = 0; index < list.length; index += 1) {
-            const item = list[index]
-            if (!item) continue
-            if (typeof source.id === 'string' && source.id !== '' && item.id === source.id) return item
-            if (typeof source.name === 'string' && source.name !== '' && item.name === source.name && matchesSource(item)) return item
-        }
-        return null
-    }
-
-    function smLocationOptions() {
-        return [
-            { value: 'user-dsh', label: t('loc.userDsh') + ' (~/.dsh/skills)', disabled: smLocationDisabled('user-dsh') },
-            { value: 'user-agents', label: t('loc.userAgents') + ' (~/.agents/skills)', disabled: smLocationDisabled('user-agents') },
-            {
-                value: 'project-dsh',
-                label: t('loc.projectDsh') + ' (<repo>/.dsh/skills)',
-                hint: typeof appState.cwd !== 'string' || appState.cwd === '' ? t('form.locationProjectDisabled') : '',
-                disabled: smLocationDisabled('project-dsh'),
-            },
-        ]
-    }
-
-    /* ------------------------------------------------------------------ *
-     * Toasts.                                                            *
-     * ------------------------------------------------------------------ */
-
-    /** Thin alias over the prelude's canonical toast queue (appState.toasts). */
-    function smPushToast(message, options) {
-        return toast(message, options)
-    }
-
-    function smDismissToast(id) {
-        if (!Array.isArray(appState.toasts)) return
-        const next = appState.toasts.filter((item) => item && item.id !== id)
-        if (next.length === appState.toasts.length) return
-        appState.toasts = next
+        const name = smNormalizeModalKind(kind, source)
+        smModalSeq += 1
+        smModalStack.push({ id: smModalSeq, kind: name, payload: source })
+        smLockScroll()
+        smHideTooltip()
+        smSyncModalState()
         if (typeof rerender === 'function') rerender()
     }
 
-    function smNormalizeToast(item, index) {
-        if (typeof item === 'string') {
-            return { id: 'ext-' + String(index), message: item, tone: 'info', actionLabel: '', onAction: null }
+    function smRemoveModalById(id) {
+        for (let index = smModalStack.length - 1; index >= 0; index -= 1) {
+            if (smModalStack[index].id !== id) continue
+            smModalStack.splice(index, 1)
+            smModalGuards.delete(id)
+            smUnlockScroll()
+            break
         }
+        smHideTooltip()
+        smSyncModalState()
+        if (typeof rerender === 'function') rerender()
+    }
+
+    /** 强制关闭最上层；提交成功后的路径使用它。 */
+    function closeModal() {
+        if (smModalStack.length === 0) return
+        smRemoveModalById(smModalStack[smModalStack.length - 1].id)
+    }
+
+    /** 用户触发的关闭（Esc / 取消 / 遮罩）：先询问模态自己的守卫。 */
+    function smRequestCloseModal(id) {
+        const target = id === undefined || id === null ? (smModalStack.length > 0 ? smModalStack[smModalStack.length - 1] : null) : smModalStack[smModalStack.length - 1]
+        if (target === null || target === undefined) return
+        const guard = smModalGuards.get(target.id)
+        if (typeof guard === 'function') {
+            try {
+                if (guard() === true) return
+            } catch (failure) {
+                /* a failing guard must not trap the user */
+            }
+        }
+        smRemoveModalById(target.id)
+    }
+
+    function smHasOpenOverlay() {
+        return smModalStack.length > 0 || smDiagnostics.open === true || appState.sourceDialogOpen === true || (appState.modal !== null && appState.modal !== undefined)
+    }
+
+    function smHandleEscape(event) {
+        if (event.key !== 'Escape') return
+        /* 更早注册的层（例如管理源弹窗）已经处理过这一层。 */
+        if (event.defaultPrevented === true) return
+        if (smModalStack.length > 0) {
+            event.preventDefault()
+            event.stopPropagation()
+            if (typeof event.stopImmediatePropagation === 'function') event.stopImmediatePropagation()
+            smRequestCloseModal()
+            return
+        }
+        /* 管理源弹窗叠在诊断抽屉之上时，先让 30-source-dialog 处理这一层。 */
+        if (appState.sourceDialogOpen === true) return
+        if (smDiagnostics.open === true) {
+            event.preventDefault()
+            event.stopPropagation()
+            if (typeof event.stopImmediatePropagation === 'function') event.stopImmediatePropagation()
+            smCloseDiagnostics()
+        }
+    }
+
+    if (typeof document !== 'undefined' && document !== null && typeof document.addEventListener === 'function') {
+        document.addEventListener('keydown', smHandleEscape, true)
+    }
+
+    /** 注册 Esc / 遮罩关闭守卫；返回 true 表示组件自己处理了这次关闭。 */
+    function smUseModalGuard(modalId, handler) {
+        const ref = useRef(handler)
+        ref.current = handler
+        useEffect(function () {
+            const guard = function () {
+                const fn = ref.current
+                if (typeof fn !== 'function') return false
+                try {
+                    return fn() === true
+                } catch (failure) {
+                    return false
+                }
+            }
+            smModalGuards.set(modalId, guard)
+            return function () { smModalGuards.delete(modalId) }
+        }, [modalId])
+    }
+
+    function renderModalLayer() {
+        if (smModalStack.length === 0) return null
+        return h(Fragment, null, smModalStack.map(function (entry, index) {
+            return h(SmModalHost, {
+                key: String(entry.id),
+                entry: entry,
+                isTop: index === smModalStack.length - 1,
+                layerIndex: index,
+            })
+        }))
+    }
+
+    function SmModalHost(props) {
+        const entry = props.entry
+        const shared = { modalId: entry.id, isTop: props.isTop === true, layerIndex: props.layerIndex, payload: entry.payload }
+        if (entry.kind === 'new-skill') return h(SmNewSkillModal, shared)
+        if (entry.kind === 'import-skill') return h(SmImportModal, shared)
+        if (entry.kind === 'install') return h(SmInstallModal, shared)
+        if (entry.kind === 'update') return h(SmUpdateModal, shared)
+        if (entry.kind === 'uninstall') return h(SmUninstallModal, shared)
+        if (entry.kind === 'delete') return h(SmDeleteModal, shared)
+        if (entry.kind === 'add-source') return h(SmAddSourceModal, shared)
+        if (entry.kind === 'edit-content') return h(SmEditContentModal, shared)
+        if (entry.kind === 'preview') return h(SmPreviewModal, shared)
+        if (entry.kind === 'confirm-remove-source') return h(SmConfirmRemoveSourceModal, shared)
+        return h(SmDialogFrame, {
+            isTop: props.isTop === true,
+            layerIndex: props.layerIndex,
+            width: 480,
+            confirm: true,
+            title: t('error.unexpected'),
+            footer: h(SmFooter, null),
+        }, h('div', { style: { color: 'var(--dsw-alias-label-secondary)', fontSize: 'calc(var(--sm-fs) - 1px)' } }, t('error.unexpected')))
+    }
+
+    /* ------------------------------------------------------------------ *
+     * Toast host（读取 appState.toasts；同一时刻只显示最新一条）。        *
+     * ------------------------------------------------------------------ */
+
+    function smNormalizeToast(item, index) {
+        if (typeof item === 'string') return { id: 'ext-' + String(index), message: item, tone: 'info', actionLabel: '', onAction: null }
         if (item === null || typeof item !== 'object') return null
         const message = typeof item.message === 'string' ? item.message : (typeof item.text === 'string' ? item.text : '')
         if (message === '') return null
@@ -154,132 +247,87 @@
         }
     }
 
-    /** Bottom-centre toast list, rendered from the shared `appState.toasts` queue. */
     function renderToastHost() {
-        const items = []
-        if (Array.isArray(appState.toasts)) {
-            for (let index = 0; index < appState.toasts.length; index += 1) {
-                const normalized = smNormalizeToast(appState.toasts[index], index)
-                if (normalized !== null) items.push(normalized)
-            }
-        }
-        if (items.length === 0) return null
-        return h(
-            'div',
-            {
-                className: 'sm-toast-host sm-toasts',
-                style: {
-                    position: 'fixed',
-                    left: '50%',
-                    bottom: '20px',
-                    transform: 'translateX(-50%)',
-                    zIndex: 2100,
-                    display: 'flex',
-                    flexDirection: 'column',
-                    alignItems: 'center',
-                    gap: '8px',
-                    maxWidth: 'min(480px, calc(100vw - 32px))',
-                    pointerEvents: 'none',
+        if (!Array.isArray(appState.toasts) || appState.toasts.length === 0) return null
+        const normalized = smNormalizeToast(appState.toasts[appState.toasts.length - 1], appState.toasts.length - 1)
+        if (normalized === null) return null
+        const toneColor = normalized.tone === 'error'
+            ? 'var(--dsw-alias-state-error-primary)'
+            : (normalized.tone === 'info' ? 'var(--dsw-alias-label-secondary)' : 'var(--dsw-alias-state-success-primary)')
+        return h('div', {
+            className: 'sm-toast-host',
+            style: { position: 'fixed', left: '50%', bottom: '20px', transform: 'translateX(-50%)', zIndex: 2100, display: 'flex', flexDirection: 'column', alignItems: 'center', maxWidth: 'min(480px, calc(100vw - 32px))', pointerEvents: 'none' },
+        },
+        h('div', {
+            className: 'sm-toast sm-toast-' + normalized.tone,
+            role: 'status',
+            'aria-live': 'polite',
+            style: { display: 'flex', alignItems: 'center', gap: '8px', maxWidth: '100%', padding: '10px 14px', borderRadius: '12px', background: 'var(--dsw-alias-bg-layer-3)', color: 'var(--dsw-alias-label-primary)', fontSize: 'calc(var(--sm-fs) - 1px)', lineHeight: '18px', boxShadow: 'none', pointerEvents: 'auto' },
+        },
+        h('span', { style: { flexShrink: 0, color: toneColor } }, icon(normalized.tone === 'error' ? 'alert' : (normalized.tone === 'info' ? 'info' : 'check'), 16)),
+        h('span', { style: { minWidth: 0, wordBreak: 'break-word' } }, normalized.message),
+        normalized.actionLabel !== '' && normalized.onAction !== null
+            ? h('button', {
+                type: 'button',
+                className: 'sm-toast-action',
+                onClick: function () {
+                    try {
+                        normalized.onAction()
+                    } finally {
+                        smDismissToast(normalized.id)
+                    }
                 },
-            },
-            items.map((item) => h(
-                'div',
-                {
-                    key: String(item.id),
-                    className: 'sm-toast sm-toast-' + (item.tone === 'error' ? 'error' : (item.tone === 'info' ? 'info' : 'ok')) + ' sm-' + (item.tone === 'error' ? 'error' : (item.tone === 'info' ? 'info' : 'ok')),
-                    role: 'status',
-                    style: {
-                        display: 'flex',
-                        alignItems: 'center',
-                        gap: '8px',
-                        maxWidth: '100%',
-                        padding: '10px 14px',
-                        borderRadius: '12px',
-                        background: 'var(--dsw-alias-bg-layer-3)',
-                        border: '1px solid var(--dsw-alias-border-l2)',
-                        color: 'var(--dsw-alias-label-primary)',
-                        fontSize: 'calc(var(--sm-fs) - 1px)',
-                        lineHeight: '18px',
-                        boxShadow: 'none',
-                        pointerEvents: 'auto',
-                    },
-                },
-                h('span', {
-                    style: {
-                        flexShrink: 0,
-                        color: item.tone === 'error'
-                            ? 'var(--dsw-alias-state-error-primary)'
-                            : (item.tone === 'info' ? 'var(--dsw-alias-brand-primary)' : 'var(--dsw-alias-state-success-primary)'),
-                    },
-                }, icon(item.tone === 'error' ? 'alert' : (item.tone === 'info' ? 'info' : 'check'), 16)),
-                h('span', { style: { minWidth: 0, wordBreak: 'break-word' } }, item.message),
-                item.actionLabel !== '' && item.onAction !== null
-                    ? h('button', {
-                        type: 'button',
-                        className: 'sm-toast-action',
-                        onClick: () => {
-                            try {
-                                item.onAction()
-                            } finally {
-                                smDismissToast(item.id)
-                            }
-                        },
-                        style: {
-                            flexShrink: 0,
-                            height: '24px',
-                            padding: '0 6px',
-                            border: 'none',
-                            background: 'transparent',
-                            color: 'var(--dsw-alias-brand-primary)',
-                            fontSize: 'calc(var(--sm-fs) - 1px)',
-                            fontWeight: 500,
-                            cursor: 'pointer',
-                        },
-                    }, item.actionLabel)
-                    : null,
-            )),
-        )
+                style: { flexShrink: 0, height: '24px', padding: '0 6px', border: 'none', background: 'transparent', color: 'var(--dsw-alias-label-primary)', fontSize: 'calc(var(--sm-fs) - 1px)', fontWeight: 500, cursor: 'pointer' },
+            }, normalized.actionLabel)
+            : null))
+    }
+
+    function smDismissToast(id) {
+        if (!Array.isArray(appState.toasts)) return
+        const next = appState.toasts.filter(function (item) { return item !== null && item !== undefined && item.id !== id })
+        if (next.length === appState.toasts.length) return
+        appState.toasts = next
+        if (typeof rerender === 'function') rerender()
     }
 
     /* ------------------------------------------------------------------ *
-     * Singleton tooltip. 300 ms hover delay, copied --sm-fs, no glow.     *
+     * Tooltip：反色、300ms、元素 id 固定 `tooltip`（选择器 #tooltip）。    *
      * ------------------------------------------------------------------ */
 
-    const smTooltip = { timer: null, target: null, label: '', node: null }
+    const smTooltipState = { timer: null, target: null, label: '', node: null }
 
     function smEnsureTooltipNode() {
         if (typeof document === 'undefined' || document === null) return null
-        if (smTooltip.node !== null && document.body.contains(smTooltip.node)) return smTooltip.node
+        if (smTooltipState.node !== null && document.body.contains(smTooltipState.node)) return smTooltipState.node
         const node = document.createElement('div')
+        node.id = 'tooltip'
         node.className = 'sm-tooltip'
         node.setAttribute('role', 'tooltip')
-        node.style.cssText = 'position:fixed;left:0;top:0;z-index:2000;max-width:290px;padding:6px 10px;border-radius:7px;border:1px solid var(--dsw-alias-border-l2);background:var(--dsw-alias-bg-layer-2);color:var(--dsw-alias-label-secondary);font-size:calc(var(--sm-fs) - 4px);line-height:1.35;box-shadow:none;pointer-events:none;opacity:0;visibility:hidden;white-space:normal;transition:opacity .12s ease;'
+        node.style.cssText = 'position:fixed;left:0;top:0;z-index:2000;max-width:290px;padding:6px 10px;border-radius:var(--dsw-radius-sm);border:none;background:var(--dsw-alias-label-primary);color:var(--dsw-alias-bg-layer-3);font-size:calc(var(--sm-fs) - 4px);line-height:1.35;box-shadow:none;pointer-events:none;opacity:0;visibility:hidden;white-space:normal;'
         const root = document.querySelector('.sm-root')
         let scale = ''
-        if (root !== null && typeof getComputedStyle === 'function') {
-            scale = getComputedStyle(root).getPropertyValue('--sm-fs').trim()
-        }
+        if (root !== null && typeof getComputedStyle === 'function') scale = getComputedStyle(root).getPropertyValue('--sm-fs').trim()
         node.style.setProperty('--sm-fs', scale !== '' ? scale : '14px')
         document.body.appendChild(node)
-        smTooltip.node = node
+        smTooltipState.node = node
         return node
     }
 
     function smHideTooltip() {
-        if (smTooltip.timer !== null) {
-            clearTimeout(smTooltip.timer)
-            smTooltip.timer = null
+        if (smTooltipState.timer !== null) {
+            clearTimeout(smTooltipState.timer)
+            smTooltipState.timer = null
         }
-        smTooltip.target = null
-        smTooltip.label = ''
-        if (smTooltip.node !== null) {
-            smTooltip.node.style.opacity = '0'
-            smTooltip.node.style.visibility = 'hidden'
+        smTooltipState.target = null
+        smTooltipState.label = ''
+        if (smTooltipState.node !== null) {
+            smTooltipState.node.style.opacity = '0'
+            smTooltipState.node.style.visibility = 'hidden'
         }
     }
 
     function smPlaceTooltip() {
-        const target = smTooltip.target
+        const target = smTooltipState.target
         if (target === null || target === undefined || typeof target.getBoundingClientRect !== 'function') {
             smHideTooltip()
             return
@@ -290,7 +338,7 @@
         }
         const node = smEnsureTooltipNode()
         if (node === null) return
-        node.textContent = smTooltip.label
+        node.textContent = smTooltipState.label
         node.style.visibility = 'hidden'
         node.style.opacity = '1'
         const rect = target.getBoundingClientRect()
@@ -310,10 +358,10 @@
         smHideTooltip()
         const text = label === null || label === undefined ? '' : String(label)
         if (text === '' || target === null || target === undefined) return
-        smTooltip.target = target
-        smTooltip.label = text
-        smTooltip.timer = setTimeout(() => {
-            smTooltip.timer = null
+        smTooltipState.target = target
+        smTooltipState.label = text
+        smTooltipState.timer = setTimeout(function () {
+            smTooltipState.timer = null
             smPlaceTooltip()
         }, 300)
     }
@@ -322,27 +370,23 @@
         const text = label === null || label === undefined ? '' : String(label)
         if (text === '') return {}
         return {
-            onMouseEnter: (event) => {
-                smScheduleTooltip(text, event.currentTarget)
-            },
-            onMouseLeave: () => {
-                smHideTooltip()
-            },
-            onMouseDown: () => {
-                smHideTooltip()
-            },
+            onMouseEnter: function (event) { smScheduleTooltip(text, event.currentTarget) },
+            onMouseLeave: function () { smHideTooltip() },
+            onMouseDown: function () { smHideTooltip() },
+            onFocus: function (event) { smScheduleTooltip(text, event.currentTarget) },
+            onBlur: function () { smHideTooltip() },
         }
     }
 
     function SmTooltipLifecycle() {
-        useEffect(() => {
+        useEffect(function () {
             smEnsureTooltipNode()
-            return () => {
+            return function () {
                 smHideTooltip()
-                if (smTooltip.node !== null && smTooltip.node.parentNode !== null && smTooltip.node.parentNode !== undefined) {
-                    smTooltip.node.parentNode.removeChild(smTooltip.node)
+                if (smTooltipState.node !== null && smTooltipState.node.parentNode !== null && smTooltipState.node.parentNode !== undefined) {
+                    smTooltipState.node.parentNode.removeChild(smTooltipState.node)
                 }
-                smTooltip.node = null
+                smTooltipState.node = null
             }
         }, [])
         return null
@@ -353,430 +397,244 @@
     }
 
     /* ------------------------------------------------------------------ *
-     * Dialog stack + Escape layering.                                    *
-     * ------------------------------------------------------------------ */
-
-    function openModal(kind, payload) {
-        let name = String(kind)
-        let source = payload !== null && typeof payload === 'object' ? payload : {}
-        // Accept the short aliases the list/source tabs use.
-        if (name === 'new') name = 'new-skill'
-        else if (name === 'import') name = 'import-skill'
-        else if (name === 'delete' || name === 'uninstall') {
-            source = Object.assign({}, source)
-            if (source.mode === undefined) source.mode = name
-            name = 'confirm-delete'
-        }
-        const id = ++smModalSeq
-        smModals.push({
-            id: id,
-            kind: name,
-            payload: source,
-        })
-        dialogStack.push('modal:' + String(id))
-        smHideTooltip()
-        if (typeof rerender === 'function') rerender()
-    }
-
-    function closeModal() {
-        if (smModals.length === 0) return
-        const entry = smModals[smModals.length - 1]
-        smModals.splice(smModals.length - 1, 1)
-        const token = 'modal:' + String(entry.id)
-        const index = dialogStack.lastIndexOf(token)
-        if (index !== -1) dialogStack.splice(index, 1)
-        smHideTooltip()
-        if (typeof rerender === 'function') rerender()
-    }
-
-    function smCloseDiagnostics() {
-        smDiagnostics.open = false
-        const index = dialogStack.lastIndexOf('diagnostics')
-        if (index !== -1) dialogStack.splice(index, 1)
-        smHideTooltip()
-        if (typeof rerender === 'function') rerender()
-    }
-
-    function smCloseTopLayer() {
-        const top = dialogStack[dialogStack.length - 1]
-        if (top === undefined) return
-        if (top === 'diagnostics') {
-            smCloseDiagnostics()
-            return
-        }
-        if (typeof top === 'string' && top.indexOf('modal:') === 0) {
-            const id = Number(top.slice('modal:'.length))
-            for (let index = smModals.length - 1; index >= 0; index -= 1) {
-                if (smModals[index].id === id) {
-                    smModals.splice(index, 1)
-                    break
-                }
-            }
-            dialogStack.pop()
-            smHideTooltip()
-            if (typeof rerender === 'function') rerender()
-        }
-    }
-
-    function smBindEscapeLayers() {
-        if (typeof document === 'undefined' || document === null) return
-        document.addEventListener('keydown', (event) => {
-            if (event.key !== 'Escape') return
-            if (dialogStack.length === 0) return
-            event.preventDefault()
-            event.stopPropagation()
-            if (typeof event.stopImmediatePropagation === 'function') event.stopImmediatePropagation()
-            smCloseTopLayer()
-        }, true)
-    }
-
-    smBindEscapeLayers()
-
-    function renderModalLayer() {
-        if (smModals.length === 0) return null
-        const topEntry = smModals[smModals.length - 1]
-        const topToken = dialogStack[dialogStack.length - 1]
-        return h(
-            Fragment,
-            null,
-            smModals.map((entry) => h(SmModalHost, {
-                key: String(entry.id),
-                entry: entry,
-                isTop: entry === topEntry && topToken === 'modal:' + String(entry.id),
-            })),
-        )
-    }
-
-    function SmModalHost(props) {
-        const entry = props.entry
-        const shared = { isTop: props.isTop === true, payload: entry.payload }
-        if (entry.kind === 'new-skill') return h(SmNewSkillModal, shared)
-        if (entry.kind === 'import-skill') return h(SmImportModal, shared)
-        if (entry.kind === 'install') return h(SmInstallModal, shared)
-        if (entry.kind === 'update') return h(SmUpdateModal, shared)
-        if (entry.kind === 'add-source') return h(SmAddSourceModal, shared)
-        if (entry.kind === 'confirm-delete') return h(SmConfirmDeleteModal, shared)
-        return h(
-            SmDialogFrame,
-            { isTop: props.isTop === true, title: t('action.close'), footer: h(SmButton, { tone: 'secondary', onClick: closeModal }, t('action.close')) },
-            h('div', { style: { color: 'var(--dsw-alias-label-secondary)', fontSize: 'calc(var(--sm-fs) - 1px)' } }, t('error.generic')),
-        )
-    }
-
-    /* ------------------------------------------------------------------ *
-     * Shared dialog chrome + form primitives.                            *
+     * 弹窗外壳与表单原语。                                               *
      * ------------------------------------------------------------------ */
 
     function SmDialogFrame(props) {
         const confirm = props.confirm === true
+        const width = props.width === 720 ? 720 : (props.width === 480 ? 480 : 488)
+        const layerIndex = typeof props.layerIndex === 'number' ? props.layerIndex : 0
         const boxRef = useRef(null)
-        useEffect(() => {
+        const close = function () {
+            if (typeof props.onRequestClose === 'function') props.onRequestClose()
+            else smRequestCloseModal(props.modalId)
+        }
+
+        useEffect(function () {
             const node = boxRef.current
-            if (node !== null && typeof node.querySelector === 'function') {
-                const field = node.querySelector('input, select, textarea, button')
-                if (field !== null && typeof field.focus === 'function') {
-                    try {
-                        field.focus({ preventScroll: true })
-                    } catch (failure) {
-                        /* focus is best effort */
-                    }
+            if (node === null || typeof node.querySelector !== 'function') return
+            let field = node.querySelector('input, textarea, select')
+            if (field === null) field = node.querySelector('button')
+            if (field !== null && typeof field.focus === 'function') {
+                try {
+                    field.focus({ preventScroll: true })
+                } catch (failure) {
+                    /* focus is best effort */
                 }
             }
         }, [])
-        return h(
-            'div',
-            {
-                className: 'sm-modal-backdrop',
-                style: {
-                    position: 'fixed',
-                    inset: 0,
-                    zIndex: 1200,
-                    display: 'flex',
-                    alignItems: 'center',
-                    justifyContent: 'center',
-                    padding: '16px',
-                    background: 'transparent',
-                },
-                onMouseDown: (event) => {
-                    if (event.target !== event.currentTarget) return
-                    if (props.isTop !== true) return
-                    smHideTooltip()
-                    closeModal()
-                },
+
+        const onKeyDown = function (event) {
+            if (typeof props.onKeyDown === 'function' && props.onKeyDown(event) === true) return
+            if (event.key !== 'Tab') return
+            const node = boxRef.current
+            if (node === null || typeof node.querySelectorAll !== 'function') return
+            const focusable = Array.prototype.slice.call(node.querySelectorAll('button, input, textarea, select, [tabindex="0"]'))
+                .filter(function (item) { return item.disabled !== true && item.getAttribute('aria-hidden') !== 'true' })
+            if (focusable.length === 0) return
+            const first = focusable[0]
+            const last = focusable[focusable.length - 1]
+            if (event.shiftKey && document.activeElement === first) {
+                event.preventDefault()
+                last.focus()
+            } else if (!event.shiftKey && document.activeElement === last) {
+                event.preventDefault()
+                first.focus()
+            }
+        }
+
+        const widthStyle = width === 480
+            ? 'min(480px, calc(100vw - 32px))'
+            : (width === 720 ? 'min(720px, 100%)' : 'min(488px, 100%)')
+
+        return h('div', {
+            className: 'sm-dialog-mask sm-modal-backdrop',
+            style: { position: 'fixed', inset: 0, zIndex: 1300 + layerIndex * 2, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '16px', background: 'transparent' },
+            onMouseDown: function (event) {
+                if (event.target !== event.currentTarget) return
+                if (props.isTop !== true) return
+                close()
             },
-            h(
-                'div',
-                {
-                    ref: boxRef,
-                    className: 'sm-dialog' + (confirm ? ' sm-narrow sm-dialog-confirm' : ''),
-                    role: 'dialog',
-                    'aria-modal': 'true',
-                    'aria-label': props.title,
-                    style: {
-                        width: confirm ? '360px' : '560px',
-                        maxWidth: 'calc(100vw - 32px)',
-                        maxHeight: 'calc(100vh - 48px)',
-                        display: 'flex',
-                        flexDirection: 'column',
-                        overflow: 'hidden',
-                        borderRadius: confirm ? '14px' : '20px',
-                        border: '0.5px solid var(--dsw-alias-border-l2)',
-                        background: 'var(--dsw-static-neutral-bluish-850, var(--dsw-alias-bg-layer-1))',
-                        boxShadow: 'none',
-                    },
-                },
-                h(
-                    'div',
-                    {
-                        className: 'sm-dialog-head',
-                        style: {
-                            display: 'flex',
-                            alignItems: 'center',
-                            justifyContent: 'space-between',
-                            gap: '12px',
-                            padding: confirm ? '18px 20px 4px' : '18px 24px',
-                            borderBottom: confirm ? 'none' : '1px solid var(--dsw-alias-border-l2)',
-                        },
-                    },
-                    h('h3', { style: { margin: 0, fontSize: 'calc(var(--sm-fs) + 1px)', fontWeight: 500, color: 'var(--dsw-alias-label-primary)' } }, props.title),
-                    confirm
-                        ? null
-                        : h('button', {
-                            type: 'button',
-                            className: 'sm-icon-btn sm-dialog-close',
-                            'aria-label': t('action.close'),
-                            onClick: () => {
-                                smHideTooltip()
-                                closeModal()
-                            },
-                            style: {
-                                display: 'inline-flex',
-                                alignItems: 'center',
-                                justifyContent: 'center',
-                                width: '28px',
-                                height: '28px',
-                                padding: 0,
-                                border: 'none',
-                                borderRadius: '8px',
-                                background: 'transparent',
-                                color: 'var(--dsw-alias-label-secondary)',
-                                cursor: 'pointer',
-                            },
-                        }, icon('x', 16)),
-                ),
-                h(
-                    'div',
-                    {
-                        className: 'sm-dialog-body',
-                        style: {
-                            flex: 1,
-                            minHeight: 0,
-                            overflowY: 'auto',
-                            display: 'flex',
-                            flexDirection: 'column',
-                            gap: '14px',
-                            padding: confirm ? '10px 20px 18px' : '20px 24px',
-                        },
-                    },
-                    props.children,
-                ),
-                props.footer === undefined || props.footer === null
-                    ? null
-                    : h(
-                        'div',
-                        {
-                            className: 'sm-dialog-foot',
-                            style: {
-                                display: 'flex',
-                                justifyContent: 'flex-end',
-                                gap: '8px',
-                                padding: confirm ? '0 20px 20px' : '14px 24px',
-                                borderTop: confirm ? 'none' : '1px solid var(--dsw-alias-border-l2)',
-                            },
-                        },
-                        props.footer,
-                    ),
-            ),
-        )
+        },
+        h('div', {
+            ref: boxRef,
+            className: cx('sm-dialog', confirm && 'sm-dialog-confirm', width === 720 && 'sm-dialog-large', width === 488 && 'sm-dialog-form'),
+            role: 'dialog',
+            'aria-modal': 'true',
+            'aria-label': props.title,
+            'aria-hidden': props.isTop === true ? undefined : 'true',
+            onKeyDown: onKeyDown,
+            style: {
+                width: widthStyle,
+                maxHeight: width === 720 ? 'min(720px, calc(100vh - 96px))' : 'calc(100vh - 48px)',
+                display: 'flex',
+                flexDirection: 'column',
+                overflow: 'hidden',
+                borderRadius: confirm ? 'var(--dsw-radius-xl)' : 'var(--dsw-radius-panel)',
+                border: '.5px solid var(--dsw-alias-border-inverted)',
+                background: 'var(--dsw-alias-bg-layer-1)',
+                boxShadow: 'none',
+                pointerEvents: props.isTop === true ? 'auto' : 'none',
+            },
+        },
+        h('div', {
+            className: 'sm-dialog-head',
+            style: { display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: '12px', padding: confirm ? '20px 20px 0' : '20px 24px 0' },
+        },
+        h('div', { style: { display: 'flex', flexDirection: 'column', gap: '4px', minWidth: 0 } },
+            h('h3', { style: { margin: 0, fontSize: 'calc(var(--sm-fs) + 1px)', lineHeight: '1.4', fontWeight: 500, color: 'var(--dsw-alias-label-primary)' } }, props.title),
+            props.subtitle !== undefined && props.subtitle !== null && props.subtitle !== ''
+                ? h('div', { style: { color: 'var(--dsw-alias-label-secondary)', fontSize: 'calc(var(--sm-fs) - 2px)' } }, props.subtitle)
+                : null),
+        confirm
+            ? null
+            : h('button', {
+                type: 'button',
+                className: 'sm-icon-btn sm-dialog-close',
+                'aria-label': t('action.close'),
+                'data-tip': t('action.close'),
+                onClick: close,
+                style: { display: 'inline-flex', alignItems: 'center', justifyContent: 'center', width: '28px', height: '28px', padding: 0, border: 'none', borderRadius: '8px', background: 'transparent', color: 'var(--dsw-alias-label-secondary)', cursor: 'pointer', flexShrink: 0 },
+            }, icon('x', 16))),
+        h('div', {
+            className: 'sm-dialog-body',
+            style: { flex: '1 1 auto', minHeight: 0, overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: confirm ? '12px' : '16px', padding: confirm ? '12px 20px 12px' : '38px 24px 20px' },
+        }, props.children),
+        props.footer === undefined || props.footer === null
+            ? null
+            : h('div', {
+                className: 'sm-dialog-foot',
+                style: { display: 'flex', justifyContent: 'flex-end', gap: '8px', padding: confirm ? '0 20px 20px' : '12px 24px', borderTop: confirm ? 'none' : '1px solid var(--dsw-alias-border-l2)', flexShrink: 0 },
+            }, props.footer)))
+    }
+
+    function SmFooter(props) {
+        return h(Fragment, null,
+            h(SmButton, { tone: 'secondary', onClick: function () { smRequestCloseModal() } }, t('action.cancel')),
+            props.children)
     }
 
     function SmField(props) {
-        return h(
-            'div',
-            { className: 'sm-field', style: { display: 'flex', flexDirection: 'column', gap: '6px' } },
-            h(
-                'div',
-                { className: 'sm-label', style: { display: 'flex', alignItems: 'baseline', justifyContent: 'space-between', gap: '8px' } },
+        return h('div', { className: 'sm-field', style: { display: 'flex', flexDirection: 'column', gap: '6px' } },
+            h('div', { style: { display: 'flex', alignItems: 'baseline', justifyContent: 'space-between', gap: '8px' } },
                 h('span', { style: { fontSize: 'calc(var(--sm-fs) - 1px)', fontWeight: 500, color: 'var(--dsw-alias-label-primary)' } }, props.label),
-                props.hint ? h('span', { style: { fontSize: 'calc(var(--sm-fs) - 3px)', color: 'var(--dsw-alias-label-caption)' } }, props.hint) : null,
-            ),
+                props.hint ? h('span', { style: { fontSize: 'calc(var(--sm-fs) - 3px)', color: 'var(--dsw-alias-label-caption)' } }, props.hint) : null),
             props.children,
-            props.error ? h('div', { style: { fontSize: 'calc(var(--sm-fs) - 2px)', color: 'var(--dsw-alias-state-error-primary)' } }, props.error) : null,
-        )
+            props.error ? h('div', { className: 'sm-form-error', style: { fontSize: 'calc(var(--sm-fs) - 2px)', color: 'var(--dsw-alias-state-error-primary)' } }, props.error) : null)
     }
 
     function SmBanner(props) {
-        const tone = props.tone || 'info'
+        const tone = props.tone === undefined || props.tone === null ? 'info' : String(props.tone)
         const color = tone === 'error'
             ? 'var(--dsw-alias-state-error-primary)'
-            : (tone === 'warn'
-                ? 'var(--dsw-alias-state-warn-primary)'
-                : (tone === 'ok' ? 'var(--dsw-alias-state-success-primary)' : 'var(--dsw-alias-brand-primary)'))
-        return h(
-            'div',
-            {
-                className: 'sm-banner sm-banner-' + tone,
-                style: {
-                    display: 'flex',
-                    flexDirection: 'column',
-                    gap: '4px',
-                    padding: '10px 14px',
-                    borderRadius: '12px',
-                    background: 'color-mix(in srgb, ' + color + ' 10%, transparent)',
-                    border: '1px solid color-mix(in srgb, ' + color + ' 28%, transparent)',
-                    color: 'var(--dsw-alias-label-secondary)',
-                    fontSize: 'calc(var(--sm-fs) - 2px)',
-                    lineHeight: '1.5',
-                },
-            },
-            props.children,
-        )
-    }
-
-    function SmRadioOptions(props) {
-        const options = Array.isArray(props.options) ? props.options : []
-        return h(
-            'div',
-            { style: { display: 'flex', flexDirection: 'column', gap: '6px' } },
-            options.map((option) => {
-                const selected = props.value === option.value
-                return h(
-                    'label',
-                    {
-                        key: option.value,
-                        style: {
-                            display: 'flex',
-                            alignItems: 'flex-start',
-                            gap: '8px',
-                            padding: '8px 10px',
-                            borderRadius: '10px',
-                            border: '1px solid ' + (selected ? 'var(--dsw-alias-brand-primary)' : 'var(--dsw-alias-border-l2)'),
-                            background: selected ? 'color-mix(in srgb, var(--dsw-alias-brand-primary) 8%, transparent)' : 'var(--dsw-alias-bg-base)',
-                            color: 'var(--dsw-alias-label-primary)',
-                            fontSize: 'calc(var(--sm-fs) - 1px)',
-                            opacity: option.disabled === true ? 0.5 : 1,
-                            cursor: option.disabled === true ? 'not-allowed' : 'pointer',
-                        },
-                    },
-                    h('input', {
-                        type: 'radio',
-                        name: props.name || 'sm-radio',
-                        value: option.value,
-                        checked: selected,
-                        disabled: option.disabled === true,
-                        onChange: () => {
-                            if (option.disabled !== true && typeof props.onChange === 'function') props.onChange(option.value)
-                        },
-                        style: { marginTop: '2px', flexShrink: 0 },
-                    }),
-                    h(
-                        'span',
-                        { style: { display: 'flex', flexDirection: 'column', gap: '2px', minWidth: 0 } },
-                        h('span', { style: { wordBreak: 'break-word' } }, option.label),
-                        option.hint ? h('span', { style: { color: 'var(--dsw-alias-label-caption)', fontSize: 'calc(var(--sm-fs) - 3px)' } }, option.hint) : null,
-                    ),
-                )
-            }),
-        )
+            : (tone === 'warn' ? 'var(--dsw-alias-state-warn-primary)' : (tone === 'ok' ? 'var(--dsw-alias-state-success-primary)' : 'var(--dsw-alias-label-secondary)'))
+        return h('div', {
+            className: 'sm-banner sm-banner-' + tone,
+            style: { display: 'flex', flexDirection: 'column', gap: '4px', padding: '10px 14px', borderRadius: '12px', background: 'var(--dsw-alias-bg-layer-2)', border: '1px solid ' + color, color: 'var(--dsw-alias-label-secondary)', fontSize: 'calc(var(--sm-fs) - 2px)', lineHeight: '1.5' },
+        }, props.children)
     }
 
     function SmSegmented(props) {
         const options = Array.isArray(props.options) ? props.options : []
-        return h(
-            'div',
-            { style: { display: 'inline-flex', gap: '2px', padding: '2px', borderRadius: '14px', background: 'var(--dsw-alias-bg-layer-3)', alignSelf: 'flex-start' } },
-            options.map((option) => {
+        return h('div', { role: 'tablist', style: { display: 'inline-flex', gap: '2px', padding: '2px', borderRadius: '14px', background: 'var(--dsw-alias-bg-layer-3)', alignSelf: 'flex-start' } },
+            options.map(function (option) {
                 const selected = props.value === option.value
-                return h(
-                    'button',
-                    {
-                        key: option.value,
-                        type: 'button',
-                        'aria-selected': selected,
-                        onClick: () => {
-                            if (typeof props.onChange === 'function') props.onChange(option.value)
-                        },
-                        style: {
-                            height: '30px',
-                            padding: '0 12px',
-                            border: 'none',
-                            borderRadius: '12px',
-                            cursor: 'pointer',
-                            background: selected ? 'var(--dsw-alias-bg-layer-1)' : 'transparent',
-                            color: selected ? 'var(--dsw-alias-label-primary)' : 'var(--dsw-alias-label-secondary)',
-                            fontSize: 'calc(var(--sm-fs) - 1px)',
-                            fontWeight: selected ? 500 : 400,
-                        },
+                return h('button', {
+                    key: option.value,
+                    type: 'button',
+                    role: 'tab',
+                    'aria-selected': selected,
+                    disabled: option.disabled === true,
+                    onClick: function () {
+                        if (option.disabled === true) return
+                        if (typeof props.onChange === 'function') props.onChange(option.value)
                     },
-                    option.label,
-                )
-            }),
-        )
+                    style: { height: '28px', padding: '0 10px', border: 'none', borderRadius: '14px', cursor: option.disabled === true ? 'not-allowed' : 'pointer', background: selected ? 'var(--dsw-alias-interactive-bg-hover)' : 'transparent', color: selected ? 'var(--dsw-alias-label-primary)' : 'var(--dsw-alias-label-tertiary)', fontSize: 'calc(var(--sm-fs) - 1px)', fontWeight: selected ? 500 : 400, opacity: option.disabled === true ? 0.5 : 1 },
+                }, option.label)
+            }))
     }
 
-    function SmFooter(props) {
-        return h(
-            Fragment,
-            null,
-            h(SmButton, { tone: 'secondary', onClick: closeModal }, t('action.cancel')),
-            props.children,
-        )
+    function SmRadioOptions(props) {
+        const options = Array.isArray(props.options) ? props.options : []
+        return h('div', { style: { display: 'flex', flexDirection: 'column', gap: '6px' } },
+            options.map(function (option) {
+                const selected = props.value === option.value
+                return h('label', {
+                    key: option.value,
+                    style: { display: 'flex', alignItems: 'flex-start', gap: '8px', padding: '8px 10px', borderRadius: '10px', border: '1px solid ' + (selected ? 'var(--dsw-alias-border-inverted)' : 'var(--dsw-alias-border-l2)'), background: selected ? 'var(--dsw-alias-interactive-bg-hover)' : 'var(--dsw-alias-bg-base)', color: 'var(--dsw-alias-label-primary)', fontSize: 'calc(var(--sm-fs) - 1px)', opacity: option.disabled === true ? 0.5 : 1, cursor: option.disabled === true ? 'not-allowed' : 'pointer' },
+                },
+                h('input', {
+                    type: 'radio',
+                    name: props.name || 'sm-radio',
+                    value: option.value,
+                    checked: selected,
+                    disabled: option.disabled === true,
+                    onChange: function () {
+                        if (option.disabled !== true && typeof props.onChange === 'function') props.onChange(option.value)
+                    },
+                    style: { marginTop: '2px', flexShrink: 0 },
+                }),
+                h('span', { style: { display: 'flex', flexDirection: 'column', gap: '2px', minWidth: 0 } },
+                    h('span', { style: { wordBreak: 'break-word' } }, option.label),
+                    option.hint ? h('span', { style: { color: 'var(--dsw-alias-label-caption)', fontSize: 'calc(var(--sm-fs) - 3px)' } }, option.hint) : null))
+            }))
+    }
+
+    function smSaveTargetCategory(location) {
+        if (location === 'user-agents') return 'shared'
+        if (location === 'project-dsh') return 'project'
+        return 'mine'
+    }
+
+    function smNameTaken(name, location) {
+        const category = smSaveTargetCategory(location)
+        return smSkillList().some(function (skill) {
+            return skill !== null && typeof skill === 'object' && skill.name === name && smSkillCategory(skill) === category
+        })
+    }
+
+    function smDefaultLocation(payload) {
+        if (payload !== null && typeof payload === 'object') {
+            if (typeof payload.location === 'string' && payload.location !== '') return payload.location
+            if (payload.category === 'shared') return 'user-agents'
+            if (payload.category === 'project') return 'project-dsh'
+        }
+        return 'user-dsh'
     }
 
     /* ------------------------------------------------------------------ *
-     * 1. New skill.                                                      *
+     * 1. 新建技能（488）                                                 *
      * ------------------------------------------------------------------ */
 
     function SmNewSkillModal(props) {
+        const payload = props.payload
         const [name, setName] = useState('')
         const [description, setDescription] = useState('')
         const [whenToUse, setWhenToUse] = useState('')
         const [body, setBody] = useState('')
-        const [location, setLocation] = useState('user-dsh')
+        const [location, setLocation] = useState(smDefaultLocation(payload))
         const [busy, setBusy] = useState(false)
         const [serverError, setServerError] = useState('')
 
         const trimmedName = name.trim()
         let nameError = ''
-        if (trimmedName !== '' && (!SM_NAME_PATTERN.test(trimmedName) || trimmedName.length > 64)) {
-            nameError = t('form.nameInvalid')
-        } else if (trimmedName !== '' && smSkillList().some((skill) => skill && skill.name === trimmedName && skill.location === location && skill.status !== 'disabled')) {
-            nameError = t('form.nameTaken')
-        }
-        const canSubmit = trimmedName !== ''
-            && nameError === ''
-            && description.trim() !== ''
-            && body.trim() !== ''
-            && !smLocationDisabled(location)
-            && !busy
+        if (trimmedName !== '' && (!SM_NAME_PATTERN.test(trimmedName) || trimmedName.length > 64)) nameError = t('form.name.invalid')
+        else if (trimmedName !== '' && smNameTaken(trimmedName, location)) nameError = t('form.name.taken')
+        const projectBlocked = location === 'project-dsh' && !smProjectAvailable()
+        const canSubmit = trimmedName !== '' && nameError === '' && description.trim() !== '' && body.trim() !== '' && !projectBlocked && !busy
 
-        async function submit() {
+        const submit = async function () {
             if (!canSubmit) return
             setBusy(true)
             setServerError('')
-            const payload = { location: location, name: trimmedName, description: description.trim(), body: body }
-            if (whenToUse.trim() !== '') payload.whenToUse = whenToUse.trim()
+            const request = { location: location, name: trimmedName, description: description.trim(), body: body }
+            if (whenToUse.trim() !== '') request.whenToUse = whenToUse.trim()
             try {
-                const result = await api('/skill', { method: 'POST', body: payload })
+                await api('skill', { method: 'POST', body: request })
                 setBusy(false)
-                smPushToast(t('toast.created', { name: trimmedName }))
+                toast(t('toast.created', { name: trimmedName }))
                 closeModal()
-                setState({
-                    tab: 'installed',
-                    view: 'list',
-                    detail: null,
-                    highlightId: result !== null && result !== undefined && result.skill !== undefined ? result.skill.id : null,
-                })
+                setState({ tab: 'skills', category: smSaveTargetCategory(location), view: 'list', detail: null })
                 void loadInstalled(true)
             } catch (failure) {
                 setBusy(false)
@@ -784,80 +642,77 @@
             }
         }
 
-        return h(
-            SmDialogFrame,
-            {
-                isTop: props.isTop,
-                title: t('action.newSkill'),
-                footer: h(SmFooter, null, h(SmButton, { tone: 'primary', disabled: !canSubmit, onClick: () => { void submit() } }, t('form.create'))),
+        return h(SmDialogFrame, {
+            modalId: props.modalId,
+            isTop: props.isTop,
+            layerIndex: props.layerIndex,
+            width: 488,
+            title: t('form.new.title'),
+            footer: h(SmFooter, null, h(SmButton, { tone: 'primary', disabled: !canSubmit, onClick: function () { void submit() } }, t('action.create'))),
+            onKeyDown: function (event) {
+                if ((event.metaKey || event.ctrlKey) && event.key === 'Enter') {
+                    event.preventDefault()
+                    void submit()
+                    return true
+                }
+                return false
             },
-            serverError !== '' ? h(SmBanner, { tone: 'error' }, serverError) : null,
-            h(SmField, { label: t('form.name'), hint: t('form.nameHint'), error: nameError },
-                h('input', {
-                    type: 'text',
-                    className: 'sm-mono',
-                    value: name,
-                    placeholder: 'code-review',
-                    onChange: (event) => {
-                        setName(event.target.value)
-                        setServerError('')
-                    },
-                    style: Object.assign({}, SM_INPUT_STYLE, { fontFamily: SM_MONO }),
-                }),
-            ),
-            h(SmField, { label: t('form.description'), hint: t('form.descriptionHint') },
-                h('input', {
-                    type: 'text',
-                    value: description,
-                    placeholder: '',
-                    onChange: (event) => {
-                        setDescription(event.target.value)
-                        setServerError('')
-                    },
-                    style: SM_INPUT_STYLE,
-                }),
-            ),
-            h(SmField, { label: t('form.whenToUse'), hint: t('form.whenToUseHint') },
-                h('input', {
-                    type: 'text',
-                    value: whenToUse,
-                    placeholder: '',
-                    onChange: (event) => setWhenToUse(event.target.value),
-                    style: SM_INPUT_STYLE,
-                }),
-            ),
-            h(SmField, { label: t('detail.location') },
-                h(SmRadioOptions, { name: 'new-skill-location', value: location, onChange: setLocation, options: smLocationOptions() }),
-            ),
-            h(SmField, { label: t('form.body'), hint: t('form.bodyHint') },
-                h('textarea', {
-                    value: body,
-                    placeholder: '',
-                    onChange: (event) => setBody(event.target.value),
-                    style: Object.assign({}, SM_TEXTAREA_STYLE, { minHeight: '140px' }),
-                }),
-            ),
-        )
+        },
+        serverError !== '' ? h(SmBanner, { tone: 'error' }, serverError) : null,
+        h(SmField, { label: t('form.name'), hint: t('form.name.placeholder'), error: nameError },
+            h('input', {
+                type: 'text',
+                className: 'sm-mono',
+                value: name,
+                placeholder: t('form.name.placeholder'),
+                onChange: function (event) { setName(event.target.value); setServerError('') },
+                style: Object.assign({}, SM_INPUT_STYLE, { fontFamily: SM_MONO }),
+            })),
+        h(SmField, { label: t('form.description') },
+            h('input', {
+                type: 'text',
+                value: description,
+                placeholder: t('form.description.placeholder'),
+                onChange: function (event) { setDescription(event.target.value); setServerError('') },
+                style: SM_INPUT_STYLE,
+            })),
+        h(SmField, { label: t('form.whenToUse') },
+            h('input', {
+                type: 'text',
+                value: whenToUse,
+                onChange: function (event) { setWhenToUse(event.target.value) },
+                style: SM_INPUT_STYLE,
+            })),
+        h(SmField, { label: t('form.saveTo') },
+            h(SmSegmented, { value: location, onChange: setLocation, options: smSaveTargets() }),
+            projectBlocked ? h('div', { style: { color: 'var(--dsw-alias-label-caption)', fontSize: 'calc(var(--sm-fs) - 3px)' } }, t('form.projectUnavailable')) : null),
+        h(SmField, { label: t('form.body') },
+            h('textarea', {
+                value: body,
+                placeholder: t('form.body.placeholder'),
+                onChange: function (event) { setBody(event.target.value); setServerError('') },
+                style: Object.assign({}, SM_TEXTAREA_STYLE, { minHeight: '140px' }),
+            })))
     }
 
     /* ------------------------------------------------------------------ *
-     * 2. Import skill.                                                   *
+     * 2. 导入技能（488）                                                 *
      * ------------------------------------------------------------------ */
 
     function SmImportModal(props) {
         const [mode, setMode] = useState('paste')
         const [content, setContent] = useState('')
         const [dirPath, setDirPath] = useState('')
-        const [location, setLocation] = useState('user-dsh')
+        const [location, setLocation] = useState(smDefaultLocation(props.payload))
         const [parsed, setParsed] = useState(null)
         const [parseError, setParseError] = useState('')
         const [parsing, setParsing] = useState(false)
         const [busy, setBusy] = useState(false)
         const [serverError, setServerError] = useState('')
 
-        async function parse() {
+        const parse = async function () {
             if (content.trim() === '') {
-                setParseError(t('form.bodyRequired'))
+                setParseError(t('form.body.required'))
                 setParsed(null)
                 return
             }
@@ -865,12 +720,9 @@
             setParseError('')
             setParsed(null)
             try {
-                const result = await api('/validate', { method: 'POST', body: { content: content } })
-                if (result !== null && result !== undefined && result.valid === true) {
-                    setParsed(result)
-                } else {
-                    setParseError(result !== null && result !== undefined && typeof result.error === 'string' && result.error !== '' ? result.error : t('import.parseFail', { reason: t('error.generic') }))
-                }
+                const result = await api('validate', { method: 'POST', body: { content: content } })
+                if (result !== null && typeof result === 'object' && result.valid === true) setParsed(result)
+                else setParseError(t('form.import.invalid', { reason: result !== null && typeof result === 'object' && typeof result.error === 'string' ? result.error : t('error.unexpected') }))
             } catch (failure) {
                 setParseError(smErrorMessage(failure))
             } finally {
@@ -878,30 +730,22 @@
             }
         }
 
-        const canSubmit = mode === 'paste'
-            ? content.trim() !== '' && !busy
-            : dirPath.trim() !== '' && !busy
-
-        async function submit() {
+        const canSubmit = (mode === 'paste' ? content.trim() !== '' : dirPath.trim() !== '') && !busy
+        const submit = async function () {
             if (!canSubmit) return
             setBusy(true)
             setServerError('')
-            const payload = { mode: mode, location: location }
-            if (mode === 'paste') payload.content = content
-            else payload.dirPath = dirPath.trim()
+            const request = { mode: mode, location: location }
+            if (mode === 'paste') request.content = content
+            else request.dirPath = dirPath.trim()
             try {
-                const result = await api('/import', { method: 'POST', body: payload })
-                const imported = result !== null && result !== undefined && result.skill !== undefined && result.skill !== null ? result.skill : null
-                const files = result !== null && result !== undefined && typeof result.files === 'number' ? result.files : 0
+                const result = await api('import', { method: 'POST', body: request })
+                const imported = result !== null && typeof result === 'object' && result.skill !== undefined && result.skill !== null ? result.skill : null
+                const files = result !== null && typeof result === 'object' && typeof result.files === 'number' ? result.files : 0
                 setBusy(false)
-                smPushToast(t('toast.imported', { name: imported !== null ? smText(imported.name) : '', count: files }))
+                toast(t('toast.imported', { name: imported !== null ? smText(imported.name) : '', count: files }))
                 closeModal()
-                setState({
-                    tab: 'installed',
-                    view: 'list',
-                    detail: null,
-                    highlightId: imported !== null ? imported.id : null,
-                })
+                setState({ tab: 'skills', category: smSaveTargetCategory(location), view: 'list', detail: null })
                 void loadInstalled(true)
             } catch (failure) {
                 setBusy(false)
@@ -909,200 +753,215 @@
             }
         }
 
-        return h(
-            SmDialogFrame,
-            {
-                isTop: props.isTop,
-                title: t('import.title'),
-                footer: h(SmFooter, null, h(SmButton, { tone: 'primary', disabled: !canSubmit, onClick: () => { void submit() } }, t('import.confirm'))),
+        return h(SmDialogFrame, {
+            modalId: props.modalId,
+            isTop: props.isTop,
+            layerIndex: props.layerIndex,
+            width: 488,
+            title: t('form.import.title'),
+            footer: h(SmFooter, null, h(SmButton, { tone: 'primary', disabled: !canSubmit, onClick: function () { void submit() } }, t('action.import'))),
+            onKeyDown: function (event) {
+                if ((event.metaKey || event.ctrlKey) && event.key === 'Enter') {
+                    event.preventDefault()
+                    void submit()
+                    return true
+                }
+                return false
             },
-            serverError !== '' ? h(SmBanner, { tone: 'error' }, serverError) : null,
-            h(SmSegmented, {
-                value: mode,
-                onChange: (value) => {
-                    setMode(value)
-                    setParseError('')
+        },
+        serverError !== '' ? h(SmBanner, { tone: 'error' }, serverError) : null,
+        h(SmSegmented, {
+            value: mode,
+            onChange: function (value) { setMode(value); setParseError(''); setParsed(null) },
+            options: [
+                { value: 'paste', label: t('form.import.paste') },
+                { value: 'dir', label: t('form.import.dir') },
+            ],
+        }),
+        mode === 'paste'
+            ? h(Fragment, null,
+                h(SmField, {
+                    label: t('form.import.paste'),
+                    hint: h('button', {
+                        type: 'button',
+                        className: 'sm-link-btn',
+                        onClick: function () { void parse() },
+                        style: { height: '24px', padding: '0 6px', border: 'none', background: 'transparent', color: 'var(--dsw-alias-label-primary)', fontSize: 'calc(var(--sm-fs) - 2px)', cursor: 'pointer' },
+                    }, parsing ? t('state.validating') : t('action.parse')),
                 },
-                options: [
-                    { value: 'paste', label: t('import.paste') },
-                    { value: 'dir', label: t('import.dir') },
-                ],
-            }),
-            mode === 'paste'
-                ? h(
-                    Fragment,
-                    null,
-                    h(SmField, {
-                        label: t('import.pasteLabel'),
-                        hint: h('button', {
-                            type: 'button',
-                            className: 'sm-link-btn',
-                            onClick: () => { void parse() },
-                            style: {
-                                height: '24px',
-                                padding: '0 6px',
-                                border: 'none',
-                                background: 'transparent',
-                                color: 'var(--dsw-alias-brand-primary)',
-                                fontSize: 'calc(var(--sm-fs) - 2px)',
-                                cursor: 'pointer',
-                            },
-                        }, parsing ? t('import.parsing') : t('import.parse')),
-                    },
-                        h('textarea', {
-                            value: content,
-                            placeholder: '',
-                            onChange: (event) => {
-                                setContent(event.target.value)
-                                setParsed(null)
-                                setParseError('')
-                            },
-                            style: Object.assign({}, SM_TEXTAREA_STYLE, { minHeight: '160px' }),
-                        }),
-                    ),
-                    parseError !== '' ? h(SmBanner, { tone: 'error' }, parseError) : null,
-                    parsed !== null
-                        ? h(SmBanner, { tone: 'ok' },
-                            h('span', { style: { color: 'var(--dsw-alias-state-success-primary)', fontWeight: 500 } }, '✓ ' + t('import.parseOk')),
-                            h('span', null, t('form.name') + ': ' + smText(parsed.name, '—')),
-                            h('span', null, t('form.description') + ': ' + smText(parsed.description, '—')),
-                        )
-                        : null,
-                )
-                : h(
-                    Fragment,
-                    null,
-                    h(SmField, { label: t('import.dirLabel') },
-                        h('input', {
-                            type: 'text',
-                            className: 'sm-mono',
-                            value: dirPath,
-                            placeholder: '',
-                            onChange: (event) => setDirPath(event.target.value),
-                            style: Object.assign({}, SM_INPUT_STYLE, { fontFamily: SM_MONO }),
-                        }),
-                    ),
-                    h(SmBanner, { tone: 'info' }, t('import.dirFilesHint')),
-                ),
-            h(SmField, { label: t('import.target') },
-                h(SmRadioOptions, { name: 'import-location', value: location, onChange: setLocation, options: smLocationOptions() }),
-            ),
-        )
+                h('textarea', {
+                    value: content,
+                    placeholder: t('form.import.paste.placeholder'),
+                    onChange: function (event) { setContent(event.target.value); setParsed(null); setParseError('') },
+                    style: Object.assign({}, SM_TEXTAREA_STYLE, { minHeight: '160px' }),
+                })),
+                parseError !== '' ? h(SmBanner, { tone: 'error' }, parseError) : null,
+                parsed !== null
+                    ? h(SmBanner, { tone: 'ok' },
+                        h('span', { style: { color: 'var(--dsw-alias-state-success-primary)', fontWeight: 500 } }, t('form.import.parsed')),
+                        h('span', null, t('form.name') + ': ' + smText(parsed.name, '—')),
+                        h('span', null, t('form.description') + ': ' + smText(parsed.description, '—')),
+                        typeof parsed.files === 'number' ? h('span', null, t('form.import.preview', { count: parsed.files })) : null)
+                    : null)
+            : h(Fragment, null,
+                h(SmField, { label: t('form.import.dir') },
+                    h('input', {
+                        type: 'text',
+                        className: 'sm-mono',
+                        value: dirPath,
+                        placeholder: t('form.import.dir.placeholder'),
+                        onChange: function (event) { setDirPath(event.target.value) },
+                        style: Object.assign({}, SM_INPUT_STYLE, { fontFamily: SM_MONO }),
+                    }))),
+        h(SmField, { label: t('form.saveTo') },
+            h(SmSegmented, { value: location, onChange: setLocation, options: smSaveTargets() })))
     }
 
     /* ------------------------------------------------------------------ *
-     * 3. Market install (target + version + conflict + progress).        *
+     * 3. 安装技能（488）                                                 *
      * ------------------------------------------------------------------ */
 
     function SmInstallModal(props) {
         const payload = props.payload !== null && typeof props.payload === 'object' ? props.payload : {}
-        const [market, setMarket] = useState(() => smMarketFromPayload(payload))
+        const initialMarket = payload.skill !== null && typeof payload.skill === 'object' ? payload.skill : null
+        const [market, setMarket] = useState(initialMarket)
         const [versions, setVersions] = useState([])
-        const [loading, setLoading] = useState(() => smMarketFromPayload(payload) === null)
+        const [loading, setLoading] = useState(initialMarket === null)
         const [loadError, setLoadError] = useState('')
         const [reloadTick, setReloadTick] = useState(0)
-        const [location, setLocation] = useState('user-dsh')
-        const [version, setVersion] = useState(() => {
-            const cached = smMarketFromPayload(payload)
-            return smText(payload.version, cached !== null ? smText(cached.version) : '')
-        })
-        const [conflictChoice, setConflictChoice] = useState('overwrite')
+        const [location, setLocation] = useState(smDefaultLocation(payload))
+        const [conflictChoice, setConflictChoice] = useState('')
         const [busy, setBusy] = useState(false)
         const [stage, setStage] = useState(0)
         const [error, setError] = useState('')
+        const [confirmCancel, setConfirmCancel] = useState(false)
         const timerRef = useRef(null)
+        const abortRef = useRef(null)
+        const canceledRef = useRef(false)
 
-        useEffect(() => {
+        smUseModalGuard(props.modalId, function () {
+            if (confirmCancel) {
+                setConfirmCancel(false)
+                return true
+            }
+            if (!busy) return false
+            setConfirmCancel(true)
+            return true
+        })
+
+        useEffect(function () {
             if (market !== null) return undefined
             let alive = true
-            async function load() {
-                setLoading(true)
-                setLoadError('')
-                const sourceId = smText(payload.sourceId)
-                const name = smText(payload.name)
-                if (sourceId === '' || name === '') {
-                    setLoading(false)
-                    setLoadError(t('install.failed', { reason: t('error.notFound') }))
-                    return
-                }
-                try {
-                    const data = await api('/market/skill?sourceId=' + encodeURIComponent(sourceId) + '&name=' + encodeURIComponent(name))
-                    if (!alive) return
-                    const skill = data !== null && data !== undefined && data.skill !== undefined ? data.skill : null
-                    setMarket(skill)
-                    setVersions(data !== null && data !== undefined && Array.isArray(data.versions) ? data.versions : [])
-                    if (skill !== null && version === '') setVersion(smText(skill.version))
-                    setLoading(false)
-                } catch (failure) {
-                    if (!alive) return
-                    setLoadError(smErrorMessage(failure))
-                    setLoading(false)
-                }
+            const sourceId = smText(payload.sourceId)
+            const name = smText(payload.name)
+            if (sourceId === '' || name === '') {
+                setLoading(false)
+                setLoadError(t('install.unavailable'))
+                return undefined
             }
-            void load()
-            return () => {
-                alive = false
-            }
+            setLoading(true)
+            setLoadError('')
+            api('market/skill?sourceId=' + encodeURIComponent(sourceId) + '&name=' + encodeURIComponent(name)).then(function (data) {
+                if (!alive) return
+                setMarket(data !== null && typeof data === 'object' && data.skill !== undefined ? data.skill : null)
+                setVersions(data !== null && typeof data === 'object' && Array.isArray(data.versions) ? data.versions : [])
+                setLoading(false)
+            }).catch(function (failure) {
+                if (!alive) return
+                setLoadError(smErrorMessage(failure))
+                setLoading(false)
+            })
+            return function () { alive = false }
         }, [reloadTick])
 
-        useEffect(() => () => {
-            if (timerRef.current !== null) clearInterval(timerRef.current)
+        useEffect(function () {
+            return function () {
+                if (timerRef.current !== null) clearInterval(timerRef.current)
+                if (abortRef.current !== null) abortRef.current.abort()
+            }
         }, [])
 
-        const conflict = market !== null && smSkillList().some((skill) => skill && skill.name === market.name && skill.location === location && skill.status !== 'disabled')
+        const version = market !== null ? smText(market.version) : ''
+        const conflict = market !== null && smSkillList().some(function (skill) {
+            return skill !== null && typeof skill === 'object' && skill.name === market.name && smSkillCategory(skill) === smSaveTargetCategory(location)
+        })
 
-        const versionOptions = versions.length > 0
-            ? versions
-            : (market !== null ? [{ version: market.version, publishTimestamp: market.publishTimestamp, enginesDsh: market.enginesDsh, yanked: false }] : [])
-
-        function changeLocation() {
+        const changeLocation = function () {
             if (market === null) return
-            for (let index = 0; index < SM_TARGET_LOCATIONS.length; index += 1) {
-                const candidate = SM_TARGET_LOCATIONS[index]
+            const candidates = ['user-dsh', 'user-agents', 'project-dsh']
+            for (let index = 0; index < candidates.length; index += 1) {
+                const candidate = candidates[index]
                 if (candidate === location) continue
-                if (smLocationDisabled(candidate)) continue
-                const taken = smSkillList().some((skill) => skill && skill.name === market.name && skill.location === candidate && skill.status !== 'disabled')
+                if (candidate === 'project-dsh' && !smProjectAvailable()) continue
+                const taken = smSkillList().some(function (skill) {
+                    return skill !== null && typeof skill === 'object' && skill.name === market.name && smSkillCategory(skill) === smSaveTargetCategory(candidate)
+                })
                 if (!taken) {
                     setLocation(candidate)
-                    setConflictChoice('overwrite')
+                    setConflictChoice('')
                     return
                 }
             }
-            smPushToast(t('install.noFreeLocation'), { tone: 'error' })
+            toast(t('error.pathOutside'), { tone: 'error' })
         }
 
-        async function submit() {
+        const cancelInstall = function () {
+            canceledRef.current = true
+            if (abortRef.current !== null) {
+                abortRef.current.abort()
+                abortRef.current = null
+            }
+            if (timerRef.current !== null) {
+                clearInterval(timerRef.current)
+                timerRef.current = null
+            }
+            setBusy(false)
+            setStage(0)
+            setConfirmCancel(false)
+            setError(t('error.canceled'))
+        }
+
+        const submit = async function () {
             if (market === null || busy) return
+            if (conflict && conflictChoice === '') return
+            canceledRef.current = false
             setBusy(true)
-            setStage(1)
+            setStage(0)
             setError('')
+            setConfirmCancel(false)
             if (timerRef.current !== null) clearInterval(timerRef.current)
-            timerRef.current = setInterval(() => {
-                setStage((previous) => (previous < 2 ? previous + 1 : previous))
+            timerRef.current = setInterval(function () {
+                setStage(function (previous) { return previous < 1 ? previous + 1 : previous })
             }, 700)
+            const controller = new AbortController()
+            abortRef.current = controller
+            const request = { sourceId: market.sourceId, name: market.name, version: version, location: location }
+            if (conflict) request.conflict = conflictChoice === 'skip' ? 'skip' : 'overwrite'
             try {
-                const body = {
-                    sourceId: market.sourceId,
-                    name: market.name,
-                    version: version,
-                    location: location,
-                }
-                if (conflict) body.conflict = conflictChoice === 'skip' ? 'skip' : 'overwrite'
-                const result = await api('/market/install', { method: 'POST', body: body })
+                const result = await api('market/install', { method: 'POST', body: request, signal: controller.signal })
                 if (timerRef.current !== null) {
                     clearInterval(timerRef.current)
                     timerRef.current = null
                 }
+                abortRef.current = null
                 setBusy(false)
                 setStage(2)
-                smPushToast(t('install.success', { name: market.name }))
-                closeModal()
-                setState({
-                    tab: 'installed',
-                    view: 'list',
-                    detail: null,
-                    highlightId: result !== null && result !== undefined && result.skill !== undefined ? result.skill.id : null,
+                const created = result !== null && typeof result === 'object' && result.skill !== undefined ? result.skill : null
+                toast(t('install.success', { name: market.name }), {
+                    actionLabel: t('action.viewInstalled'),
+                    onAction: function () {
+                        const category = smSaveTargetCategory(location)
+                        void loadInstalled(true).then(function () {
+                            if (created !== null && typeof created === 'object' && typeof created.id === 'string') {
+                                setState({ tab: 'skills', category: category, view: 'detail', detail: { kind: 'installed', id: created.id } })
+                            } else {
+                                setState({ tab: 'skills', category: category, view: 'list', detail: null })
+                            }
+                        })
+                    },
                 })
+                closeModal()
+                setState({ tab: 'skills', category: smSaveTargetCategory(location), view: 'list', detail: null })
                 void loadInstalled(true)
                 void loadMarket()
             } catch (failure) {
@@ -1110,389 +969,307 @@
                     clearInterval(timerRef.current)
                     timerRef.current = null
                 }
+                abortRef.current = null
                 setBusy(false)
-                setError(smErrorMessage(failure))
+                setStage(0)
+                if (canceledRef.current === true || (failure !== null && typeof failure === 'object' && failure.code === 'E_CANCELED')) {
+                    setError(t('error.canceled'))
+                } else {
+                    setError(smErrorMessage(failure))
+                }
             }
         }
 
         if (loading) {
-            return h(
-                SmDialogFrame,
-                { isTop: props.isTop, title: t('install.title'), footer: h(SmFooter, null) },
-                h('div', { style: { color: 'var(--dsw-alias-label-secondary)', fontSize: 'calc(var(--sm-fs) - 1px)' } }, t('state.loading')),
-            )
+            return h(SmDialogFrame, { modalId: props.modalId, isTop: props.isTop, layerIndex: props.layerIndex, width: 488, title: t('install.title'), footer: h(SmFooter, null) },
+                h('div', { style: { color: 'var(--dsw-alias-label-secondary)', fontSize: 'calc(var(--sm-fs) - 1px)' } }, t('state.loading')))
         }
-
         if (market === null) {
-            return h(
-                SmDialogFrame,
-                { isTop: props.isTop, title: t('install.title'), footer: h(SmFooter, null, h(SmButton, { tone: 'secondary', onClick: () => setReloadTick((value) => value + 1) }, t('action.retry'))) },
-                h(SmBanner, { tone: 'error' }, loadError !== '' ? loadError : t('error.notFound')),
-            )
+            return h(SmDialogFrame, { modalId: props.modalId, isTop: props.isTop, layerIndex: props.layerIndex, width: 488, title: t('install.title'), footer: h(SmFooter, null, h(SmButton, { tone: 'secondary', onClick: function () { setReloadTick(function (value) { return value + 1 }) } }, t('action.retry'))) },
+                h(SmBanner, { tone: 'error' }, loadError !== '' ? loadError : t('install.unavailable')))
         }
 
-        const stageLabels = [t('install.stageDownload'), t('install.stageVerify'), t('install.stageWrite')]
-        const pct = stage <= 0 ? 8 : (stage === 1 ? 42 : (stage === 2 ? 88 : 100))
+        const stageLabel = stage === 0 ? t('install.progress.preparing') : t('install.progress.verifying')
 
-        return h(
-            SmDialogFrame,
-            {
-                isTop: props.isTop,
-                title: t('install.title') + ' · ' + market.name,
-                footer: h(SmFooter, null, h(SmButton, { tone: 'primary', disabled: busy, onClick: () => { void submit() } }, busy ? (t('install.button') + '…') : t('install.button'))),
-            },
-            error !== '' ? h(SmBanner, { tone: 'error' }, error) : null,
-            h(SmField, { label: t('install.target') },
-                h(SmRadioOptions, { name: 'install-location', value: location, onChange: setLocation, options: smLocationOptions() }),
-            ),
-            h(SmField, { label: t('install.version') },
-                h('select', {
-                    value: version,
-                    onChange: (event) => setVersion(event.target.value),
-                    style: SM_SELECT_STYLE,
-                }, versionOptions.map((item) => h(
-                    'option',
-                    { key: item.version, value: item.version, disabled: item.yanked === true },
-                    'v' + item.version + (item.yanked === true ? ' (' + t('install.yanked') + ')' : '') + (typeof item.publishTimestamp === 'number' ? ' · ' + fmtTime(item.publishTimestamp) : ''),
-                ))),
-            ),
-            h(
-                'div',
-                { style: { display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '12px', padding: '10px 12px', borderRadius: '12px', background: 'var(--dsw-alias-bg-base)', border: '1px solid var(--dsw-alias-border-l1)', color: 'var(--dsw-alias-label-secondary)', fontSize: 'calc(var(--sm-fs) - 2px)' } },
-                h('span', null,
-                    h('span', { style: { color: 'var(--dsw-alias-label-caption)' } }, t('install.version') + ': '),
-                    h('span', { className: 'sm-mono', style: { color: 'var(--dsw-alias-label-primary)' } }, 'v' + smText(version, market.version)),
-                    typeof market.commit === 'string' && market.commit !== ''
-                        ? h('span', { className: 'sm-mono', style: { marginLeft: '6px', color: 'var(--dsw-alias-label-caption)' } }, '(' + market.commit.slice(0, 7) + ')')
-                        : null,
-                ),
-                h('span', null, t('detail.files') + ': ' + String(Array.isArray(market.files) ? market.files.length : 0)),
-            ),
-            conflict
-                ? h(SmBanner, { tone: 'warn' },
-                    h('span', { style: { color: 'var(--dsw-alias-state-warn-primary)', fontWeight: 500 } }, '⚠ ' + t('install.conflict')),
-                    h(SmRadioOptions, {
-                        name: 'install-conflict',
-                        value: conflictChoice,
-                        onChange: setConflictChoice,
-                        options: [
-                            { value: 'overwrite', label: t('install.conflict.overwrite') },
-                            { value: 'skip', label: t('install.conflict.skip') },
-                        ],
-                    }),
-                    h(SmButton, { tone: 'secondary', style: { alignSelf: 'flex-start', height: '28px' }, onClick: changeLocation }, t('install.conflict.changeTarget')),
-                )
-                : null,
-            busy || stage > 0
-                ? h(
-                    'div',
-                    { style: { display: 'flex', flexDirection: 'column', gap: '8px', padding: '12px 14px', borderRadius: '12px', background: 'var(--dsw-alias-bg-base)', border: '1px solid var(--dsw-alias-border-l1)' } },
-                    h('div', { style: { display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '8px', color: 'var(--dsw-alias-label-secondary)', fontSize: 'calc(var(--sm-fs) - 2px)' } },
-                        h('span', null, stageLabels[Math.min(stage, stageLabels.length - 1)]),
-                        h('span', { className: 'sm-mono' }, String(pct) + '%'),
-                    ),
-                    h(
-                        'div',
-                        { role: 'progressbar', 'aria-valuenow': pct, 'aria-valuemin': 0, 'aria-valuemax': 100, style: { width: '100%', height: '6px', borderRadius: '999px', background: 'var(--dsw-alias-bg-layer-3)', overflow: 'hidden' } },
-                        h('div', { style: { width: String(pct) + '%', height: '100%', background: 'var(--dsw-alias-brand-primary)', transition: 'width 220ms' } }),
-                    ),
-                )
-                : null,
-        )
+        return h(SmDialogFrame, {
+            modalId: props.modalId,
+            isTop: props.isTop,
+            layerIndex: props.layerIndex,
+            width: 488,
+            title: t('install.title'),
+            subtitle: smText(market.name),
+            footer: busy
+                ? h(Fragment, null,
+                    h(SmButton, { tone: 'secondary', onClick: function () { setConfirmCancel(true) } }, t('action.cancel')),
+                    h(SmButton, { tone: 'primary', disabled: true }, t('state.installing')))
+                : h(SmFooter, null, h(SmButton, { tone: 'primary', disabled: conflict && conflictChoice === '', onClick: function () { void submit() } }, t('action.install'))),
+        },
+        error !== '' ? h(SmBanner, { tone: 'error' }, error) : null,
+        confirmCancel
+            ? h(SmBanner, { tone: 'warn' },
+                h('span', { style: { fontWeight: 500 } }, t('install.cancelConfirm.title')),
+                h('span', null, t('install.cancelConfirm.body')),
+                h('div', { style: { display: 'flex', gap: '8px', marginTop: '4px' } },
+                    h(SmButton, { tone: 'secondary', style: { height: '28px' }, onClick: function () { setConfirmCancel(false) } }, t('action.cancel')),
+                    h(SmButton, { tone: 'danger', style: { height: '28px' }, onClick: cancelInstall }, t('install.cancelConfirm.ok'))))
+            : null,
+        h(SmField, { label: t('install.target') },
+            h(SmSegmented, { value: location, onChange: function (value) { setLocation(value); setConflictChoice('') }, options: smSaveTargets() })),
+        h(SmField, { label: t('install.version') },
+            h('div', { className: 'sm-mono', style: { color: 'var(--dsw-alias-label-primary)', fontSize: 'calc(var(--sm-fs) - 1px)' } }, version === '' ? '—' : (version.charAt(0) === 'v' ? version : 'v' + version))),
+        conflict
+            ? h(SmBanner, { tone: 'warn' },
+                h('span', { style: { fontWeight: 500 } }, t('install.conflict')),
+                h(SmRadioOptions, {
+                    name: 'install-conflict',
+                    value: conflictChoice,
+                    onChange: setConflictChoice,
+                    options: [
+                        { value: 'overwrite', label: t('install.conflict.overwrite') },
+                        { value: 'skip', label: t('install.conflict.skip') },
+                    ],
+                }),
+                h(SmButton, { tone: 'secondary', style: { alignSelf: 'flex-start', height: '28px' }, onClick: changeLocation }, t('install.conflict.changeTarget')))
+            : null,
+        busy
+            ? h('div', { role: 'progressbar', 'aria-busy': 'true', style: { display: 'flex', flexDirection: 'column', gap: '6px', padding: '10px 12px', borderRadius: '12px', background: 'var(--dsw-alias-bg-base)', border: '1px solid var(--dsw-alias-border-l1)' } },
+                h('span', { style: { color: 'var(--dsw-alias-label-secondary)', fontSize: 'calc(var(--sm-fs) - 2px)' } }, stageLabel),
+                h('div', { style: { width: '100%', height: '6px', borderRadius: '999px', background: 'var(--dsw-alias-bg-layer-3)', overflow: 'hidden' } },
+                    h('div', { style: { width: stage === 0 ? '40%' : '82%', height: '100%', background: 'var(--dsw-alias-label-primary)', transition: 'width 220ms' } })))
+            : null)
     }
 
     /* ------------------------------------------------------------------ *
-     * 4. Manual update confirmation.                                     *
+     * 4. 更新确认（480，单个 / 全部）                                    *
      * ------------------------------------------------------------------ */
+
+    function smUpdateTargets(payload) {
+        const list = []
+        const push = function (skill) {
+            if (skill === null || typeof skill !== 'object') return
+            if (skill.status === 'disabled' || skill.writable === false || smIsBuiltin(skill)) return
+            if (smSkillUpdateVersion(skill) === '') return
+            if (list.some(function (item) { return item.id === skill.id })) return
+            list.push(skill)
+        }
+        if (payload !== null && typeof payload === 'object') {
+            if (Array.isArray(payload.skills)) payload.skills.forEach(push)
+            else if (payload.all === true) smSkillList().forEach(push)
+            else if (payload.skill !== null && payload.skill !== undefined) push(payload.skill)
+        }
+        return list
+    }
 
     function SmUpdateModal(props) {
         const payload = props.payload !== null && typeof props.payload === 'object' ? props.payload : {}
-        const payloadSkill = payload.skill !== null && typeof payload.skill === 'object' ? payload.skill : null
-        const payloadMarket = payloadSkill !== null && payloadSkill.market !== null && typeof payloadSkill.market === 'object' ? payloadSkill.market : null
-        const payloadSourceId = smText(payload.sourceId, payloadMarket !== null ? smText(payloadMarket.sourceId) : '')
-        const payloadName = smText(payload.name, payloadSkill !== null ? smText(payloadSkill.name) : '')
-        const payloadLocation = smText(payload.location, payloadSkill !== null ? smText(payloadSkill.location) : '')
-        const payloadHasSource = payloadSourceId !== ''
-        const payloadHasLocation = payloadLocation !== ''
-        /* 本地记录必须与 payload 的 sourceId + location 精确一致；记录本身缺
-           sourceId 时只允许 name + location 匹配，绝不跨源/跨位置取值。 */
-        const payloadRecordMatches = (record) => {
-            if (record === null || record === undefined || typeof record !== 'object') return false
-            if (payloadHasLocation && smText(record.location) !== payloadLocation) return false
-            const recordMarket = record.market !== null && typeof record.market === 'object' ? record.market : null
-            const recordSource = recordMarket !== null ? smText(recordMarket.sourceId) : ''
-            if (payloadHasSource && recordSource !== '' && recordSource !== payloadSourceId) return false
-            if (payloadHasSource && recordSource === '' && !payloadHasLocation) return false
-            return true
-        }
-        let skill = typeof smFindInstalledCopy === 'function'
-            ? smFindInstalledCopy(payloadName, payloadLocation, payloadSourceId)
-            : null
-        if (skill === null && payloadSkill !== null && payloadRecordMatches(payloadSkill)) skill = payloadSkill
-        if (skill === null && typeof payload.id === 'string' && payload.id !== '') {
-            const byId = smFindSkillById(payload.id)
-            if (byId !== null && payloadRecordMatches(byId)) skill = byId
-        }
-        const market = skill !== null && skill.market !== undefined && skill.market !== null ? skill.market : null
-
-        const sourceId = smText(payloadSourceId, market !== null ? smText(market.sourceId) : '')
-        const name = smText(payloadName, skill !== null ? smText(skill.name) : '')
-        const cached = smFindMarketSkill('', sourceId, name)
-        /* 解析不到精确记录时 available/current/location/commit 全部留空，
-           绝不复用其他来源或位置的版本、位置。 */
-        const location = skill !== null ? smText(skill.location) : ''
-        const resolvedSourceId = market !== null ? smText(market.sourceId) : ''
-        const updateVersion = skill !== null ? skillUpdateVersion(skill) : ''
-        /* payload 中的版本只在与解析出的本地记录同源时才可采用，绝不跨源取值。 */
-        const payloadAvailable = smText(payload.available, smText(payload.version))
-        const sameSourcePayload = payloadAvailable !== '' && sourceId !== '' && resolvedSourceId === sourceId
-        const available = skill !== null
-            ? (updateVersion !== '' ? updateVersion : (sameSourcePayload ? payloadAvailable : ''))
-            : ''
-        const current = skill !== null
-            ? (market !== null && smText(market.version) !== ''
-                ? smText(market.version)
-                : smText(payload.current, smText(payload.currentVersion, cached !== null ? smText(cached.version) : '')))
-            : ''
-        const commit = skill !== null
-            ? (market !== null ? smText(market.commit) : (cached !== null ? smText(cached.commit) : ''))
-            : ''
-        const localModified = market !== null && market.localModified === true
-
-        const [busy, setBusy] = useState(false)
+        const initialTargets = smUpdateTargets(payload)
+        const batch = initialTargets.length > 1 || payload.all === true
+        const [targets, setTargets] = useState(initialTargets)
+        const [phase, setPhase] = useState('confirm')
+        const [done, setDone] = useState(0)
+        const [failed, setFailed] = useState([])
+        const [okCount, setOkCount] = useState(0)
         const [error, setError] = useState('')
+        const [confirmCancel, setConfirmCancel] = useState(false)
+        const cancelRef = useRef(false)
+        const abortRef = useRef(null)
 
-        async function submit() {
-            if (busy || available === '' || sourceId === '' || name === '' || location === '') return
-            setBusy(true)
+        smUseModalGuard(props.modalId, function () {
+            if (confirmCancel) {
+                setConfirmCancel(false)
+                return true
+            }
+            if (phase !== 'running') return false
+            setConfirmCancel(true)
+            return true
+        })
+
+        const modifiedCount = targets.filter(function (skill) { return smSkillLocalModified(skill) }).length
+        const updateOne = async function (skill) {
+            const version = smSkillUpdateVersion(skill)
+            await api('market/update', {
+                method: 'POST',
+                body: { sourceId: smText(skill.sourceId), name: smText(skill.name), version: version, location: smText(skill.location) },
+                signal: abortRef.current !== null ? abortRef.current.signal : undefined,
+            })
+        }
+
+        const run = async function (queue) {
+            setPhase('running')
+            setDone(0)
+            setOkCount(0)
+            setFailed([])
             setError('')
-            try {
-                await api('/market/update', { method: 'POST', body: { sourceId: sourceId, name: name, version: available, location: location } })
-                setBusy(false)
-                smPushToast(t('update.success', { version: available }))
-                closeModal()
+            setConfirmCancel(false)
+            cancelRef.current = false
+            let ok = 0
+            const failures = []
+            for (let index = 0; index < queue.length; index += 1) {
+                if (cancelRef.current) break
+                const skill = queue[index]
+                try {
+                    await updateOne(skill)
+                    ok += 1
+                } catch (failure) {
+                    if (cancelRef.current === true || (failure !== null && typeof failure === 'object' && failure.code === 'E_CANCELED')) break
+                    failures.push({ skill: skill, reason: smErrorMessage(failure) })
+                }
+                setDone(index + 1)
+                setOkCount(ok)
+                setFailed(failures.slice())
+            }
+            abortRef.current = null
+            if (cancelRef.current === true && ok === 0 && failures.length === 0) setError(t('error.canceled'))
+            if (cancelRef.current !== true && !batch && queue.length === 1 && failures.length === 0) {
+                toast(t('update.success', { version: smSkillUpdateVersion(queue[0]) }))
                 void loadInstalled(true)
                 void loadUpdates(true)
                 void loadMarket()
-            } catch (failure) {
-                setBusy(false)
-                setError(smErrorMessage(failure))
-            }
-        }
-
-        return h(
-            SmDialogFrame,
-            {
-                isTop: props.isTop,
-                title: t('action.update') + (name !== '' ? ' · ' + name : ''),
-                footer: h(SmFooter, null, h(SmButton, { tone: 'primary', disabled: busy || available === '' || location === '', onClick: () => { void submit() } }, t('update.confirm'))),
-            },
-            error !== '' ? h(SmBanner, { tone: 'error' }, error) : null,
-            location === '' ? h(SmBanner, { tone: 'warn' }, t('error.notFound')) : null,
-            h(
-                'div',
-                { style: { display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '12px', padding: '12px 14px', borderRadius: '12px', background: 'var(--dsw-alias-bg-base)', border: '1px solid var(--dsw-alias-border-l1)', color: 'var(--dsw-alias-label-secondary)', fontSize: 'calc(var(--sm-fs) - 2px)' } },
-                h('span', null, t('install.version')),
-                h('span', { className: 'sm-mono', style: { fontWeight: 500, color: 'var(--dsw-alias-label-primary)' } },
-                    'v' + smText(current, '—'),
-                    ' → ',
-                    h('span', { style: { color: 'var(--dsw-alias-state-success-primary)' } }, available !== '' ? 'v' + available : t('update.none')),
-                ),
-            ),
-            commit !== ''
-                ? h('div', { style: { display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '12px', color: 'var(--dsw-alias-label-secondary)', fontSize: 'calc(var(--sm-fs) - 2px)' } },
-                    h('span', null, t('update.sourceCommit')),
-                    h('span', { className: 'sm-mono', style: { wordBreak: 'break-all', color: 'var(--dsw-alias-label-caption)', fontSize: 'calc(var(--sm-fs) - 3px)' } }, commit),
-                )
-                : null,
-            localModified
-                ? h(SmBanner, { tone: 'warn' },
-                    h('span', { style: { color: 'var(--dsw-alias-state-warn-primary)', fontWeight: 500 } }, '⚠ ' + t('update.localModified')),
-                    h('span', null, t('update.backupHint')),
-                )
-                : null,
-        )
-    }
-
-    /* ------------------------------------------------------------------ *
-     * 5. Add market source.                                              *
-     * ------------------------------------------------------------------ */
-
-    function SmAddSourceModal(props) {
-        const [type, setType] = useState('index')
-        const [name, setName] = useState('')
-        const [url, setUrl] = useState('')
-        const [validating, setValidating] = useState(false)
-        const [result, setResult] = useState(null)
-        const [validateError, setValidateError] = useState(null)
-        const [busy, setBusy] = useState(false)
-        const [serverError, setServerError] = useState('')
-
-        async function validate() {
-            if (url.trim() === '') {
-                setValidateError({ code: 'E_BAD_REQUEST', message: t('form.urlRequired') })
-                setResult(null)
+                closeModal()
                 return
             }
-            setValidating(true)
-            setValidateError(null)
-            setResult(null)
-            setServerError('')
-            try {
-                const data = await api('/sources/validate', { method: 'POST', body: { url: url.trim() } })
-                setResult(data !== null && typeof data === 'object' ? data : null)
-            } catch (failure) {
-                setValidateError(failure !== null && typeof failure === 'object' ? failure : {})
-            } finally {
-                setValidating(false)
-            }
+            setPhase('result')
+            if (ok > 0) toast(t('update.result', { ok: ok, failed: failures.length }))
+            void loadInstalled(true)
+            void loadUpdates(true)
+            void loadMarket()
         }
 
-        const canSave = result !== null && validateError === null && url.trim() !== '' && !busy
-
-        async function submit() {
-            if (!canSave) return
-            setBusy(true)
-            setServerError('')
-            const payload = { url: url.trim() }
-            if (name.trim() !== '') payload.name = name.trim()
-            try {
-                const data = await api('/sources', { method: 'POST', body: payload })
-                const source = data !== null && data !== undefined && data.source !== undefined ? data.source : null
-                setBusy(false)
-                smPushToast(t('source.added', { name: source !== null ? smText(source.name, name.trim()) : name.trim() }))
-                closeModal()
-                void loadSources()
-                void loadMarket()
-            } catch (failure) {
-                setBusy(false)
-                setServerError(smErrorMessage(failure))
+        const submit = function () {
+            if (targets.length === 0) return
+            const queue = targets.slice()
+            setTargets(queue)
+            if (queue.length > 1 || batch) {
+                abortRef.current = null
+                void run(queue)
+                return
             }
+            abortRef.current = new AbortController()
+            void run(queue)
         }
 
-        const samples = result !== null && Array.isArray(result.sample) ? result.sample : []
-        const warnings = result !== null && Array.isArray(result.warnings) ? result.warnings : []
+        const cancelRun = function () {
+            cancelRef.current = true
+            if (abortRef.current !== null) abortRef.current.abort()
+            setConfirmCancel(false)
+        }
 
-        return h(
-            SmDialogFrame,
-            {
-                isTop: props.isTop,
-                title: t('source.add.title'),
-                footer: h(SmFooter, null, h(SmButton, { tone: 'primary', disabled: !canSave, onClick: () => { void submit() } }, t('action.save'))),
-            },
-            serverError !== '' ? h(SmBanner, { tone: 'error' }, serverError) : null,
-            h(SmSegmented, {
-                value: type,
-                onChange: (value) => {
-                    setType(value)
-                    setResult(null)
-                    setValidateError(null)
-                },
-                options: [
-                    { value: 'index', label: t('source.type.index') },
-                    { value: 'local', label: t('source.type.local') },
-                ],
-            }),
-            type === 'index' ? h(SmBanner, { tone: 'warn' }, '⚠ ' + t('source.trust')) : null,
-            h(SmField, { label: t('source.name') },
-                h('input', {
-                    type: 'text',
-                    value: name,
-                    placeholder: '',
-                    onChange: (event) => setName(event.target.value),
-                    style: SM_INPUT_STYLE,
-                }),
-            ),
-            h(SmField, { label: type === 'local' ? t('source.localPath') : t('source.url') },
-                h('div', { style: { display: 'flex', gap: '8px', alignItems: 'center' } },
-                    h('input', {
-                        type: 'text',
-                        className: 'sm-mono',
-                        value: url,
-                        placeholder: type === 'local' ? '~/.dsh/skills' : 'https://…/index.json',
-                        onChange: (event) => {
-                            setUrl(event.target.value)
-                            setResult(null)
-                            setValidateError(null)
-                        },
-                        style: Object.assign({}, SM_INPUT_STYLE, { fontFamily: SM_MONO, flex: 1 }),
-                    }),
-                    h(SmButton, { tone: 'secondary', disabled: validating, onClick: () => { void validate() } }, validating ? (t('source.validate') + '…') : t('source.validate')),
-                ),
-            ),
-            validateError !== null
-                ? h(SmBanner, { tone: 'error' },
-                    h('span', { style: { fontWeight: 500 } }, '[' + smText(validateError.code, 'E_BAD_REQUEST') + '] ' + smErrorMessage(validateError)),
-                    typeof validateError.path === 'string' && validateError.path !== ''
-                        ? h('span', { className: 'sm-mono' }, t('source.error.path', { path: validateError.path }))
-                        : null,
-                )
-                : null,
-            result !== null
-                ? h(SmBanner, { tone: 'ok' },
-                    h('span', { style: { color: 'var(--dsw-alias-state-success-primary)', fontWeight: 500 } }, '✓ ' + t('source.validated', { count: typeof result.skillCount === 'number' ? result.skillCount : 0 })),
-                    result.title ? h('span', null, t('source.title') + ': ' + smText(result.title)) : null,
-                    result.description ? h('span', null, smText(result.description)) : null,
-                    samples.length > 0
-                        ? h('span', { className: 'sm-mono', style: { wordBreak: 'break-all' } }, t('source.sample') + ': ' + samples.slice(0, 3).map((item) => smText(item.name) + (item.version ? ' v' + item.version : '')).join(' · '))
-                        : null,
-                    warnings.length > 0 ? h('span', { style: { color: 'var(--dsw-alias-state-warn-primary)' } }, t('source.warnings', { count: warnings.length }) + ': ' + warnings.join('; ')) : null,
-                )
-                : null,
-        )
+        const retryFailed = function () {
+            const queue = failed.map(function (entry) { return entry.skill })
+            if (queue.length === 0) return
+            setTargets(queue)
+            abortRef.current = null
+            void run(queue)
+        }
+
+        const footer = phase === 'running'
+            ? h(Fragment, null,
+                h(SmButton, { tone: 'secondary', onClick: function () { setConfirmCancel(true) } }, t('action.cancel')))
+            : phase === 'result'
+                ? h(Fragment, null,
+                    failed.length > 0 ? h(SmButton, { tone: 'secondary', onClick: retryFailed }, t('update.retryFailedCount', { count: failed.length })) : null,
+                    h(SmButton, { tone: 'primary', onClick: closeModal }, t('action.close')))
+                : h(SmFooter, null, h(SmButton, { tone: 'primary', disabled: targets.length === 0, onClick: submit }, t('action.update')))
+
+        const body = []
+        if (error !== '') body.push(h(SmBanner, { key: 'error', tone: 'error' }, error))
+        if (confirmCancel) {
+            body.push(h(SmBanner, { key: 'cancel', tone: 'warn' },
+                h('span', { style: { fontWeight: 500 } }, t('update.cancelConfirm.title')),
+                h('span', null, t('update.cancelConfirm.body')),
+                h('div', { style: { display: 'flex', gap: '8px', marginTop: '4px' } },
+                    h(SmButton, { key: 'keep', tone: 'secondary', style: { height: '28px' }, onClick: function () { setConfirmCancel(false) } }, t('action.cancel')),
+                    h(SmButton, { key: 'stop', tone: 'danger', style: { height: '28px' }, onClick: cancelRun }, t('update.cancelConfirm.ok')))))
+        }
+
+        if (phase === 'confirm') {
+            if (targets.length === 0) {
+                body.push(h('div', { key: 'none', style: { color: 'var(--dsw-alias-label-secondary)', fontSize: 'calc(var(--sm-fs) - 1px)' } }, t('update.none')))
+            } else if (!batch) {
+                const skill = targets[0]
+                body.push(h('div', { key: 'single', style: { display: 'flex', flexDirection: 'column', gap: '10px' } },
+                    h('div', { style: { display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '12px', padding: '12px 14px', borderRadius: '12px', background: 'var(--dsw-alias-bg-base)', border: '1px solid var(--dsw-alias-border-l1)' } },
+                        h('span', { className: 'sm-mono', style: { minWidth: 0, wordBreak: 'break-all', color: 'var(--dsw-alias-label-primary)', fontSize: 'calc(var(--sm-fs) - 1px)' } }, smText(skill.name)),
+                        h('span', { className: 'sm-mono', style: { flexShrink: 0, color: 'var(--dsw-alias-label-secondary)', fontSize: 'calc(var(--sm-fs) - 2px)' } },
+                            t('update.versionChange', {
+                                current: smSkillVersion(skill) === '' ? '—' : smSkillVersion(skill),
+                                next: (smSkillUpdateVersion(skill).charAt(0) === 'v' ? '' : 'v') + smSkillUpdateVersion(skill),
+                            }))),
+                    h('div', { style: { color: 'var(--dsw-alias-label-secondary)', fontSize: 'calc(var(--sm-fs) - 2px)' } }, t('market.source') + ': ' + smText(skill.sourceName, smText(skill.sourceId, '—'))),
+                    smSkillLocalModified(skill) ? h(SmBanner, { tone: 'warn' }, t('update.localModified')) : null,
+                    h('div', { style: { color: 'var(--dsw-alias-label-caption)', fontSize: 'calc(var(--sm-fs) - 2px)' } }, t('update.backupNote'))))
+            } else {
+                body.push(h('div', { key: 'batch', style: { display: 'flex', flexDirection: 'column', gap: '10px' } },
+                    h('div', { style: { color: 'var(--dsw-alias-label-primary)', fontSize: 'var(--sm-fs)' } }, t('update.all.body', { count: targets.length })),
+                    modifiedCount > 0 ? h(SmBanner, { tone: 'warn' }, t('update.all.modified', { count: modifiedCount })) : null,
+                    h('div', { style: { display: 'flex', flexDirection: 'column', gap: '6px', maxHeight: '220px', overflowY: 'auto' } },
+                        targets.map(function (skill) {
+                            return h('div', { key: smText(skill.id, smText(skill.name)), style: { display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '12px', padding: '8px 10px', borderRadius: '10px', background: 'var(--dsw-alias-bg-base)' } },
+                                h('span', { className: 'sm-mono', style: { minWidth: 0, wordBreak: 'break-all', color: 'var(--dsw-alias-label-primary)', fontSize: 'calc(var(--sm-fs) - 2px)' } }, smText(skill.name)),
+                                h('span', { className: 'sm-mono', style: { flexShrink: 0, color: 'var(--dsw-alias-label-caption)', fontSize: 'calc(var(--sm-fs) - 3px)' } }, 'v' + smSkillUpdateVersion(skill)))
+                        })),
+                    h('div', { style: { color: 'var(--dsw-alias-label-caption)', fontSize: 'calc(var(--sm-fs) - 2px)' } }, t('update.backupNote'))))
+            }
+        } else if (phase === 'running') {
+            body.push(h('div', { key: 'progress', style: { display: 'flex', flexDirection: 'column', gap: '8px' } },
+                h('div', { style: { color: 'var(--dsw-alias-label-secondary)', fontSize: 'calc(var(--sm-fs) - 1px)' } }, t('update.progress', { done: done, total: targets.length })),
+                h('div', { role: 'progressbar', style: { width: '100%', height: '6px', borderRadius: '999px', background: 'var(--dsw-alias-bg-layer-3)', overflow: 'hidden' } },
+                    h('div', { style: { width: String(targets.length === 0 ? 0 : Math.round((done / targets.length) * 100)) + '%', height: '100%', background: 'var(--dsw-alias-label-primary)', transition: 'width 220ms' } }))))
+        } else {
+            body.push(h('div', { key: 'result', style: { display: 'flex', flexDirection: 'column', gap: '8px' } },
+                h('div', { style: { color: 'var(--dsw-alias-label-primary)', fontSize: 'var(--sm-fs)', fontWeight: 500 } }, failed.length === 0 ? t('update.result.ok') : t('update.result', { ok: okCount, failed: failed.length })),
+                failed.map(function (entry) {
+                    return h('div', { key: smText(entry.skill.id, smText(entry.skill.name)), style: { color: 'var(--dsw-alias-label-secondary)', fontSize: 'calc(var(--sm-fs) - 2px)' } },
+                        smText(entry.skill.name) + ' · ' + entry.reason)
+                })))
+        }
+
+        return h(SmDialogFrame, {
+            modalId: props.modalId,
+            isTop: props.isTop,
+            layerIndex: props.layerIndex,
+            width: 480,
+            confirm: true,
+            title: batch ? t('update.all.title') : t('update.title'),
+            footer: footer,
+        }, body)
     }
 
     /* ------------------------------------------------------------------ *
-     * 6. Delete / uninstall confirmation (360px).                        *
+     * 5. 卸载确认（480）                                                 *
      * ------------------------------------------------------------------ */
 
-    function SmConfirmDeleteModal(props) {
-        const payload = props.payload !== null && typeof props.payload === 'object' ? props.payload : {}
-        const payloadSkill = payload.skill !== null && typeof payload.skill === 'object' ? payload.skill : null
-        /* 缺 payload.skill 时按 id 精确定位；退回 name 时必须带上调用方给出的
-           location / sourceId，避免卸载另一个位置或来源的同名副本。 */
-        const skill = payloadSkill !== null
-            ? payloadSkill
-            : (smFindSkillById(payload.id) || (typeof smFindInstalledCopy === 'function'
-                ? smFindInstalledCopy(smText(payload.name), smText(payload.location), smText(payload.sourceId))
-                : smFindSkillByName(payload.name)))
-        const mode = payload.mode === 'uninstall'
-            || payload.kind === 'uninstall'
-            || (payload.mode === undefined && payload.kind === undefined
-                && skill !== null && skill !== undefined && skill.market !== undefined && skill.market !== null)
-            ? 'uninstall'
-            : 'delete'
-        const name = skill !== null && skill !== undefined ? smText(skill.name) : smText(payload.name)
-        const path = skill !== null && skill !== undefined ? smText(skill.path) : ''
-        const location = skill !== null && skill !== undefined ? smText(skill.location) : ''
+    function smResolveSkill(payload) {
+        if (payload === null || typeof payload !== 'object') return null
+        if (payload.skill !== null && typeof payload.skill === 'object') return payload.skill
+        return smFindSkillById(payload.id) || smFindSkillByName(payload.name)
+    }
 
+    function SmUninstallModal(props) {
+        const payload = props.payload !== null && typeof props.payload === 'object' ? props.payload : {}
+        const skill = smResolveSkill(payload)
+        const name = skill !== null ? smText(skill.name, smText(payload.name)) : smText(payload.name)
+        const location = skill !== null ? smText(skill.location, smText(payload.location)) : smText(payload.location)
+        const blocked = skill !== null && smIsReadonly(skill)
         const [preserveBackup, setPreserveBackup] = useState(false)
         const [busy, setBusy] = useState(false)
         const [error, setError] = useState('')
 
-        async function submit() {
-            if (busy) return
-            if (mode === 'delete' && path === '') {
-                setError(t('error.notFound'))
-                return
-            }
-            if (mode === 'uninstall' && (name === '' || location === '')) {
+        const submit = async function () {
+            if (busy || blocked) return
+            if (name === '' || location === '') {
                 setError(t('error.notFound'))
                 return
             }
             setBusy(true)
             setError('')
             try {
-                if (mode === 'uninstall') {
-                    await api('/market/uninstall', { method: 'POST', body: { name: name, location: location, preserveBackup: preserveBackup } })
-                } else {
-                    await api('/skill?path=' + encodeURIComponent(path), { method: 'DELETE' })
-                }
+                await api('market/uninstall', { method: 'POST', body: { name: name, location: location, preserveBackup: preserveBackup } })
                 setBusy(false)
-                smPushToast(mode === 'uninstall' ? t('uninstall.success', { name: name }) : t('delete.success', { name: name }))
+                toast(t('uninstall.success', { name: name }))
                 closeModal()
                 const detail = appState.detail
-                if (detail !== null && typeof detail === 'object' && (detail.id === (skill !== null ? skill.id : '') || detail.name === name)) {
+                if (detail !== null && typeof detail === 'object' && (detail.id === smText(skill !== null ? skill.id : '') || detail.name === name)) {
                     setState({ view: 'list', detail: null })
                 }
                 void loadInstalled(true)
@@ -1503,66 +1280,467 @@
             }
         }
 
-        return h(
-            SmDialogFrame,
-            {
-                isTop: props.isTop,
-                confirm: true,
-                title: mode === 'uninstall' ? t('uninstall.confirm.title') : t('delete.confirm.title'),
-                footer: h(
-                    Fragment,
-                    null,
-                    h(SmButton, { tone: 'secondary', onClick: closeModal }, t('action.cancel')),
-                    h(SmButton, { tone: 'dangerSolid', disabled: busy, onClick: () => { void submit() } }, mode === 'uninstall' ? t('action.uninstall') : t('action.delete')),
-                ),
-            },
-            error !== '' ? h(SmBanner, { tone: 'error' }, error) : null,
-            h(
-                'p',
-                { style: { margin: 0, color: 'var(--dsw-alias-label-secondary)', fontSize: 'calc(var(--sm-fs) - 1px)', lineHeight: '1.55' } },
-                mode === 'uninstall'
-                    ? t('uninstall.confirm.body', { name: name !== '' ? name : '—' })
-                    : t('delete.confirm.body', { path: path !== '' ? path : '—' }),
-            ),
-            path !== '' && mode === 'uninstall'
-                ? h('div', { className: 'sm-mono', style: { wordBreak: 'break-all', color: 'var(--dsw-alias-label-caption)', fontSize: 'calc(var(--sm-fs) - 3px)' } }, path)
-                : null,
-            mode === 'uninstall'
-                ? h(
-                    'label',
-                    { style: { display: 'flex', alignItems: 'center', gap: '6px', color: 'var(--dsw-alias-label-secondary)', fontSize: 'calc(var(--sm-fs) - 2px)', cursor: 'pointer' } },
-                    h('input', {
-                        type: 'checkbox',
-                        checked: preserveBackup,
-                        onChange: (event) => setPreserveBackup(event.target.checked),
-                    }),
-                    h('span', null, t('uninstall.keepBackup')),
-                )
-                : null,
-        )
+        return h(SmDialogFrame, {
+            modalId: props.modalId,
+            isTop: props.isTop,
+            layerIndex: props.layerIndex,
+            width: 480,
+            confirm: true,
+            title: t('uninstall.title'),
+            footer: h(Fragment, null,
+                h(SmButton, { tone: 'secondary', onClick: function () { smRequestCloseModal() } }, t('action.cancel')),
+                h(SmButton, { tone: 'danger', disabled: busy || blocked, onClick: function () { void submit() } }, t('action.uninstall'))),
+        },
+        error !== '' ? h(SmBanner, { tone: 'error' }, error) : null,
+        blocked ? h(SmBanner, { tone: 'warn' }, t('uninstall.readonly')) : null,
+        h('p', { style: { margin: 0, color: 'var(--dsw-alias-label-secondary)', fontSize: 'calc(var(--sm-fs) - 1px)', lineHeight: '1.55' } }, t('uninstall.body', { name: name !== '' ? name : '—' })),
+        h('label', { style: { display: 'flex', alignItems: 'center', gap: '6px', color: 'var(--dsw-alias-label-secondary)', fontSize: 'calc(var(--sm-fs) - 2px)', cursor: 'pointer' } },
+            h('input', { type: 'checkbox', checked: preserveBackup, onChange: function (event) { setPreserveBackup(event.target.checked) } }),
+            h('span', null, t('action.backup'))))
     }
 
     /* ------------------------------------------------------------------ *
-     * Diagnostics drawer.                                                *
+     * 6. 删除确认（480）                                                 *
      * ------------------------------------------------------------------ */
 
-    const SM_DIAG_KINDS = [
-        { kind: 'broken-link', labelKey: 'diag.kind.brokenLink', tone: 'error' },
-        { kind: 'frontmatter', labelKey: 'diag.kind.frontmatter', tone: 'error' },
-        { kind: 'name', labelKey: 'diag.kind.name', tone: 'error' },
-        { kind: 'same-layer-shadow', labelKey: 'diag.kind.sameLayer', tone: 'warn' },
-        { kind: 'cross-layer-shadow', labelKey: 'diag.kind.crossLayer', tone: 'warn' },
-        { kind: 'unreadable', labelKey: 'diag.kind.unreadable', tone: 'error' },
-        { kind: 'oversize', labelKey: 'diag.kind.oversize', tone: 'idle' },
-    ]
+    function SmDeleteModal(props) {
+        const payload = props.payload !== null && typeof props.payload === 'object' ? props.payload : {}
+        const skill = smResolveSkill(payload)
+        const name = skill !== null ? smText(skill.name, smText(payload.name)) : smText(payload.name)
+        const path = skill !== null ? smText(skill.path, smText(payload.path)) : smText(payload.path)
+        const blocked = skill !== null && smIsReadonly(skill)
+        const [busy, setBusy] = useState(false)
+        const [error, setError] = useState('')
+
+        const submit = async function () {
+            if (busy || blocked) return
+            if (path === '') {
+                setError(t('error.notFound'))
+                return
+            }
+            setBusy(true)
+            setError('')
+            try {
+                await api('skill?path=' + encodeURIComponent(path), { method: 'DELETE' })
+                setBusy(false)
+                toast(t('toast.deleted', { name: name }))
+                closeModal()
+                const detail = appState.detail
+                if (detail !== null && typeof detail === 'object' && (detail.id === smText(skill !== null ? skill.id : '') || detail.name === name)) {
+                    setState({ view: 'list', detail: null })
+                }
+                void loadInstalled(true)
+            } catch (failure) {
+                setBusy(false)
+                setError(smErrorMessage(failure))
+            }
+        }
+
+        return h(SmDialogFrame, {
+            modalId: props.modalId,
+            isTop: props.isTop,
+            layerIndex: props.layerIndex,
+            width: 480,
+            confirm: true,
+            title: t('delete.title'),
+            footer: h(Fragment, null,
+                h(SmButton, { tone: 'secondary', onClick: function () { smRequestCloseModal() } }, t('action.cancel')),
+                h(SmButton, { tone: 'danger', disabled: busy || blocked, onClick: function () { void submit() } }, t('action.delete'))),
+        },
+        error !== '' ? h(SmBanner, { tone: 'error' }, error) : null,
+        blocked ? h(SmBanner, { tone: 'warn' }, t('delete.readonly')) : null,
+        h('p', { style: { margin: 0, color: 'var(--dsw-alias-label-secondary)', fontSize: 'calc(var(--sm-fs) - 1px)', lineHeight: '1.55' } }, t('delete.body', { name: name !== '' ? name : '—' })))
+    }
+
+    /* ------------------------------------------------------------------ *
+     * 7. 添加索引源（488）                                               *
+     * ------------------------------------------------------------------ */
+
+    function SmAddSourceModal(props) {
+        const [name, setName] = useState('')
+        const [url, setUrl] = useState('')
+        const [validating, setValidating] = useState(false)
+        const [result, setResult] = useState(null)
+        const [validateError, setValidateError] = useState('')
+        const [busy, setBusy] = useState(false)
+        const [serverError, setServerError] = useState('')
+
+        const validate = async function () {
+            if (url.trim() === '') {
+                setValidateError(t('source.error.urlRequired'))
+                setResult(null)
+                return
+            }
+            setValidating(true)
+            setValidateError('')
+            setResult(null)
+            setServerError('')
+            try {
+                const data = await api('sources/validate', { method: 'POST', body: { url: url.trim() } })
+                setResult(data !== null && typeof data === 'object' ? data : null)
+            } catch (failure) {
+                setValidateError(smErrorMessage(failure))
+            } finally {
+                setValidating(false)
+            }
+        }
+
+        const canSave = result !== null && validateError === '' && url.trim() !== '' && !busy
+        const submit = async function () {
+            if (!canSave) return
+            setBusy(true)
+            setServerError('')
+            const request = { url: url.trim() }
+            if (name.trim() !== '') request.name = name.trim()
+            try {
+                const data = await api('sources', { method: 'POST', body: request })
+                const source = data !== null && typeof data === 'object' && data.source !== undefined ? data.source : null
+                setBusy(false)
+                toast(t('toast.sourceAdded', { name: source !== null ? smText(source.name, name.trim()) : name.trim() }))
+                closeModal()
+                void loadSources()
+                void loadMarket()
+            } catch (failure) {
+                setBusy(false)
+                setServerError(smErrorMessage(failure))
+            }
+        }
+
+        const samples = result !== null && Array.isArray(result.sample) ? result.sample : (result !== null && Array.isArray(result.skills) ? result.skills : [])
+        const sampleNames = samples.slice(0, 3).map(function (item) { return smText(item.name) }).filter(function (text) { return text !== '' }).join(' · ')
+
+        return h(SmDialogFrame, {
+            modalId: props.modalId,
+            isTop: props.isTop,
+            layerIndex: props.layerIndex,
+            width: 488,
+            title: t('source.add.title'),
+            footer: h(SmFooter, null, h(SmButton, { tone: 'primary', disabled: !canSave, onClick: function () { void submit() } }, t('action.save'))),
+        },
+        serverError !== '' ? h(SmBanner, { tone: 'error' }, serverError) : null,
+        h(SmBanner, { tone: 'info' }, t('source.trust')),
+        h(SmField, { label: t('source.name') },
+            h('input', { type: 'text', value: name, placeholder: t('source.name.placeholder'), onChange: function (event) { setName(event.target.value) }, style: SM_INPUT_STYLE })),
+        h(SmField, { label: t('source.url'), error: validateError },
+            h('div', { style: { display: 'flex', gap: '8px', alignItems: 'center' } },
+                h('input', {
+                    type: 'text',
+                    className: 'sm-mono',
+                    value: url,
+                    placeholder: t('source.url.placeholder'),
+                    onChange: function (event) { setUrl(event.target.value); setResult(null); setValidateError('') },
+                    style: Object.assign({}, SM_INPUT_STYLE, { fontFamily: SM_MONO, flex: 1 }),
+                }),
+                h(SmButton, { tone: 'secondary', disabled: validating, onClick: function () { void validate() } }, validating ? t('state.validating') : t('action.validate')))),
+        result !== null
+            ? h(SmBanner, { tone: 'ok' },
+                h('span', { style: { color: 'var(--dsw-alias-state-success-primary)', fontWeight: 500 } }, t('source.validated', { count: typeof result.skillCount === 'number' ? result.skillCount : (typeof result.count === 'number' ? result.count : 0) })),
+                result.title ? h('span', null, t('source.title') + ': ' + smText(result.title)) : null,
+                result.description ? h('span', null, smText(result.description)) : null,
+                sampleNames !== '' ? h('span', { className: 'sm-mono', style: { wordBreak: 'break-all' } }, t('source.preview', { names: sampleNames })) : null)
+            : null)
+    }
+
+    /* ------------------------------------------------------------------ *
+     * 8. 编辑原文（720）                                                 *
+     * ------------------------------------------------------------------ */
+
+    function SmEditContentModal(props) {
+        const payload = props.payload !== null && typeof props.payload === 'object' ? props.payload : {}
+        const skill = payload.skill !== null && typeof payload.skill === 'object' ? payload.skill : null
+        const path = smText(payload.path, skill !== null ? smText(skill.path) : '')
+        const name = smText(payload.name, skill !== null ? smText(skill.name) : '')
+        const [draft, setDraft] = useState(typeof payload.content === 'string' ? payload.content : '')
+        const [original, setOriginal] = useState(typeof payload.content === 'string' ? payload.content : '')
+        const [mtime, setMtime] = useState(smNumber(payload.mtime, skill !== null ? smNumber(skill.mtime, 0) : 0))
+        const [loading, setLoading] = useState(typeof payload.content !== 'string' && path !== '')
+        const [saving, setSaving] = useState(false)
+        const [error, setError] = useState('')
+        const [confirmDiscard, setConfirmDiscard] = useState(false)
+        const alive = useRef(true)
+        const textareaRef = useRef(null)
+        const gutterRef = useRef(null)
+        const dirty = draft !== original
+
+        smUseModalGuard(props.modalId, function () {
+            if (confirmDiscard) {
+                setConfirmDiscard(false)
+                return true
+            }
+            if (!dirty) return false
+            setConfirmDiscard(true)
+            return true
+        })
+
+        useEffect(function () {
+            alive.current = true
+            return function () { alive.current = false }
+        }, [])
+
+        const load = useCallback(function () {
+            if (path === '') {
+                setLoading(false)
+                setError(t('error.notFound'))
+                return
+            }
+            setLoading(true)
+            setError('')
+            api('skill?path=' + encodeURIComponent(path)).then(function (data) {
+                if (!alive.current) return
+                const content = data !== null && typeof data === 'object' && typeof data.content === 'string' ? data.content : ''
+                const fetchedSkill = data !== null && typeof data === 'object' && data.skill !== null && typeof data.skill === 'object' ? data.skill : null
+                setDraft(content)
+                setOriginal(content)
+                setMtime(fetchedSkill !== null ? smNumber(fetchedSkill.mtime, mtime) : mtime)
+                setLoading(false)
+            }).catch(function (failure) {
+                if (!alive.current) return
+                setError(smErrorMessage(failure))
+                setLoading(false)
+            })
+        }, [path])
+
+        useEffect(function () {
+            if (typeof payload.content === 'string') return
+            load()
+        }, [load])
+
+        const save = async function () {
+            if (saving || path === '') return
+            setSaving(true)
+            setError('')
+            try {
+                await api('skill', { method: 'PUT', body: { path: path, mtime: mtime, content: draft } })
+                setSaving(false)
+                setOriginal(draft)
+                toast(t('toast.saved'))
+                smRefreshDetail()
+                void loadInstalled(true)
+                if (smDiagnostics.open) void smLoadDiagnostics()
+                closeModal()
+            } catch (failure) {
+                setSaving(false)
+                setError(failure !== null && typeof failure === 'object' && failure.code === 'E_CONFLICT_MTIME' ? t('form.mtimeConflict') : smErrorMessage(failure))
+            }
+        }
+
+        const requestClose = function () {
+            if (dirty) {
+                setConfirmDiscard(true)
+                return
+            }
+            smRemoveModalById(props.modalId)
+        }
+
+        const lineCount = draft.split('\n').length
+        const gutter = []
+        for (let index = 1; index <= Math.max(lineCount, 1); index += 1) gutter.push(h('div', { key: index }, String(index)))
+
+        const body = []
+        if (error !== '') {
+            body.push(h(SmBanner, { key: 'error', tone: 'error' },
+                h('span', null, error),
+                error === t('form.mtimeConflict')
+                    ? h(SmButton, { key: 'refresh', tone: 'secondary', style: { alignSelf: 'flex-start', height: '28px' }, onClick: function () { void load() } }, t('action.refresh'))
+                    : null))
+        }
+        if (confirmDiscard) {
+            body.push(h(SmBanner, { key: 'discard', tone: 'warn' },
+                h('span', { style: { fontWeight: 500 } }, t('form.edit.discard.title')),
+                h('span', null, t('form.edit.discard.body')),
+                h('div', { style: { display: 'flex', gap: '8px', marginTop: '4px' } },
+                    h(SmButton, { key: 'keep', tone: 'secondary', style: { height: '28px' }, onClick: function () { setConfirmDiscard(false) } }, t('action.cancel')),
+                    h(SmButton, { key: 'discard', tone: 'danger', style: { height: '28px' }, onClick: function () { smRemoveModalById(props.modalId) } }, t('form.edit.discard.confirm')))))
+        }
+        if (loading) {
+            body.push(h('div', { key: 'loading', style: { color: 'var(--dsw-alias-label-secondary)', fontSize: 'calc(var(--sm-fs) - 1px)' } }, t('state.loading')))
+        } else {
+            body.push(h('div', {
+                key: 'editor',
+                className: 'sm-editor',
+                style: { display: 'flex', minHeight: '320px', height: 'min(52vh, 480px)', border: '1px solid var(--dsw-alias-border-l2)', borderRadius: '12px', background: 'var(--dsw-alias-bg-base)', overflow: 'hidden' },
+            },
+            h('div', {
+                ref: gutterRef,
+                className: 'sm-mono',
+                'aria-hidden': 'true',
+                style: { flexShrink: 0, width: '44px', padding: '10px 8px', overflow: 'hidden', textAlign: 'right', userSelect: 'none', color: 'var(--dsw-alias-label-caption)', fontFamily: SM_MONO, fontSize: 'calc(var(--sm-fs) - 2px)', lineHeight: '20px' },
+            }, gutter),
+            h('textarea', {
+                ref: textareaRef,
+                className: 'sm-mono',
+                value: draft,
+                spellCheck: false,
+                onChange: function (event) {
+                    setDraft(event.target.value)
+                    setError('')
+                },
+                onScroll: function (event) {
+                    if (gutterRef.current !== null) gutterRef.current.scrollTop = event.target.scrollTop
+                },
+                style: { flex: '1 1 auto', minWidth: 0, border: 'none', outline: 'none', resize: 'none', background: 'transparent', color: 'var(--dsw-alias-label-primary)', fontFamily: SM_MONO, fontSize: 'calc(var(--sm-fs) - 2px)', lineHeight: '20px', padding: '10px 12px', whiteSpace: 'pre', overflow: 'auto' },
+            })))
+            body.push(h('div', { key: 'hint', style: { color: 'var(--dsw-alias-label-caption)', fontSize: 'calc(var(--sm-fs) - 3px)' } }, t('detail.editHint')))
+        }
+
+        return h(SmDialogFrame, {
+            modalId: props.modalId,
+            isTop: props.isTop,
+            layerIndex: props.layerIndex,
+            width: 720,
+            title: t('form.edit.title'),
+            subtitle: name,
+            onRequestClose: requestClose,
+            footer: h(Fragment, null,
+                h(SmButton, { tone: 'secondary', onClick: requestClose }, t('action.cancel')),
+                h(SmButton, { tone: 'primary', disabled: saving || loading || !dirty || path === '', onClick: function () { void save() } }, saving ? t('state.savingContent') : t('action.save'))),
+            onKeyDown: function (event) {
+                if ((event.metaKey || event.ctrlKey) && String(event.key).toLowerCase() === 's') {
+                    event.preventDefault()
+                    void save()
+                    return true
+                }
+                return false
+            },
+        },
+        dirty ? h('div', { style: { color: 'var(--dsw-alias-state-warn-primary)', fontSize: 'calc(var(--sm-fs) - 2px)' } }, t('form.edit.dirty')) : null,
+        body)
+    }
+
+    /* ------------------------------------------------------------------ *
+     * 9. 预览（720）                                                     *
+     * ------------------------------------------------------------------ */
+
+    function SmPreviewModal(props) {
+        const payload = props.payload !== null && typeof props.payload === 'object' ? props.payload : {}
+        const skill = payload.skill !== null && typeof payload.skill === 'object' ? payload.skill : null
+        const path = smText(payload.path, skill !== null ? smText(skill.path) : '')
+        const name = smText(payload.name, skill !== null ? smText(skill.name) : '')
+        const [content, setContent] = useState(typeof payload.content === 'string' ? payload.content : '')
+        const [loading, setLoading] = useState(typeof payload.content !== 'string' && path !== '')
+        const [error, setError] = useState('')
+        const alive = useRef(true)
+
+        useEffect(function () {
+            alive.current = true
+            return function () { alive.current = false }
+        }, [])
+
+        const load = useCallback(function () {
+            if (path === '') {
+                setLoading(false)
+                return
+            }
+            setLoading(true)
+            setError('')
+            api('skill?path=' + encodeURIComponent(path)).then(function (data) {
+                if (!alive.current) return
+                setContent(data !== null && typeof data === 'object' && typeof data.content === 'string' ? data.content : '')
+                setLoading(false)
+            }).catch(function (failure) {
+                if (!alive.current) return
+                setError(smErrorMessage(failure))
+                setLoading(false)
+            })
+        }, [path])
+
+        useEffect(function () {
+            if (typeof payload.content === 'string') return
+            load()
+        }, [load])
+
+        return h(SmDialogFrame, {
+            modalId: props.modalId,
+            isTop: props.isTop,
+            layerIndex: props.layerIndex,
+            width: 720,
+            title: t('detail.content'),
+            subtitle: name,
+            footer: h(Fragment, null, h(SmButton, { tone: 'primary', onClick: function () { smRemoveModalById(props.modalId) } }, t('action.close'))),
+        },
+        loading
+            ? h('div', { style: { color: 'var(--dsw-alias-label-secondary)', fontSize: 'calc(var(--sm-fs) - 1px)' } }, t('state.loading'))
+            : error !== ''
+                ? h(SmBanner, { tone: 'error' }, error)
+                : content === ''
+                    ? h('div', { style: { color: 'var(--dsw-alias-label-caption)', fontSize: 'calc(var(--sm-fs) - 1px)' } }, t('detail.content.empty'))
+                    : h(SmCodeBlock, { text: content, maxHeight: '60vh' }))
+    }
+
+    /* ------------------------------------------------------------------ *
+     * 10. 删除源确认（480）                                              *
+     * ------------------------------------------------------------------ */
+
+    function SmConfirmRemoveSourceModal(props) {
+        const payload = props.payload !== null && typeof props.payload === 'object' ? props.payload : {}
+        const source = payload.source !== null && typeof payload.source === 'object' ? payload.source : null
+        const sourceId = smText(payload.sourceId, smText(payload.id, source !== null ? smText(source.id) : ''))
+        const name = smText(payload.name, source !== null ? smText(source.name) : '')
+        const [busy, setBusy] = useState(false)
+        const [error, setError] = useState('')
+
+        const submit = async function () {
+            if (busy) return
+            if (sourceId === '') {
+                setError(t('error.notFound'))
+                return
+            }
+            setBusy(true)
+            setError('')
+            try {
+                await api('sources/' + encodeURIComponent(sourceId), { method: 'DELETE' })
+                setBusy(false)
+                toast(t('toast.sourceDeleted', { name: name !== '' ? name : sourceId }))
+                closeModal()
+                void loadSources()
+                void loadMarket()
+            } catch (failure) {
+                setBusy(false)
+                setError(smErrorMessage(failure))
+            }
+        }
+
+        return h(SmDialogFrame, {
+            modalId: props.modalId,
+            isTop: props.isTop,
+            layerIndex: props.layerIndex,
+            width: 480,
+            confirm: true,
+            title: t('source.confirmDelete.title'),
+            footer: h(Fragment, null,
+                h(SmButton, { tone: 'secondary', onClick: function () { smRequestCloseModal() } }, t('action.cancel')),
+                h(SmButton, { tone: 'danger', disabled: busy, onClick: function () { void submit() } }, t('action.deleteSource'))),
+        },
+        error !== '' ? h(SmBanner, { tone: 'error' }, error) : null,
+        h('p', { style: { margin: 0, color: 'var(--dsw-alias-label-secondary)', fontSize: 'calc(var(--sm-fs) - 1px)', lineHeight: '1.55' } }, t('source.confirmDelete.body')),
+        name !== '' ? h('div', { className: 'sm-mono', style: { wordBreak: 'break-all', color: 'var(--dsw-alias-label-primary)', fontSize: 'calc(var(--sm-fs) - 2px)' } }, name) : null)
+    }
+
+    /* ------------------------------------------------------------------ *
+     * 诊断抽屉（420，DG-01～DG-03 / PRD §9）。                            *
+     * ------------------------------------------------------------------ */
+
+    function smDiagnosticsPayload() {
+        if (smDiagnostics.data !== null && typeof smDiagnostics.data === 'object') return smDiagnostics.data
+        if (appState.diagnostics !== null && typeof appState.diagnostics === 'object') return appState.diagnostics
+        return null
+    }
 
     function openDiagnosticsDrawer() {
         if (!smDiagnostics.open) {
             smDiagnostics.open = true
-            dialogStack.push('diagnostics')
+            smLockScroll()
         }
         if (typeof rerender === 'function') rerender()
         void smLoadDiagnostics()
+    }
+
+    function smCloseDiagnostics() {
+        if (!smDiagnostics.open) return
+        smDiagnostics.open = false
+        smUnlockScroll()
+        smHideTooltip()
+        if (typeof rerender === 'function') rerender()
     }
 
     async function smLoadDiagnostics() {
@@ -1570,10 +1748,10 @@
         smDiagnostics.error = null
         if (typeof rerender === 'function') rerender()
         try {
-            const query = typeof appState.cwd === 'string' && appState.cwd !== '' ? '?cwd=' + encodeURIComponent(appState.cwd) : ''
-            const data = await api('/diagnostics' + query)
+            const cwd = typeof appState.cwd === 'string' ? appState.cwd : ''
+            const data = await api('diagnostics' + (cwd === '' ? '' : '?cwd=' + encodeURIComponent(cwd)))
             smDiagnostics.data = data !== null && typeof data === 'object' ? data : null
-            smDiagnostics.checkedAt = data !== null && typeof data === 'object' && typeof data.checkedAt === 'number' ? data.checkedAt : 0
+            appState.diagnostics = smDiagnostics.data
             smDiagnostics.error = null
         } catch (failure) {
             smDiagnostics.error = failure !== null && typeof failure === 'object' ? failure : {}
@@ -1583,72 +1761,112 @@
         }
     }
 
-    function smFixLabel(issue) {
-        const action = issue !== null && issue !== undefined && issue.fix !== undefined && issue.fix !== null ? issue.fix.action : ''
-        if (action === 'remove-link') return t('diag.fix.removeLink')
-        if (action === 'open-file') return t('diag.fix.openFile')
-        if (action === 'rename') return t('diag.fix.rename')
-        if (action === 'view-active') return t('diag.fix.viewActive')
-        if (action === 'retry') return t('action.retry')
-        return t('action.retry')
+    /** 八类问题归一化；同一套用户语言。 */
+    function smIssueKind(issue) {
+        const raw = smText(issue.kind, smText(issue.type)).toLowerCase()
+        if (raw === '') return 'unreadable'
+        if (raw.indexOf('same') !== -1 || raw.indexOf('shadow') !== -1 || raw.indexOf('duplicate') !== -1) return 'same-name'
+        if (raw.indexOf('source') !== -1) return 'source-unreachable'
+        if (raw.indexOf('broken') !== -1 || raw.indexOf('link') !== -1) return 'broken-link'
+        if (raw.indexOf('frontmatter') !== -1 || raw.indexOf('format') !== -1 || raw.indexOf('schema') !== -1) return 'frontmatter'
+        if (raw.indexOf('oversize') !== -1 || raw.indexOf('large') !== -1) return 'oversize'
+        if (raw.indexOf('missing') !== -1 || raw.indexOf('not-found') !== -1 || raw.indexOf('enoent') !== -1) return 'missing'
+        if (raw.indexOf('name') !== -1) return 'name'
+        if (raw.indexOf('unreadable') !== -1 || raw.indexOf('permission') !== -1 || raw.indexOf('eacces') !== -1) return 'unreadable'
+        return 'unreadable'
+    }
+
+    function smIssueSection(issue) {
+        const kind = smIssueKind(issue)
+        /* 同名问题无论来源层都算「未生效」，进入警示图标计数。 */
+        if (kind === 'same-name') return 'inactive'
+        if (kind === 'oversize' || kind === 'source-unreachable') return 'attention'
+        if (issue.severity === 'info') return 'attention'
+        return 'inactive'
+    }
+
+    /** 仅用于「详细信息」层；技术类型名只在这里出现。 */
+    function smIssueTypeLabel(issue) {
+        return smText(issue.kind, smText(issue.type, t('error.read')))
+    }
+
+    function smIssueSentence(issue) {
+        const kind = smIssueKind(issue)
+        const name = smText(issue.name, smText(issue.path, '—'))
+        if (kind === 'same-name') {
+            const category = smText(issue.category, smCategoryForLocation(issue.location))
+            const group = smText(issue.group, smText(issue.categoryLabel, smText(issue.locationName, smCategoryLabel(category) || t('tab.category.mine'))))
+            return t('diag.sentence.sameName', { name: name, group: group })
+        }
+        if (kind === 'frontmatter') return t('diag.sentence.frontmatter', { name: name })
+        if (kind === 'name') return t('diag.sentence.name', { name: name })
+        if (kind === 'broken-link') return t('diag.sentence.brokenLink', { name: name })
+        if (kind === 'oversize') return t('diag.sentence.oversize', { name: name })
+        if (kind === 'source-unreachable') return t('diag.sentence.sourceUnreachable', { name: name, source: smText(issue.source, smText(issue.sourceName, '—')) })
+        return t('diag.sentence.unreadable', { name: name })
+    }
+
+    function smIssueAction(issue) {
+        const kind = smIssueKind(issue)
+        if (kind === 'same-name') return { id: 'view-active', label: t('action.viewActive') }
+        if (kind === 'frontmatter') return { id: 'open-file', label: t('action.openFile') }
+        if (kind === 'name') return { id: 'open-file', label: t('action.openFile') }
+        if (kind === 'broken-link') return { id: 'remove-link', label: t('action.removeLink') }
+        if (kind === 'oversize') return { id: 'trim', label: t('action.viewFile') }
+        if (kind === 'source-unreachable') return { id: 'manage-sources', label: t('diag.fix.manageSources') }
+        if (kind === 'missing') return { id: 'retry', label: t('action.retry') }
+        return { id: 'open-folder', label: t('diag.fix.openFolder') }
     }
 
     function smOpenSkillDetail(skill) {
-        if (skill === null || skill === undefined) return
-        setState({ tab: 'installed', view: 'detail', detail: { kind: 'installed', id: skill.id, name: skill.name } })
+        if (skill === null || typeof skill !== 'object') return
+        setState({ tab: 'skills', view: 'detail', detail: { kind: 'installed', id: smText(skill.id), name: smText(skill.name) } })
     }
 
-    function smOpenActiveForIssue(issue) {
-        const name = issue !== null && issue !== undefined ? smText(issue.name) : ''
-        const active = smFindActiveSkillByName(name)
-        if (active !== null) {
+    function smRunIssueFix(issue, setBusy, setError) {
+        const action = smIssueAction(issue).id
+        const name = smText(issue.name)
+        const path = smText(issue.path)
+        const findSkill = function () {
+            return smFindSkillById(issue.id) || smFindSkillByName(name) || (path !== '' ? smFindSkillById(path) : null)
+        }
+        const openEditor = function () {
+            const skill = findSkill()
+            if (path === '' && (skill === null || smText(skill.path) === '')) {
+                setError(t('error.notFound'))
+                return
+            }
+            openModal('edit-content', { skill: skill, name: name, path: path !== '' ? path : smText(skill !== null ? skill.path : ''), mtime: skill !== null ? smNumber(skill.mtime, 0) : 0 })
+        }
+
+        if (action === 'view-active') {
+            const active = smFindActiveSkillByName(name)
+            if (active === null) {
+                toast(t('error.notFound'), { tone: 'error' })
+                return
+            }
             smCloseDiagnostics()
             smOpenSkillDetail(active)
             return
         }
-        smPushToast(t('diag.noActive'), { tone: 'error' })
-    }
-
-    function smOpenIssueSkill(issue) {
-        const name = issue !== null && issue !== undefined ? smText(issue.name) : ''
-        const path = issue !== null && issue !== undefined ? smText(issue.path) : ''
-        const skill = smFindSkillByName(name) || smFindSkillById(path)
-        if (skill !== null) {
-            smCloseDiagnostics()
-            smOpenSkillDetail(skill)
+        if (action === 'open-file' || action === 'trim') {
+            openEditor()
             return
         }
-        if (path !== '') {
-            smCopyText(path)
+        if (action === 'manage-sources') {
+            if (typeof openSourceDialog === 'function') {
+                openSourceDialog()
+                return
+            }
+            setError(t('error.unexpected'))
             return
         }
-        smPushToast(t('error.notFound'), { tone: 'error' })
-    }
-
-    async function smRemoveBrokenLink(issue) {
-        const path = issue !== null && issue !== undefined ? smText(issue.path) : ''
-        if (path === '') {
-            smPushToast(t('error.notFound'), { tone: 'error' })
-            return
-        }
-        try {
-            await api('/skill?path=' + encodeURIComponent(path), { method: 'DELETE' })
-            smPushToast(t('diag.fixed', { name: smText(issue.name, path) }))
-            void loadInstalled(true)
-            void smLoadDiagnostics()
-        } catch (failure) {
-            smPushToast(smErrorMessage(failure), { tone: 'error' })
-        }
-    }
-
-    function smRunDiagnosticFix(issue) {
-        const action = issue !== null && issue !== undefined && issue.fix !== undefined && issue.fix !== null ? issue.fix.action : 'retry'
-        if (action === 'view-active') {
-            smOpenActiveForIssue(issue)
-            return
-        }
-        if (action === 'open-file') {
-            smOpenIssueSkill(issue)
+        if (action === 'open-folder') {
+            if (typeof openFolder === 'function') {
+                openFolder(path)
+                return
+            }
+            smCopyText(path, t('toast.copied'))
             return
         }
         if (action === 'retry') {
@@ -1656,181 +1874,147 @@
             return
         }
         if (action === 'remove-link') {
-            void smRemoveBrokenLink(issue)
-            return
-        }
-        if (action === 'rename') {
-            const suggested = issue !== null && issue !== undefined ? smText(issue.name) : ''
-            if (suggested !== '') smCopyText(suggested)
-            smPushToast(t('diag.fix.renameHint', { name: suggested }))
+            if (path === '') {
+                setError(t('error.notFound'))
+                return
+            }
+            setBusy(true)
+            setError('')
+            api('skill?path=' + encodeURIComponent(path), { method: 'DELETE' }).then(function () {
+                setBusy(false)
+                toast(t('diag.toast.fixed'))
+                void loadInstalled(true)
+                void smLoadDiagnostics()
+            }).catch(function (failure) {
+                setBusy(false)
+                setError(t('diag.error.fixFailed', { reason: smErrorMessage(failure) }))
+            })
         }
     }
 
+    function SmIssueCard(props) {
+        const issue = props.issue
+        const [detailsOpen, setDetailsOpen] = useState(false)
+        const [busy, setBusy] = useState(false)
+        const [fixError, setFixError] = useState('')
+        const kind = smIssueKind(issue)
+        const action = smIssueAction(issue)
+        const name = smText(issue.name, smText(issue.path, '—'))
+        const path = smText(issue.path)
+        const effective = smText(issue.effective, smText(issue.activeName, smText(issue.shadowedBy, smText(issue.effectivePath, smText(issue.activePath)))))
+
+        return h('div', { className: 'sm-issue', style: { display: 'flex', flexDirection: 'column', gap: '8px', padding: '14px 16px', borderRadius: '16px', background: 'var(--dsw-alias-bg-layer-1)', border: '1px solid var(--dsw-alias-border-l2)' } },
+            h('div', { style: { display: 'flex', alignItems: 'flex-start', gap: '8px', minWidth: 0 } },
+                h('span', { style: { flexShrink: 0, color: kind === 'oversize' || kind === 'source-unreachable' ? 'var(--dsw-alias-label-secondary)' : 'var(--dsw-alias-state-warn-primary)' } }, icon(kind === 'oversize' || kind === 'source-unreachable' ? 'info' : 'alert', 16)),
+                h('div', { style: { display: 'flex', flexDirection: 'column', gap: '4px', minWidth: 0 } },
+                    h('span', { className: 'sm-mono', style: { wordBreak: 'break-all', color: 'var(--dsw-alias-label-primary)', fontSize: 'calc(var(--sm-fs) - 1px)', fontWeight: 500 } }, name),
+                    h('span', { style: { color: 'var(--dsw-alias-label-secondary)', fontSize: 'calc(var(--sm-fs) - 2px)', lineHeight: '1.5' } }, smIssueSentence(issue)))),
+            fixError !== '' ? h('div', { style: { color: 'var(--dsw-alias-state-error-primary)', fontSize: 'calc(var(--sm-fs) - 2px)' } }, fixError) : null,
+            h('div', { style: { display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' } },
+                h(SmButton, { tone: 'primary', style: { height: '28px' }, disabled: busy, onClick: function () { smRunIssueFix(issue, setBusy, setFixError) } }, action.label),
+                h(SmButton, {
+                    tone: 'ghost',
+                    style: { height: '28px' },
+                    onClick: function () { setDetailsOpen(!detailsOpen) },
+                }, detailsOpen ? t('diag.details.hide') : t('diag.details'))),
+            detailsOpen
+                ? h('div', { className: 'sm-issue-detail', style: { display: 'flex', flexDirection: 'column', gap: '6px', paddingTop: '6px', borderTop: '1px solid var(--dsw-alias-border-l2)' } },
+                    path !== ''
+                        ? h('div', { style: { display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: '8px' } },
+                            h('span', { className: 'sm-mono', style: { minWidth: 0, wordBreak: 'break-all', color: 'var(--dsw-alias-label-secondary)', fontSize: 'calc(var(--sm-fs) - 3px)' } }, t('diag.path') + ': ' + path),
+                            h(SmButton, { tone: 'ghost', icon: 'copy', style: { height: '24px', flexShrink: 0 }, onClick: function () { smCopyText(path, t('toast.copied')) } }, t('action.copyPath')))
+                        : null,
+                    h('div', { style: { color: 'var(--dsw-alias-label-caption)', fontSize: 'calc(var(--sm-fs) - 3px)' } }, t('diag.kind') + ': ' + smIssueTypeLabel(issue)),
+                    effective !== '' ? h('div', { style: { color: 'var(--dsw-alias-label-caption)', fontSize: 'calc(var(--sm-fs) - 3px)' } }, t('diag.effective') + ': ' + effective) : null,
+                    h('div', { style: { color: 'var(--dsw-alias-label-caption)', fontSize: 'calc(var(--sm-fs) - 3px)' } }, t('diag.fixHint')))
+                : null)
+    }
+
     function SmDiagnosticsDrawer() {
-        const data = smDiagnostics.data
-        const rawIssues = data !== null && Array.isArray(data.issues) ? data.issues : []
-        const issues = rawIssues.filter((issue) => issue !== null && typeof issue === 'object')
-        const errors = issues.filter((issue) => issue.severity === 'error').length
-        const warnings = issues.filter((issue) => issue.severity !== 'error').length
-        const checkedAt = smDiagnostics.checkedAt
-        const loading = smDiagnostics.loading || (data === null && smDiagnostics.error === null)
+        const payload = smDiagnosticsPayload()
+        const issues = payload !== null && Array.isArray(payload.issues) ? payload.issues.filter(function (issue) { return issue !== null && typeof issue === 'object' }) : []
+        const inactive = issues.filter(function (issue) { return smIssueSection(issue) === 'inactive' })
+        const attention = issues.filter(function (issue) { return smIssueSection(issue) === 'attention' })
+        const checkedAt = payload !== null && typeof payload.checkedAt === 'number' ? payload.checkedAt : 0
+        const loading = smDiagnostics.loading || (payload === null && smDiagnostics.error === null)
+        const sortByName = function (left, right) {
+            return smText(left.name, left.path).localeCompare(smText(right.name, right.path))
+        }
+        const partial = payload !== null && (payload.partial === true || payload.incomplete === true)
 
-        const body = loading
-            ? h(
-                'div',
-                { style: { display: 'flex', flexDirection: 'column', gap: '12px' } },
-                h('div', { style: { height: '64px', borderRadius: '14px', background: 'var(--dsw-alias-bg-layer-2)' } }),
-                h('div', { style: { height: '64px', borderRadius: '14px', background: 'var(--dsw-alias-bg-layer-2)' } }),
-                h('div', { style: { color: 'var(--dsw-alias-label-secondary)', fontSize: 'calc(var(--sm-fs) - 1px)' } }, t('state.loading')),
-            )
-            : smDiagnostics.error !== null
-                ? h(
-                    'div',
-                    { style: { display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '10px', padding: '48px 20px', textAlign: 'center' } },
-                    h('span', { style: { color: 'var(--dsw-alias-state-error-primary)' } }, icon('alert', 28)),
-                    h('div', { style: { color: 'var(--dsw-alias-label-primary)', fontSize: 'var(--sm-fs)', fontWeight: 500 } }, t('diag.error')),
-                    h('div', { style: { color: 'var(--dsw-alias-label-secondary)', fontSize: 'calc(var(--sm-fs) - 2px)' } }, smErrorMessage(smDiagnostics.error)),
-                    h(SmButton, { tone: 'secondary', onClick: () => { void smLoadDiagnostics() } }, t('action.retry')),
-                )
-                : issues.length === 0
-                    ? h(
-                        'div',
-                        { style: { display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '10px', padding: '56px 20px', textAlign: 'center' } },
-                        h('span', { style: { color: 'var(--dsw-alias-state-success-primary)' } }, icon('check', 32)),
-                        h('div', { style: { color: 'var(--dsw-alias-label-primary)', fontSize: 'var(--sm-fs)', fontWeight: 500 } }, t('diag.none')),
-                        h('div', { style: { maxWidth: '340px', color: 'var(--dsw-alias-label-secondary)', fontSize: 'calc(var(--sm-fs) - 2px)', lineHeight: '1.5' } }, t('diag.explain')),
-                    )
-                    : h(
-                        'div',
-                        { style: { display: 'flex', flexDirection: 'column', gap: '12px' } },
-                        SM_DIAG_KINDS.map((meta) => {
-                            const group = issues.filter((issue) => issue && issue.kind === meta.kind)
-                            if (group.length === 0) return null
-                            return h(
-                                'div',
-                                { key: meta.kind, style: { display: 'flex', flexDirection: 'column', gap: '8px' } },
-                                h('div', { style: { display: 'flex', alignItems: 'center', gap: '8px', color: 'var(--dsw-alias-label-caption)', fontSize: 'calc(var(--sm-fs) - 2px)' } },
-                                    h(SmBadge, { tone: meta.tone }, meta.labelKey !== '' ? t(meta.labelKey) : meta.kind),
-                                    h('span', null, String(group.length)),
-                                ),
-                                group.map((issue, index) => h(
-                                    'div',
-                                    {
-                                        key: String(issue.id || meta.kind + '-' + String(index)),
-                                        style: {
-                                            display: 'flex',
-                                            flexDirection: 'column',
-                                            gap: '8px',
-                                            padding: '14px 16px',
-                                            borderRadius: '16px',
-                                            background: 'var(--dsw-alias-bg-layer-1)',
-                                            border: '1px solid var(--dsw-alias-border-l2)',
-                                        },
-                                    },
-                                    h(
-                                        'div',
-                                        { style: { display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '8px' } },
-                                        h('span', { className: 'sm-mono', style: { minWidth: 0, wordBreak: 'break-all', color: 'var(--dsw-alias-label-primary)', fontSize: 'calc(var(--sm-fs) - 1px)', fontWeight: 500 } }, smText(issue.name, issue.kind)),
-                                        h(SmBadge, { tone: issue.severity === 'error' ? 'error' : (issue.severity === 'warning' ? 'warn' : 'idle') }, issue.severity === 'error' ? t('diag.error') : (issue.severity === 'warning' ? t('diag.warning') : t('diag.info'))),
-                                    ),
-                                    h('div', { className: 'sm-mono', style: { wordBreak: 'break-all', color: 'var(--dsw-alias-label-caption)', fontSize: 'calc(var(--sm-fs) - 3px)' } }, smText(issue.path)),
-                                    h('div', { style: { color: 'var(--dsw-alias-label-secondary)', fontSize: 'calc(var(--sm-fs) - 2px)', lineHeight: '1.5' } }, smText(issue.message)),
-                                    h(
-                                        'div',
-                                        { style: { display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' } },
-                                        h(SmButton, {
-                                            tone: 'secondary',
-                                            style: { height: '28px' },
-                                            onClick: () => smRunDiagnosticFix(issue),
-                                        }, smFixLabel(issue)),
-                                        issue.fix !== undefined && issue.fix !== null && typeof issue.fix.hint === 'string' && issue.fix.hint !== ''
-                                            ? h('span', { style: { color: 'var(--dsw-alias-label-caption)', fontSize: 'calc(var(--sm-fs) - 3px)' } }, issue.fix.hint)
-                                            : null,
-                                    ),
-                                )),
-                            )
-                        }),
-                        h('div', { style: { paddingTop: '4px', color: 'var(--dsw-alias-label-caption)', fontSize: 'calc(var(--sm-fs) - 3px)', lineHeight: '1.5' } }, t('diag.explain')),
-                    )
+        const sections = []
+        if (inactive.length > 0) {
+            sections.push(h('section', { key: 'inactive', style: { display: 'flex', flexDirection: 'column', gap: '8px' } },
+                h('h4', { style: { margin: 0, color: 'var(--dsw-alias-label-primary)', fontSize: 'calc(var(--sm-fs) - 1px)', fontWeight: 500 } }, t('diag.section.inactive')),
+                inactive.slice().sort(sortByName).map(function (issue, index) {
+                    return h(SmIssueCard, { key: smText(issue.id, 'inactive-' + String(index)), issue: issue })
+                })))
+        }
+        if (attention.length > 0) {
+            sections.push(h('section', { key: 'attention', style: { display: 'flex', flexDirection: 'column', gap: '8px' } },
+                h('h4', { style: { margin: 0, color: 'var(--dsw-alias-label-primary)', fontSize: 'calc(var(--sm-fs) - 1px)', fontWeight: 500 } }, t('diag.section.attention')),
+                attention.slice().sort(sortByName).map(function (issue, index) {
+                    return h(SmIssueCard, { key: smText(issue.id, 'attention-' + String(index)), issue: issue })
+                })))
+        }
 
-        return h(
-            'div',
-            {
-                className: 'sm-drawer-backdrop',
-                style: { position: 'fixed', inset: 0, zIndex: 1240, background: 'transparent' },
-                onMouseDown: (event) => {
-                    if (event.target !== event.currentTarget) return
-                    if (dialogStack[dialogStack.length - 1] !== 'diagnostics') return
-                    smHideTooltip()
-                    smCloseDiagnostics()
-                },
+        let body
+        if (loading) {
+            body = h('div', { style: { display: 'flex', flexDirection: 'column', gap: '12px' } },
+                h('div', { style: { height: '64px', borderRadius: '14px', background: 'var(--dsw-alias-bg-layer-1)' } }),
+                h('div', { style: { height: '64px', borderRadius: '14px', background: 'var(--dsw-alias-bg-layer-1)' } }),
+                h('div', { style: { color: 'var(--dsw-alias-label-secondary)', fontSize: 'calc(var(--sm-fs) - 1px)' } }, t('state.loading')))
+        } else if (smDiagnostics.error !== null) {
+            body = h('div', { style: { display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '10px', padding: '48px 20px', textAlign: 'center' } },
+                h('span', { style: { color: 'var(--dsw-alias-state-error-primary)' } }, icon('alert', 28)),
+                h('div', { style: { color: 'var(--dsw-alias-label-primary)', fontSize: 'var(--sm-fs)', fontWeight: 500 } }, t('state.error.diag.title')),
+                h('div', { style: { color: 'var(--dsw-alias-label-secondary)', fontSize: 'calc(var(--sm-fs) - 2px)' } }, smErrorMessage(smDiagnostics.error)),
+                h(SmButton, { tone: 'secondary', onClick: function () { void smLoadDiagnostics() } }, t('action.retry')))
+        } else if (issues.length === 0) {
+            body = h('div', { style: { display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '10px', padding: '56px 20px', textAlign: 'center' } },
+                h('span', { style: { color: 'var(--dsw-alias-state-success-primary)' } }, icon('check', 32)),
+                h('div', { style: { color: 'var(--dsw-alias-label-primary)', fontSize: 'var(--sm-fs)', fontWeight: 500 } }, t('empty.diag.title')),
+                h('div', { style: { color: 'var(--dsw-alias-label-secondary)', fontSize: 'calc(var(--sm-fs) - 2px)' } }, t('empty.diag.body')))
+        } else {
+            body = h('div', { style: { display: 'flex', flexDirection: 'column', gap: '16px' } },
+                partial ? h(SmBanner, { tone: 'warn' },
+                    h('span', null, t('diag.partial')),
+                    h(SmButton, { tone: 'secondary', style: { alignSelf: 'flex-start', height: '28px' }, onClick: function () { void smLoadDiagnostics() } }, t('action.retry'))) : null,
+                sections,
+                h('div', { style: { color: 'var(--dsw-alias-label-caption)', fontSize: 'calc(var(--sm-fs) - 3px)', lineHeight: '1.5' } }, t('diag.note')))
+        }
+
+        return h('div', {
+            className: 'sm-drawer-mask sm-drawer-backdrop',
+            style: { position: 'fixed', inset: 0, zIndex: 1100, background: 'transparent' },
+            onMouseDown: function (event) {
+                if (event.target !== event.currentTarget) return
+                if (smModalStack.length > 0) return
+                smCloseDiagnostics()
             },
-            h(
-                'aside',
-                {
-                    className: 'sm-drawer sm-diagnostics',
-                    role: 'dialog',
-                    'aria-modal': 'true',
-                    'aria-label': t('diag.title'),
-                    style: {
-                        position: 'fixed',
-                        top: 0,
-                        right: 0,
-                        bottom: 0,
-                        zIndex: 1250,
-                        width: 'min(560px, 100vw)',
-                        display: 'flex',
-                        flexDirection: 'column',
-                        background: 'var(--dsw-static-neutral-bluish-850, var(--dsw-alias-bg-layer-1))',
-                        borderLeft: '0.5px solid var(--dsw-alias-border-l2)',
-                        boxShadow: 'none',
-                    },
-                },
-                h(
-                    'div',
-                    { style: { display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: '12px', padding: '20px 24px 16px', borderBottom: '1px solid var(--dsw-alias-border-l2)' } },
-                    h(
-                        'div',
-                        { style: { display: 'flex', flexDirection: 'column', gap: '2px', minWidth: 0 } },
-                        h('h3', { style: { margin: 0, fontSize: 'calc(var(--sm-fs) + 1px)', fontWeight: 500, color: 'var(--dsw-alias-label-primary)' } }, t('diag.title')),
-                        h('div', { style: { color: 'var(--dsw-alias-label-secondary)', fontSize: 'calc(var(--sm-fs) - 2px)' } },
-                            loading
-                                ? t('state.loading')
-                                : t('diag.issuesCount', { errors: errors, warnings: warnings }) + ' · ' + t('update.lastChecked', { time: checkedAt > 0 ? fmtTime(checkedAt) : '—' }),
-                        ),
-                    ),
-                    h(
-                        'div',
-                        { style: { display: 'flex', alignItems: 'center', gap: '8px', flexShrink: 0 } },
-                        h(SmButton, { tone: 'secondary', style: { height: '28px' }, disabled: loading, onClick: () => { void smLoadDiagnostics() } }, t('diag.recheck')),
-                        h('button', {
-                            type: 'button',
-                            className: 'sm-icon-btn',
-                            'aria-label': t('action.close'),
-                            onClick: smCloseDiagnostics,
-                            style: {
-                                display: 'inline-flex',
-                                alignItems: 'center',
-                                justifyContent: 'center',
-                                width: '28px',
-                                height: '28px',
-                                padding: 0,
-                                border: 'none',
-                                borderRadius: '8px',
-                                background: 'transparent',
-                                color: 'var(--dsw-alias-label-secondary)',
-                                cursor: 'pointer',
-                            },
-                        }, icon('x', 16)),
-                    ),
-                ),
-                h(
-                    'div',
-                    { style: { flex: 1, minHeight: 0, overflowY: 'auto', padding: '20px 24px', display: 'flex', flexDirection: 'column', gap: '12px' } },
-                    body,
-                ),
-            ),
-        )
+        },
+        h('aside', {
+            className: 'sm-drawer sm-diagnostics',
+            role: 'dialog',
+            'aria-modal': 'true',
+            'aria-label': t('diag.title'),
+            style: { position: 'fixed', top: 0, right: 0, bottom: 0, width: 'min(420px, 92vw)', display: 'flex', flexDirection: 'column', background: 'var(--dsw-alias-bg-layer-2)', borderLeft: '.5px solid var(--dsw-alias-border-l2)', boxShadow: 'none' },
+        },
+        h('div', { className: 'sm-drawer-head', style: { display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: '12px', padding: '20px 20px 14px', borderBottom: '1px solid var(--dsw-alias-border-l2)' } },
+            h('div', { style: { display: 'flex', flexDirection: 'column', gap: '4px', minWidth: 0 } },
+                h('h3', { style: { margin: 0, fontSize: 'calc(var(--sm-fs) + 1px)', fontWeight: 500, color: 'var(--dsw-alias-label-primary)' } }, t('diag.title')),
+                h('div', { style: { color: 'var(--dsw-alias-label-secondary)', fontSize: 'calc(var(--sm-fs) - 2px)' } },
+                    t('diag.summary', { active: inactive.length, attention: attention.length }) + ' · ' + t('diag.checkedAt', { time: checkedAt > 0 ? fmtTime(checkedAt) : '—' }))),
+            h('div', { style: { display: 'flex', alignItems: 'center', gap: '8px', flexShrink: 0 } },
+                h(SmButton, { tone: 'secondary', style: { height: '28px' }, disabled: loading, onClick: function () { void smLoadDiagnostics() } }, loading ? t('diag.rechecking') : t('diag.recheck')),
+                h('button', {
+                    type: 'button',
+                    className: 'sm-icon-btn',
+                    'aria-label': t('action.close'),
+                    onClick: smCloseDiagnostics,
+                    style: { display: 'inline-flex', alignItems: 'center', justifyContent: 'center', width: '28px', height: '28px', padding: 0, border: 'none', borderRadius: '8px', background: 'transparent', color: 'var(--dsw-alias-label-secondary)', cursor: 'pointer' },
+                }, icon('x', 16)))),
+        h('div', { className: 'sm-drawer-body', style: { flex: '1 1 auto', minHeight: 0, overflowY: 'auto', padding: '16px 20px 20px', display: 'flex', flexDirection: 'column', gap: '12px' } }, body)))
     }
 
     function renderDiagnosticsDrawer() {

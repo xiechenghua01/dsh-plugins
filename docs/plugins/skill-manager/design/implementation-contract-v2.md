@@ -116,6 +116,7 @@ interface SkillView {
   writable: boolean
   updateAvailable: string | null
   brokenReason: string | null   // 仅 status='broken' 时给用户语言原因；当前扫描器不产出 broken 视图（断链只进诊断），字段预留给后续
+  localModified?: boolean       // 安装后本地被改过；更新确认需要据此提示备份
 }
 ```
 
@@ -189,6 +190,7 @@ interface AppState {
   diagnostics: DiagnosticsPayload | null
   loading: Record<string, boolean>
   error: { scope: string; code: string; message: string } | null
+  cwd: string                       // 项目根，用于项目位置可用性与 /diagnostics?cwd=
   // 记忆
   restoreListScroll: number | null
   menu: unknown | null
