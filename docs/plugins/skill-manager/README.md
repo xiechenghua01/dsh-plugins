@@ -10,10 +10,11 @@
 | --- | --- | --- | --- |
 | **0** | **[product/v2-ia-decisions.md](product/v2-ia-decisions.md)** | v2.0 | **IA 基线**：四个箱子、两 Tab、隐藏清单、验收口径 |
 | **0.1** | **[product/v2-1-review-decisions.md](product/v2-1-review-decisions.md)** | v2.1 | **首轮评审变更**：二级 Tab、两列卡片、市场按源分组与源排序、状态图标、弹窗尺寸；冲突时以本文件为准 |
-| **1** | **[product/skills-manager-prd-v2.md](product/skills-manager-prd-v2.md)** | v2.1 | **PRD**：范围、分类规则、诊断文案对照、禁用词、42 条验收项 |
-| **2** | **[design/interaction-spec-v3.md](design/interaction-spec-v3.md)** | v3.1 | **交互稿**：35 屏清单、状态与行为、文案 key、键盘规范 |
-| **3** | **[prototypes/skills-manager-v3.html](prototypes/skills-manager-v3.html)** | v3.1 | **可点击原型**：20 个画面，含二级 Tab、两列卡片、源排序与弹窗 |
-| 4 | [design/implementation-contract.md](design/implementation-contract.md) | v1.3 | 平台约束；按 v3.1 实现前需同步两 Tab、卡片列表与源排序 |
+| **0.2** | **[product/v2-2-review-decisions.md](product/v2-2-review-decisions.md)** | v2.2 | **第二轮评审变更**：Tab 内按来源分组、工具栏图标化、卡片操作重排、管理源改弹窗并拖动排序；与 v2.1 冲突时以本文件为准 |
+| **1** | **[product/skills-manager-prd-v2.md](product/skills-manager-prd-v2.md)** | v2.2 | **PRD**：范围、分类规则、诊断文案对照、禁用词、47 条验收项 |
+| **2** | **[design/interaction-spec-v3.md](design/interaction-spec-v3.md)** | v3.2 | **交互稿**：34 屏清单、状态与行为、文案 key、键盘规范 |
+| **3** | **[prototypes/skills-manager-v3.html](prototypes/skills-manager-v3.html)** | v3.2 | **可点击原型**：21 个画面，含来源分组、拖动排序、卡片悬停菜单 |
+| 4 | [design/implementation-contract.md](design/implementation-contract.md) | v1.3 | 平台约束；按 v3.2 实现前需同步两 Tab、卡片列表、来源分组、市场源弹窗与拖动排序 |
 
 ## v1 归档（已不作为当前输入）
 
@@ -52,11 +53,11 @@
 ## 当前状态
 
 - 调研：完成（含未验证项清单，见各文档末节）。
-- 产品文档：**v2.1 完成**——首轮评审后改为二级 Tab、两列卡片、市场按源分组、状态图标、DSH 对齐弹窗；42 条验收项待评审。
-- 交互稿：**v3.1 完成**——35 屏清单，含源排序与两个 488px 弹窗画面。
-- 原型：**v3.1 完成**——单文件可点击 HTML，20 个画面，源顺序持久化。
+- 产品文档：**v2.2 完成**——Tab 内按来源分组、工具栏图标化、卡片操作重排、管理源弹窗与拖动排序；47 条验收项待评审。
+- 交互稿：**v3.2 完成**——34 屏清单，含拖动排序五种状态与卡片悬停交互。
+- 原型：**v3.2 完成**——单文件可点击 HTML，21 个画面，拖动排序与提示语经真实浏览器验证。
 - 技能市场索引：规范 v1.0 草案 + JSON Schema + 示例 + 实现方案完成，待评审冻结。
-- 实现：**已发布 0.1.2（v1 三 Tab 结构）**；按 v3.0 改造前需要同步 `implementation-contract.md`（两 Tab、删除 filter/sort location、市场源抽屉、10 类模态）。
+- 实现：**已发布 0.1.2（v1 三 Tab 结构）**；按 v3.2 改造前需要同步 `implementation-contract.md`（两 Tab、卡片列表、来源分组、市场源弹窗与拖动排序）。
 
 ## 验证与发布提醒
 
