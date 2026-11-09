@@ -660,6 +660,19 @@
           "engines": {
             "dsh": ">=0.2.1-rc.5 <0.3.0"
           }
+        },
+        {
+          "version": "0.2.0",
+          "publishTimestamp": 1794223616,
+          "source": {
+            "type": "git",
+            "url": "https://github.com/xiechenghua01/dsh-plugins",
+            "commit": "d269f69f9a47986cc30d04fd7c17cdc5b3fc7f40",
+            "path": "plugins/skill-manager"
+          },
+          "engines": {
+            "dsh": ">=0.2.1-rc.5 <0.3.0"
+          }
         }
       ],
       "title": {
