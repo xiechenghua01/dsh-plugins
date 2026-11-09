@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>DSH · 技能管理 v3.1</title>
+<title>DSH · 技能管理 v3.2</title>
 <style>
   /* ============ 1. DSH tokens（原型内近似值，命名与用途与 DSH 一致） ============ */
   :root {
@@ -159,6 +159,17 @@
   .sm-icon-btn:hover { background: var(--dsw-alias-interactive-bg-hover); color: var(--dsw-alias-label-primary); }
   .sm-icon-btn.plain { background: transparent; border-color: transparent; }
   .sm-icon-btn.plain:hover { background: var(--dsw-alias-interactive-bg-hover); }
+  /* v3.2 工具栏图标按钮：30×30、图标 16、间距 6 */
+  .sm-toolbar-icons { display: inline-flex; align-items: center; gap: 6px; }
+  .sm-tool-btn {
+    width: 30px; height: 30px; padding: 0; border-radius: 10px;
+    background: var(--dsw-alias-bg-layer-1); border: 1px solid var(--dsw-alias-border-l2);
+    color: var(--dsw-alias-label-secondary); display: inline-flex; align-items: center; justify-content: center;
+    flex-shrink: 0;
+  }
+  .sm-tool-btn:hover:not(:disabled) { background: var(--dsw-alias-interactive-bg-hover); color: var(--dsw-alias-label-primary); }
+  .sm-spin { animation: sm-spin 800ms linear infinite; }
+  @keyframes sm-spin { to { transform: rotate(360deg); } }
   .sm-select {
     height: 33px; padding: 0 10px; border-radius: 12px;
     background: var(--dsw-alias-bg-layer-1); border: 1px solid var(--dsw-alias-border-l2);
@@ -249,12 +260,22 @@
   }
   .sm-card-item.is-disabled .sm-card-name { color: var(--dsw-alias-label-caption); }
   .sm-card-item.is-disabled .sm-card-desc { color: var(--dsw-alias-label-caption); }
-  .sm-card-tail { width: 68px; flex-shrink: 0; align-self: center; display: flex; flex-direction: column; align-items: stretch; justify-content: center; gap: 6px; }
-  .sm-card-tail .btn { width: 100%; }
-  .sm-card-more { width: 100% !important; height: 26px !important; border-radius: 8px !important; }
+  /* v3.2：⋯ 在左、主按钮在右，同一行、右对齐 */
+  .sm-card-tail {
+    margin-left: auto; flex-shrink: 0; align-self: center;
+    display: inline-flex; flex-direction: row; align-items: center; justify-content: flex-end; gap: 6px;
+  }
+  .sm-card-more {
+    width: 26px; height: 26px; border-radius: 8px;
+    opacity: 0; pointer-events: none; transition: opacity 120ms ease;
+  }
+  .sm-card-item:hover .sm-card-more,
+  .sm-card-item:focus-within .sm-card-more,
+  .sm-card-more:focus-visible { opacity: 1; pointer-events: auto; }
 
-  /* ============ 7. 市场按源分组 ============ */
+  /* ============ 7. 市场按源分组 / 技能 Tab 内按来源分组 ============ */
   .sm-market-blocks { display: flex; flex-direction: column; gap: 28px; }
+  .sm-skill-groups { gap: 24px; }
   .sm-source-block { display: flex; flex-direction: column; gap: 10px; min-width: 0; }
   .sm-source-block-head { display: flex; align-items: center; gap: 8px; padding: 0 2px; min-width: 0; }
   .sm-source-block-title { font-size: var(--sm-fs); font-weight: 500; color: var(--dsw-alias-label-primary); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
@@ -349,10 +370,27 @@
   .sm-issue-ok { border-color: color-mix(in srgb, var(--dsw-alias-state-success-primary) 30%, transparent); }
   .sm-issue-ok .sm-issue-icon { background: color-mix(in srgb, var(--dsw-alias-state-success-primary) 14%, transparent); color: var(--dsw-alias-state-success-primary); }
 
-  /* 源 */
-  .sm-source { padding: 12px 14px; border-radius: 14px; background: var(--dsw-alias-bg-layer-1); border: 1px solid var(--dsw-alias-border-l2); display: flex; flex-direction: column; gap: 6px; margin-bottom: 10px; }
+  /* 源（v3.2：弹窗内列表，整行拖动排序） */
+  .sm-source {
+    padding: 10px 12px; border-radius: 14px; background: var(--dsw-alias-bg-layer-1);
+    border: 1px solid var(--dsw-alias-border-l2); display: flex; flex-direction: column; gap: 4px;
+    position: relative;
+  }
   .sm-source.is-off { opacity: 0.6; }
-  .sm-source-top { display: flex; align-items: center; gap: 8px; }
+  .sm-source.is-dragging { opacity: 0.4; }
+  .sm-source.is-drop-before::before,
+  .sm-source.is-drop-after::after {
+    content: ''; position: absolute; left: 8px; right: 8px; height: 2px;
+    border-radius: 2px; background: var(--dsw-alias-brand-primary); pointer-events: none;
+  }
+  .sm-source.is-drop-before::before { top: -5px; }
+  .sm-source.is-drop-after::after { bottom: -5px; }
+  .sm-drag-handle {
+    width: 16px; height: 16px; flex-shrink: 0; display: inline-flex; align-items: center; justify-content: center;
+    color: var(--dsw-alias-label-caption); cursor: grab;
+  }
+  .sm-source:active .sm-drag-handle, .sm-source.is-dragging .sm-drag-handle { cursor: grabbing; }
+  .sm-source-top { display: flex; align-items: center; gap: 8px; min-width: 0; }
   .sm-source-top .sm-dot { position: static; border: none; flex-shrink: 0; }
   .sm-source-name { font-size: var(--sm-fs); font-weight: 500; flex: 1; min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
   .sm-source-actions { display: flex; align-items: center; gap: 4px; flex-shrink: 0; }
@@ -364,7 +402,7 @@
   .sm-switch[aria-checked="true"] { background: var(--dsw-alias-button-primary-fill); }
   .sm-switch-thumb { width: 16px; height: 16px; border-radius: 50%; background: var(--dsw-alias-bg-base); transform: translateX(0); transition: transform 150ms ease; }
   .sm-switch[aria-checked="true"] .sm-switch-thumb { transform: translateX(16px); }
-  .sm-add-source { margin-top: 20px; padding-top: 16px; border-top: 1px solid var(--dsw-alias-border-l1); display: flex; flex-direction: column; gap: 8px; }
+  .sm-add-source { margin-top: 14px; padding-top: 14px; border-top: 1px solid var(--dsw-alias-border-l1); display: flex; flex-direction: column; gap: 8px; flex-shrink: 0; }
   .sm-add-label { font-size: calc(var(--sm-fs) - 2px); font-weight: 500; color: var(--dsw-alias-label-secondary); }
   .sm-add-row { display: flex; align-items: center; gap: 8px; }
   .sm-input {
@@ -386,9 +424,21 @@
   .sm-dialog.form { width: min(488px, 100%); border-radius: var(--dsw-radius-panel); }
   .sm-dialog.confirm { width: min(480px, 100vw - 32px); border-radius: var(--dsw-radius-xl); }
   .sm-dialog.large { width: min(720px, 100%); border-radius: var(--dsw-radius-panel); }
+  /* v3.2 管理源：居中大弹窗，720 档 + 视口余量 32px，列表内部滚动 */
+  .sm-dialog.sources {
+    width: min(720px, 100vw - 32px);
+    max-height: min(720px, 100vh - 96px);
+    border-radius: var(--dsw-radius-panel);
+  }
+  .sm-dialog.sources .sm-dialog-body {
+    display: flex; flex-direction: column; overflow: hidden; padding-top: 14px; padding-bottom: 16px;
+  }
   .sm-dialog-head { padding: 18px 20px 0; display: flex; align-items: flex-start; justify-content: space-between; gap: 10px; flex-shrink: 0; }
+  .sm-dialog-head-left { display: flex; align-items: center; gap: 8px; min-width: 0; }
   .sm-dialog-title { font-size: calc(var(--sm-fs) + 1px); font-weight: 500; }
   .sm-dialog-sub { margin: 4px 0 0; font-size: calc(var(--sm-fs) - 2px); color: var(--dsw-alias-label-caption); }
+  .sm-dialog-intro { margin: 0 0 12px; font-size: calc(var(--sm-fs) - 2px); color: var(--dsw-alias-label-caption); line-height: 1.6; flex-shrink: 0; }
+  .sm-source-list { display: flex; flex-direction: column; gap: 8px; overflow-y: auto; min-height: 0; padding-right: 2px; }
   .sm-dialog-body { padding: 16px 20px; overflow-y: auto; min-height: 0; }
   .sm-dialog.form .sm-dialog-body { padding-top: 38px; }
   .sm-dialog.large .sm-dialog-body { padding-top: 18px; }
@@ -438,13 +488,15 @@
     border: 1px solid var(--dsw-alias-border-l2); color: var(--dsw-alias-label-primary);
     font-size: calc(var(--sm-fs) - 1px); box-shadow: none; display: inline-flex; align-items: center; gap: 8px; pointer-events: auto;
   }
-  #sm-tooltip {
+  /* The element is #tooltip; the old #sm-tooltip selector left the tooltip
+      * unstyled, so it rendered off-flow and was invisible. */
+  #tooltip {
     position: fixed; z-index: 2000; font-size: calc(var(--sm-fs) - 4px); color: var(--dsw-alias-label-secondary);
     background: var(--dsw-alias-bg-layer-2); border: 1px solid var(--dsw-alias-border-l2);
     box-shadow: none; border-radius: 7px; padding: 6px 10px; max-width: 290px; line-height: 1.35;
     pointer-events: none; opacity: 0; transition: opacity 110ms;
   }
-  #sm-tooltip.visible { opacity: 1; }
+  #tooltip.visible { opacity: 1; }
 
   /* ============ 12. 响应式 ============ */
   @media (max-width: 1120px) {
@@ -462,7 +514,7 @@
 <header class="pb" aria-label="原型画面切换">
   <div class="pb-left">
     <span class="pb-brand">DSH · 技能管理</span>
-    <span class="pb-ver">v3.1</span>
+    <span class="pb-ver">v3.2</span>
     <span class="pb-label">画面</span>
     <select id="screen-select" class="proto-select" onchange="applyScreen(this.value)" aria-label="切换原型画面"></select>
     <button class="proto-btn" onclick="stepScreen(-1)" title="上一画面">←</button>
@@ -475,7 +527,7 @@
       <option value="16">16px</option>
       <option value="12">12px</option>
     </select>
-    <span class="pb-date">v3.1 · 2026-11-09</span>
+    <span class="pb-date">v3.2 · 2026-11-09</span>
   </div>
 </header>
 
@@ -540,6 +592,7 @@ const ICONS = {
   copy: '<path stroke-linecap="round" stroke-linejoin="round" d="M15.75 17.25v3.375c0 .621-.504 1.125-1.125 1.125h-9.75a1.125 1.125 0 01-1.125-1.125V7.875c0-.621.504-1.125 1.125-1.125H8.25m7.5 10.5h3.375c.621 0 1.125-.504 1.125-1.125V9.375c0-.621-.504-1.125-1.125-1.125H9.375c-.621 0-1.125.504-1.125 1.125v9.75c0 .621.504 1.125 1.125 1.125H15.75z"/>',
   refresh: '<path stroke-linecap="round" stroke-linejoin="round" d="M16.023 9.348h4.992v-.001M2.985 19.644v-4.992m0 0h4.992m-4.993 0l3.181 3.183a8.25 8.25 0 0013.803-3.7M4.031 9.865a8.25 8.25 0 0113.803-3.7l3.181 3.182m0-4.991v4.99"/>',
   sliders: '<path stroke-linecap="round" stroke-linejoin="round" d="M10.5 6h9.75M10.5 6a1.5 1.5 0 11-3 0m3 0a1.5 1.5 0 10-3 0M3.75 6H7.5m3 12h9.75m-9.75 0a1.5 1.5 0 01-3 0m3 0a1.5 1.5 0 00-3 0m-3.75 0H7.5m9-6h3.75m-3.75 0a1.5 1.5 0 01-3 0m3 0a1.5 1.5 0 00-3 0m-9.75 0h9.75"/>',
+  grip: '<circle cx="9" cy="5.5" r="1" fill="currentColor" stroke="none"/><circle cx="15" cy="5.5" r="1" fill="currentColor" stroke="none"/><circle cx="9" cy="12" r="1" fill="currentColor" stroke="none"/><circle cx="15" cy="12" r="1" fill="currentColor" stroke="none"/><circle cx="9" cy="18.5" r="1" fill="currentColor" stroke="none"/><circle cx="15" cy="18.5" r="1" fill="currentColor" stroke="none"/>',
   user: '<path stroke-linecap="round" stroke-linejoin="round" d="M15.75 6a3.75 3.75 0 11-7.5 0 3.75 3.75 0 017.5 0zM4.501 20.118a7.5 7.5 0 0114.998 0A17.933 17.933 0 0112 21.75c-2.676 0-5.216-.584-7.499-1.632z"/>',
   users: '<path stroke-linecap="round" stroke-linejoin="round" d="M15 19.128a9.38 9.38 0 002.625.372 9.337 9.337 0 004.121-.952 4.125 4.125 0 00-7.533-2.493M15 19.128v-.003c0-1.113-.285-2.16-.786-3.07M15 19.128v.106A12.318 12.318 0 018.624 21c-2.331 0-4.512-.645-6.374-1.766l-.001-.109a6.375 6.375 0 0111.964-3.07M12 6.375a3.375 3.375 0 11-6.75 0 3.375 3.375 0 016.75 0zm8.25 2.25a2.625 2.625 0 11-5.25 0 2.625 2.625 0 015.25 0z"/>',
   folder: '<path stroke-linecap="round" stroke-linejoin="round" d="M2.25 12.75V12A2.25 2.25 0 014.5 9.75h15A2.25 2.25 0 0121.75 12v.75m-8.69-6.44l-2.12-2.12a1.5 1.5 0 00-1.061-.44H4.5A2.25 2.25 0 002.25 6v12a2.25 2.25 0 002.25 2.25h15A2.25 2.25 0 0021.75 18V9a2.25 2.25 0 00-2.25-2.25h-5.379a1.5 1.5 0 01-1.06-.44z"/>',
@@ -554,9 +607,10 @@ const ICONS = {
   sparkle: '<path stroke-linecap="round" stroke-linejoin="round" d="M9.813 15.904L9 18.75l-.813-2.846a4.5 4.5 0 00-3.09-3.09L2.25 12l2.846-.813a4.5 4.5 0 003.09-3.09L9 5.25l.813 2.846a4.5 4.5 0 003.09 3.09L15.75 12l-2.846.813a4.5 4.5 0 00-3.09 3.09zM18.259 8.715L18 9.75l-.259-1.035a3.375 3.375 0 00-2.455-2.456L14.25 6l1.036-.259a3.375 3.375 0 002.455-2.456L18 2.25l.259 1.035a3.375 3.375 0 002.456 2.456L21.75 6l-1.035.259a3.375 3.375 0 00-2.456 2.456z"/>'
 };
 
-function icon(name, size) {
+function icon(name, size, cls) {
   const s = size || 16;
-  return '<svg width="' + s + '" height="' + s + '" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true">' + (ICONS[name] || ICONS.skill) + '</svg>';
+  const c = cls ? ' class="' + cls + '"' : '';
+  return '<svg' + c + ' width="' + s + '" height="' + s + '" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true">' + (ICONS[name] || ICONS.skill) + '</svg>';
 }
 
 /*************************************************************************
@@ -576,6 +630,7 @@ const SKILLS = [
     when: '当你准备提交代码、整理 PR 描述或生成版本说明时使用。',
     status: 'active', writable: true,
     version: '1.4.0', update: '1.5.0', author: 'deepseek-ai',
+    sourceId: 'official',
     source: '来自市场：DSH 官方技能索引', market: true,
     path: '~/.dsh/skills/git-commit/SKILL.md', modified: '2 天前', mtime: 80,
     localModified: true,
@@ -618,7 +673,8 @@ const SKILLS = [
     when: '当为这个仓库编写或修改 Cordis 插件时使用。',
     status: 'active', writable: true,
     version: null, update: null, author: null,
-    source: '本地文件', market: false,
+    sourceId: 'team',
+    source: '来自市场：团队内部技能索引', market: true,
     path: '.dsh/skills/cordis-plugin-development/SKILL.md', modified: '3 小时前', mtime: 95,
     body: '---\nname: cordis-plugin-development\ndescription: 为这个项目开发 Cordis 插件：包结构、生命周期与 UI 槽位。\nwhenToUse: 当为这个仓库编写或修改 Cordis 插件时使用。\n---\n\n# Cordis Plugin Development\n\n1. 插件入口导出 name、inject 与 apply。\n2. 浏览器半只 require("react")，不要引入其它运行时依赖。\n3. UI 槽位注册放在 apply 里，卸载时清理监听。\n4. 所有颜色使用 --dsw-* 语义变量。'
   },
@@ -750,7 +806,8 @@ const SOURCES = [
 ];
 
 const SCREENS = [
-  { id: 'list', label: '技能 · 我的技能（两列卡片）', state: {} },
+  { id: 'list', label: '技能 · 我的技能（Tab 内按来源分组）', state: {} },
+  { id: 'skill-grouped', label: '技能 · Tab 内按来源分组（项目技能）', state: { category: 'project' } },
   { id: 'category-empty', label: '技能 · 分类空态（共享技能）', state: { category: 'shared', omit: ['ego-browser'] } },
   { id: 'search', label: '技能 · 跨分类搜索（office）', state: { search: 'office' } },
   { id: 'search-empty', label: '技能 · 搜索无结果', state: { search: 'kubernetes' } },
@@ -764,7 +821,7 @@ const SCREENS = [
   { id: 'source-order', label: '市场 · 调整源顺序后', state: { tab: 'market', sourceOrder: ['team', 'official', 'legacy'] } },
   { id: 'market-empty', label: '市场 · 无源空态', state: { tab: 'market', noSources: true } },
   { id: 'market-detail', label: '市场详情 · 未安装', state: { tab: 'market', view: 'detail', detail: { kind: 'market', id: 'playwright-e2e-gen' } } },
-  { id: 'sources', label: '管理源抽屉 · 排序', state: { tab: 'market', sourcesOpen: true } },
+  { id: 'source-dialog', label: '管理源弹窗 · 拖动排序', state: { tab: 'market', sourcesOpen: true } },
   { id: 'modal-new', label: '弹窗 · 新建技能（488）', state: { modal: { kind: 'new' } } },
   { id: 'modal-update', label: '弹窗 · 更新确认（480）', state: { modal: { kind: 'update', id: 'git-commit' } } },
   { id: 'modal-uninstall', label: '弹窗 · 卸载确认（480）', state: { modal: { kind: 'uninstall', id: 'git-commit' } } },
@@ -791,6 +848,7 @@ function baseState() {
     noSources: false,
     diagOpen: false,
     sourcesOpen: false,
+    checking: false,
     modal: null,
     issueFixed: false,
     issueCount: 1,
@@ -899,7 +957,7 @@ function codeBlock(text) {
 }
 
 function renderFooter() {
-  return '<footer class="sm-footer">v3.1 · 2026-11-09</footer>';
+  return '<footer class="sm-footer">v3.2 · 2026-11-09</footer>';
 }
 
 function visibleSkills() {
@@ -951,7 +1009,10 @@ function renderListHeader(tab) {
           <option value="updated"${state.marketSort === 'updated' ? ' selected' : ''}>最近更新</option>
           <option value="name"${state.marketSort === 'name' ? ' selected' : ''}>按名称</option>
         </select>
-        <button class="btn btn-secondary" onclick="openSources()">${icon('sliders', 15)} 管理源</button>
+        <span class="sm-toolbar-icons">
+          <button class="sm-tool-btn" aria-label="检查更新" data-tip="检查更新" onclick="checkForUpdates()"${state.checking ? ' disabled aria-busy="true"' : ''}>${icon('refresh', 16, state.checking ? 'sm-spin' : '')}</button>
+          <button class="sm-tool-btn" aria-label="管理源" data-tip="管理源" onclick="openSources()">${icon('sliders', 16)}</button>
+        </span>
       </div>`
     : `<div class="sm-toolbar">
         <div class="sm-search">
@@ -962,9 +1023,13 @@ function renderListHeader(tab) {
         <select class="sm-select" onchange="setSort(this.value)" aria-label="排序方式">
           <option value="name"${state.sort === 'name' ? ' selected' : ''}>按名称</option>
           <option value="recent"${state.sort === 'recent' ? ' selected' : ''}>最近修改</option>
+          <option value="source"${state.sort === 'source' ? ' selected' : ''}>按来源</option>
         </select>
-        <button class="btn btn-primary" onclick="openModal('new')">${icon('plus', 15)} 新建技能</button>
-        <button class="sm-icon-btn" aria-label="更多" data-tip="更多：导入技能、检查更新" onclick="event.stopPropagation();openTopMenu(event)">${icon('more', 16)}</button>
+        <span class="sm-toolbar-icons">
+          <button class="sm-tool-btn" aria-label="新建技能" data-tip="新建技能" onclick="openModal('new')">${icon('plus', 16)}</button>
+          <button class="sm-tool-btn" aria-label="导入技能" data-tip="导入技能" onclick="openModal('import')">${icon('upload', 16)}</button>
+          <button class="sm-tool-btn" aria-label="检查更新" data-tip="检查更新" onclick="checkForUpdates()"${state.checking ? ' disabled aria-busy="true"' : ''}>${icon('refresh', 16, state.checking ? 'sm-spin' : '')}</button>
+        </span>
       </div>`;
 
   return `
@@ -1012,7 +1077,7 @@ function renderSkillsPage() {
       <div class="sm-empty-actions">
         <button class="btn btn-primary" onclick="switchTab('market')">去市场看看</button>
         <button class="btn btn-secondary" onclick="openModal('new')">${icon('plus', 15)} 新建技能</button>
-        <button class="btn btn-ghost" onclick="toast('导入入口在工具栏的 ⋯ 里')">导入技能</button>
+        <button class="btn btn-ghost" onclick="openModal('import')">导入技能</button>
       </div>
     </div>`;
     return '<div class="page-col">' + content + renderFooter() + '</div>';
@@ -1073,9 +1138,42 @@ function renderSkillsPage() {
     return '<div class="page-col">' + content + renderFooter() + '</div>';
   }
 
-  content += '<div class="sm-grid">' + sorted.map(renderSkillCard).join('') + '</div>';
+  // 系统内置全部来自 Harness 本身，不按来源分组；其余 Tab 内再按来源分组
+  if (cat.key === 'system') {
+    content += '<div class="sm-grid">' + sorted.map(renderSkillCard).join('') + '</div>';
+  } else {
+    content += renderSkillGroups(sorted);
+  }
   content += '</div>';
   return '<div class="page-col">' + content + renderFooter() + '</div>';
+}
+
+// v3.2：组头顺序 = 市场源顺序（state.sources），「本地创建」固定最后；空组不渲染。
+function skillSourceGroup(skill) {
+  if (skill.builtin || !skill.sourceId) return { key: 'local', name: '本地创建' };
+  const src = state.sources.find(s => s.id === skill.sourceId);
+  return src ? { key: src.id, name: src.name } : { key: 'local', name: '本地创建' };
+}
+
+function renderSkillGroups(skills) {
+  const groups = state.sources.map(src => ({ key: src.id, name: src.name, items: [] }));
+  groups.push({ key: 'local', name: '本地创建', items: [] });
+  const byKey = {};
+  groups.forEach(g => { byKey[g.key] = g; });
+  skills.forEach(skill => {
+    const meta = skillSourceGroup(skill);
+    (byKey[meta.key] || byKey.local).items.push(skill);
+  });
+  const html = groups.filter(g => g.items.length > 0).map(g =>
+    `<section class="sm-source-block" data-source-group="${g.key}">
+      <div class="sm-source-block-head">
+        <span class="sm-source-block-title">${escapeHtml(g.name)}</span>
+        <span class="sm-source-block-count">${g.items.length} 个技能</span>
+      </div>
+      <div class="sm-grid">${g.items.map(renderSkillCard).join('')}</div>
+    </section>`
+  ).join('');
+  return '<div class="sm-market-blocks sm-skill-groups">' + html + '</div>';
 }
 
 function renderSkillCard(skill) {
@@ -1106,8 +1204,8 @@ function renderSkillCard(skill) {
       <div class="sm-card-desc">${escapeHtml(skill.desc)}</div>
     </div>
     <div class="sm-card-tail" onclick="event.stopPropagation()">
-      ${primary}
       <button class="sm-icon-btn plain sm-card-more" aria-label="更多操作" data-tip="更多操作" onclick="event.stopPropagation();openRowMenu(event,'${skill.id}')">${icon('more', 16)}</button>
+      ${primary}
     </div>
   </div>`;
 }
@@ -1146,7 +1244,7 @@ function renderMarketPage() {
         <span class="sm-source-block-title">${escapeHtml(src.name)}</span>
         <span class="sm-source-block-count">${list.length} 个技能</span>
         <span class="sm-source-block-actions">
-          <button class="sm-icon-btn plain" style="width:28px;height:28px;border-radius:9px;" aria-label="源操作" data-tip="刷新 / 删除 / 上移 / 下移" onclick="event.stopPropagation();openSourceMenu(event,'${src.id}')">${icon('more', 16)}</button>
+          <button class="sm-icon-btn plain" style="width:28px;height:28px;border-radius:9px;" aria-label="源操作" data-tip="刷新 / 删除 / 管理源" onclick="event.stopPropagation();openSourceMenu(event,'${src.id}')">${icon('more', 16)}</button>
         </span>
       </div>
       <div class="sm-grid">${list.map(renderMarketCard).join('')}</div>
@@ -1189,8 +1287,8 @@ function renderMarketCard(item) {
       <div class="sm-card-desc">${escapeHtml(item.desc)}</div>
     </div>
     <div class="sm-card-tail" onclick="event.stopPropagation()">
-      ${primary}
       <button class="sm-icon-btn plain sm-card-more" aria-label="更多操作" data-tip="更多操作" onclick="event.stopPropagation();openMarketMenu(event,'${item.id}')">${icon('more', 16)}</button>
+      ${primary}
     </div>
   </div>`;
 }
@@ -1395,7 +1493,7 @@ function renderMarketDetail(item) {
 function renderOverlays() {
   let html = '';
   if (state.diagOpen) html += renderDiagnosticsDrawer();
-  if (state.sourcesOpen) html += renderSourcesDrawer();
+  if (state.sourcesOpen) html += renderSourceDialog();
   if (state.modal) html += renderModal();
   return html;
 }
@@ -1464,25 +1562,29 @@ function renderDiagnosticsDrawer() {
           <span class="sm-drawer-title">诊断</span>
           <span class="sm-badge ${state.issueFixed ? 'success' : 'warn'}">${state.issueFixed ? '0 个问题' : (state.issueCount === 2 ? '2 个问题' : '1 个问题')}</span>
         </div>
-        <button class="sm-icon-btn plain" aria-label="关闭" onclick="closeDiag()">${icon('x', 16)}</button>
+        <button class="sm-icon-btn plain" aria-label="关闭" data-tip="关闭" onclick="closeDiag()">${icon('x', 16)}</button>
       </header>
       <div class="sm-drawer-body">${body}</div>
     </aside>`;
 }
 
-function renderSourcesDrawer() {
-  const rows = state.sources.map((src, idx) => {
+// v3.2：管理源由右侧抽屉改为居中弹窗；整行拖动排序，删除上下箭头。
+function renderSourceDialog() {
+  const rows = state.sources.map(src => {
     const dot = src.status === 'ok' ? 'sm-dot-ok' : src.status === 'checking' ? 'sm-dot-update' : 'sm-dot-error';
-    const isFirst = idx === 0;
-    const isLast = idx === state.sources.length - 1;
-    return `<div class="sm-source${src.enabled ? '' : ' is-off'}">
+    return `<div class="sm-source${src.enabled ? '' : ' is-off'}" draggable="true" data-source-row="${src.id}" tabindex="0"
+      aria-label="索引源 ${escapeHtml(src.name)}，可用 Alt+上下方向键排序"
+      ondragstart="onSourceDragStart(event,'${src.id}')"
+      ondragover="onSourceDragOver(event,'${src.id}')"
+      ondrop="onSourceDrop(event,'${src.id}')"
+      ondragend="onSourceDragEnd(event)"
+      onkeydown="onSourceKeydown(event,'${src.id}')">
       <div class="sm-source-top">
+        <span class="sm-drag-handle" data-tip="拖动排序" aria-hidden="true">${icon('grip', 16)}</span>
         <span class="sm-dot ${dot}" data-tip="${src.status === 'ok' ? '正常' : src.status === 'checking' ? '正在检查' : '有错误'}"></span>
         <span class="sm-source-name">${escapeHtml(src.name)}</span>
         <span class="sm-badge">${src.count} 个技能</span>
         <span class="sm-source-actions">
-          <button class="sm-icon-btn plain" aria-label="上移 ${escapeHtml(src.name)}" data-tip="上移（优先级更高）" onclick="moveSource('${src.id}',-1)" ${isFirst ? 'disabled' : ''}>${icon('arrow-up', 14)}</button>
-          <button class="sm-icon-btn plain" aria-label="下移 ${escapeHtml(src.name)}" data-tip="下移" onclick="moveSource('${src.id}',1)" ${isLast ? 'disabled' : ''}>${icon('arrow-down', 14)}</button>
           <button class="sm-switch" role="switch" aria-checked="${src.enabled ? 'true' : 'false'}" aria-label="启用或停用 ${escapeHtml(src.name)}" onclick="toggleSource('${src.id}')"><span class="sm-switch-thumb"></span></button>
           <button class="sm-icon-btn plain" aria-label="刷新" data-tip="刷新" onclick="refreshSource('${src.id}')">${icon('refresh', 14)}</button>
           <button class="sm-icon-btn plain" aria-label="删除" data-tip="删除源" onclick="removeSource('${src.id}')">${icon('trash', 14)}</button>
@@ -1494,25 +1596,25 @@ function renderSourcesDrawer() {
     </div>`;
   }).join('');
 
-  return `<div class="sm-drawer-backdrop" onclick="closeSources()"></div>
-    <aside class="sm-drawer sources" role="dialog" aria-label="管理源">
-      <header class="sm-drawer-head">
-        <div class="sm-drawer-head-left">
-          <span class="sm-drawer-title">管理源</span>
+  return `<div class="sm-modal-layer" onclick="if(event.target===this) closeSources()">
+    <div class="sm-dialog sources" role="dialog" aria-modal="true" aria-label="管理源">
+      <div class="sm-dialog-head">
+        <div class="sm-dialog-head-left">
+          <span class="sm-dialog-title">管理源</span>
           <span class="sm-badge">${state.sources.length} 个源</span>
         </div>
-        <button class="sm-icon-btn plain" aria-label="关闭" onclick="closeSources()">${icon('x', 16)}</button>
-      </header>
-      <div class="sm-drawer-body">
-        <p class="sm-drawer-intro">市场里的技能来自这些索引源。排序即优先级：排在前面的源，其技能在市场中排在前面。停用后不再检查更新，已安装的技能不受影响。</p>
-        ${rows}
+        <button class="sm-icon-btn plain" aria-label="关闭" data-tip="关闭" onclick="closeSources()">${icon('x', 16)}</button>
+      </div>
+      <div class="sm-dialog-body">
+        <p class="sm-dialog-intro">排序即优先级：排在前面的源，其技能在市场中排在前面。拖动行首手柄调整顺序。</p>
+        <div class="sm-source-list">${rows}</div>
         <div class="sm-add-source">
-          <span class="sm-add-label">添加索引源</span>
           <button class="btn btn-secondary" onclick="openModal('add-source')">${icon('plus', 15)} 添加索引源…</button>
           <p class="sm-confirm-note">支持 JSON 索引地址，添加后会先检查一次。新源默认排在最后。</p>
         </div>
       </div>
-    </aside>`;
+    </div>
+  </div>`;
 }
 
 function renderModal() {
@@ -1536,7 +1638,7 @@ function renderNewModal() {
           <div class="sm-dialog-title">新建技能</div>
           <p class="sm-dialog-sub">创建一个新的 SKILL.md，保存到本地技能目录。</p>
         </div>
-        <button class="sm-icon-btn plain" aria-label="关闭" onclick="closeModal()">${icon('x', 16)}</button>
+        <button class="sm-icon-btn plain" aria-label="关闭" data-tip="关闭" onclick="closeModal()">${icon('x', 16)}</button>
       </div>
       <div class="sm-dialog-body">
         <div class="sm-form-field">
@@ -1575,7 +1677,7 @@ function renderUpdateModal() {
     <div class="sm-dialog confirm" role="dialog" aria-modal="true" aria-label="更新确认">
       <div class="sm-dialog-head">
         <div class="sm-dialog-title">更新 ${escapeHtml(skill.name)}？</div>
-        <button class="sm-icon-btn plain" aria-label="关闭" onclick="closeModal()">${icon('x', 16)}</button>
+        <button class="sm-icon-btn plain" aria-label="关闭" data-tip="关闭" onclick="closeModal()">${icon('x', 16)}</button>
       </div>
       <div class="sm-dialog-body">
         <div class="sm-confirm">
@@ -1603,7 +1705,7 @@ function renderUninstallModal() {
     <div class="sm-dialog confirm" role="dialog" aria-modal="true" aria-label="${verb}确认">
       <div class="sm-dialog-head">
         <div class="sm-dialog-title">${verb} ${escapeHtml(skill.name)}？</div>
-        <button class="sm-icon-btn plain" aria-label="关闭" onclick="closeModal()">${icon('x', 16)}</button>
+        <button class="sm-icon-btn plain" aria-label="关闭" data-tip="关闭" onclick="closeModal()">${icon('x', 16)}</button>
       </div>
       <div class="sm-dialog-body">
         <div class="sm-confirm">
@@ -1629,7 +1731,7 @@ function renderEditModal() {
           <div class="sm-dialog-title">编辑 ${escapeHtml(skill.name)}</div>
           <p class="sm-dialog-sub">直接修改 SKILL.md 原文，保存后立即生效。</p>
         </div>
-        <button class="sm-icon-btn plain" aria-label="关闭" onclick="closeModal()">${icon('x', 16)}</button>
+        <button class="sm-icon-btn plain" aria-label="关闭" data-tip="关闭" onclick="closeModal()">${icon('x', 16)}</button>
       </div>
       <div class="sm-dialog-body">
         <textarea id="edit-skill-body" class="sm-input sm-edit-body" spellcheck="false">${escapeHtml(skill.body)}</textarea>
@@ -1650,7 +1752,7 @@ function renderAddSourceModal() {
           <div class="sm-dialog-title">添加索引源</div>
           <p class="sm-dialog-sub">添加后会先检查一次，通过的技能会出现在市场里。</p>
         </div>
-        <button class="sm-icon-btn plain" aria-label="关闭" onclick="closeModal()">${icon('x', 16)}</button>
+        <button class="sm-icon-btn plain" aria-label="关闭" data-tip="关闭" onclick="closeModal()">${icon('x', 16)}</button>
       </div>
       <div class="sm-dialog-body">
         <div class="sm-form-field">
@@ -1661,7 +1763,7 @@ function renderAddSourceModal() {
           <label class="sm-form-label" for="source-url">索引地址</label>
           <input id="source-url" class="sm-input mono" placeholder="https://…/index.json" autocomplete="off">
         </div>
-        <p class="sm-confirm-note">新添加的源默认排在最后；可在管理源抽屉里上移。</p>
+        <p class="sm-confirm-note">新添加的源默认排在最后；可在管理源弹窗里拖动调整顺序。</p>
       </div>
       <div class="sm-dialog-foot">
         <button class="btn btn-ghost" onclick="closeModal()">取消</button>
@@ -1679,7 +1781,7 @@ function renderImportModal() {
           <div class="sm-dialog-title">导入技能</div>
           <p class="sm-dialog-sub">把已有的 SKILL.md、技能文件夹或 .zip 导入到本地技能目录。</p>
         </div>
-        <button class="sm-icon-btn plain" aria-label="关闭" onclick="closeModal()">${icon('x', 16)}</button>
+        <button class="sm-icon-btn plain" aria-label="关闭" data-tip="关闭" onclick="closeModal()">${icon('x', 16)}</button>
       </div>
       <div class="sm-dialog-body">
         <div class="sm-dropzone">
@@ -1705,19 +1807,13 @@ function renderMenu() {
   const m = state.menu;
   let items = '';
 
-  if (m.type === 'top') {
-    items = `<button class="sm-menu-item" onclick="menuAction('import')"><span class="sm-menu-icon">${icon('upload', 15)}</span>导入技能</button>
-      <button class="sm-menu-item" onclick="menuAction('check')"><span class="sm-menu-icon">${icon('refresh', 15)}</span>检查更新</button>
-      <button class="sm-menu-item" onclick="menuAction('refresh')"><span class="sm-menu-icon">${icon('refresh', 15)}</span>刷新列表</button>`;
-  } else if (m.type === 'source') {
+  if (m.type === 'source') {
     const src = state.sources.find(s => s.id === m.id);
     if (!src) return '';
-    const idx = state.sources.indexOf(src);
     items = `<button class="sm-menu-item" onclick="refreshSource('${src.id}')"><span class="sm-menu-icon">${icon('refresh', 15)}</span>刷新</button>
       <button class="sm-menu-item danger" onclick="removeSource('${src.id}')"><span class="sm-menu-icon">${icon('trash', 15)}</span>删除源</button>
       <div class="sm-menu-sep"></div>
-      <button class="sm-menu-item" onclick="moveSource('${src.id}',-1)" ${idx === 0 ? 'disabled' : ''}><span class="sm-menu-icon">${icon('arrow-up', 15)}</span>上移</button>
-      <button class="sm-menu-item" onclick="moveSource('${src.id}',1)" ${idx === state.sources.length - 1 ? 'disabled' : ''}><span class="sm-menu-icon">${icon('arrow-down', 15)}</span>下移</button>`;
+      <button class="sm-menu-item" onclick="menuAction('sources')"><span class="sm-menu-icon">${icon('sliders', 15)}</span>管理源…</button>`;
   } else if (m.type === 'market') {
     const item = MARKET.find(x => x.id === m.id);
     if (!item) return '';
@@ -1831,7 +1927,7 @@ function switchCategory(key) {
 }
 
 function sourceOrderStorageKey() {
-  return 'sm.v31.sourceOrder';
+  return 'sm.v32.sourceOrder';
 }
 
 function loadSourceOrder() {
@@ -1864,6 +1960,94 @@ function moveSource(id, dir) {
   saveSourceOrder();
   render();
   toast('已' + (dir < 0 ? '上移' : '下移') + '「' + moved.name + '」，市场顺序已更新');
+}
+
+/* v3.2 管理源：拖动排序 */
+let dragSourceId = null;
+let dragDropAfter = false;
+
+function clearSourceDropMarks() {
+  document.querySelectorAll('.sm-source.is-drop-before, .sm-source.is-drop-after').forEach(el => {
+    el.classList.remove('is-drop-before', 'is-drop-after');
+  });
+}
+
+function onSourceDragStart(e, id) {
+  dragSourceId = id;
+  dragDropAfter = false;
+  if (e.dataTransfer) {
+    e.dataTransfer.effectAllowed = 'move';
+    try { e.dataTransfer.setData('text/plain', id); } catch (err) { /* noop */ }
+  }
+  e.currentTarget.classList.add('is-dragging');
+}
+
+function onSourceDragOver(e, id) {
+  if (!dragSourceId || dragSourceId === id) return;
+  e.preventDefault();
+  if (e.dataTransfer) e.dataTransfer.dropEffect = 'move';
+  const row = e.currentTarget;
+  const r = row.getBoundingClientRect();
+  dragDropAfter = e.clientY > r.top + r.height / 2;
+  clearSourceDropMarks();
+  row.classList.add(dragDropAfter ? 'is-drop-after' : 'is-drop-before');
+}
+
+function onSourceDrop(e, id) {
+  e.preventDefault();
+  const fromId = dragSourceId;
+  const after = dragDropAfter;
+  clearSourceDropMarks();
+  dragSourceId = null;
+  if (!fromId || fromId === id) return;
+  const from = state.sources.findIndex(s => s.id === fromId);
+  if (from < 0) return;
+  const moved = state.sources.splice(from, 1)[0];
+  let to = state.sources.findIndex(s => s.id === id);
+  if (to < 0) {
+    state.sources.splice(from, 0, moved);
+    return;
+  }
+  if (after) to += 1;
+  state.sources.splice(to, 0, moved);
+  saveSourceOrder();
+  render();
+  toast('已调整「' + moved.name + '」的位置，市场顺序已更新');
+}
+
+function onSourceDragEnd() {
+  clearSourceDropMarks();
+  dragSourceId = null;
+  document.querySelectorAll('.sm-source.is-dragging').forEach(el => el.classList.remove('is-dragging'));
+}
+
+// 可访问性兜底：行获得焦点后 Alt+↑ / Alt+↓ 移动
+function onSourceKeydown(e, id) {
+  if (!e.altKey) return;
+  if (e.key === 'ArrowUp' || e.key === 'ArrowDown') {
+    e.preventDefault();
+    moveSource(id, e.key === 'ArrowUp' ? -1 : 1);
+  }
+}
+
+/* v3.2 合并「检查更新」与「刷新列表」：一个动作，转圈后给出汇总 */
+function checkForUpdates() {
+  if (state.checking) return;
+  const enabledCount = state.sources.filter(s => s.enabled).length;
+  state.checking = true;
+  render();
+  setTimeout(() => {
+    state.checking = false;
+    state.sources.forEach(src => {
+      if (src.enabled) {
+        src.status = 'ok';
+        src.checked = '刚刚';
+        src.error = null;
+      }
+    });
+    render();
+    toast('已检查 ' + enabledCount + ' 个源，' + updateCountNow() + ' 个技能可更新');
+  }, 900);
 }
 
 function openUpdateFlow() {
@@ -2091,16 +2275,6 @@ function openRowMenu(e, id) {
   render();
 }
 
-function openTopMenu(e) {
-  e.stopPropagation();
-  const r = e.currentTarget.getBoundingClientRect();
-  const width = 184;
-  let x = Math.min(Math.max(8, r.left), window.innerWidth - width - 8);
-  let y = r.bottom + 6;
-  if (y + 160 > window.innerHeight) y = Math.max(52, r.top - 160);
-  state.menu = { type: 'top', x: x, y: y };
-  render();
-}
 
 function openSourceMenu(e, id) {
   e.stopPropagation();
@@ -2168,18 +2342,8 @@ function menuAction(action, id) {
     toast('Harness 自带的内置技能不能修改，升级 Harness 时会自动更新。');
     return;
   }
-  if (action === 'import') {
-    openModal('import');
-    return;
-  }
-  if (action === 'check') {
-    render();
-    toast('正在检查更新…');
-    return;
-  }
-  if (action === 'refresh') {
-    render();
-    toast('已刷新');
+  if (action === 'sources') {
+    openSources();
     return;
   }
   render();
