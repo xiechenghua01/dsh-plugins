@@ -1,0 +1,1931 @@
+<!DOCTYPE html>
+<html lang="zh-CN" data-theme="dark">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>DSH · 技能管理 v3.0</title>
+<style>
+  /* ============ 1. DSH tokens（原型内近似值，命名与用途与 DSH 一致） ============ */
+  :root {
+    --dsw-alias-bg-base: #151517;
+    --dsw-specific-sidebar-fill: #1b1b1c;
+    --dsw-static-neutral-bluish-850: #2c2c2e;
+    --dsw-alias-bg-layer-1: #232324;
+    --dsw-alias-bg-layer-2: #2c2c2e;
+    --dsw-alias-bg-layer-3: #353638;
+    --dsw-alias-label-primary: #f9fafb;
+    --dsw-alias-label-secondary: #cfd3d6;
+    --dsw-alias-label-tertiary: #adb2b8;
+    --dsw-alias-label-caption: #81858c;
+    --dsw-alias-border-l1: #ffffff0f;
+    --dsw-alias-border-l2: #ffffff1f;
+    --dsw-alias-border-l3: #ffffff29;
+    --dsw-alias-interactive-bg-hover: #ffffff14;
+    --dsw-specific-sidebar-nav-item-active: #43454a;
+    --dsw-alias-button-primary-fill: #f9fafb;
+    --dsw-alias-label-primary-foreground: #0f1115;
+    --dsw-alias-state-success-primary: #22c55e;
+    --dsw-alias-state-warn-primary: #f59e0b;
+    --dsw-alias-state-error-primary: #f25a5a;
+    --dsw-alias-brand-primary: #7aaaff;
+    --dsw-focus-ring-color: #7aaaff;
+    --dsw-focus-ring-width: 2px;
+  }
+
+  /* ============ 2. 基础 ============ */
+  * { box-sizing: border-box; }
+  html, body {
+    margin: 0; padding: 0; width: 100%; height: 100%;
+    background: var(--dsw-alias-bg-base);
+    color: var(--dsw-alias-label-primary);
+    font-family: -apple-system, BlinkMacSystemFont, "PingFang SC", "Helvetica Neue", "Microsoft YaHei", sans-serif;
+    -webkit-font-smoothing: antialiased;
+    overflow: hidden;
+  }
+  button, input, select, textarea { font-family: inherit; font-size: inherit; color: inherit; background: none; border: none; outline: none; }
+  button { cursor: pointer; }
+  button:disabled { cursor: not-allowed; opacity: 0.45; }
+  button:focus-visible, input:focus-visible, select:focus-visible, textarea:focus-visible, [tabindex]:focus-visible {
+    outline: var(--dsw-focus-ring-width) solid var(--dsw-focus-ring-color);
+    outline-offset: 1px;
+  }
+  ::-webkit-scrollbar { width: 6px; height: 6px; }
+  ::-webkit-scrollbar-track { background: transparent; }
+  ::-webkit-scrollbar-thumb { background: var(--dsw-alias-border-l3); border-radius: 999px; }
+
+  .mono { font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace; }
+
+  /* 字号阶梯：一律基于 --sm-fs */
+  .sm-root { --sm-fs: var(--dsh-content-font-size, 14px); font-size: calc(var(--sm-fs) - 1px); line-height: 1.5; }
+  .fs-16 { font-size: calc(var(--sm-fs) + 2px); line-height: 1.4; }
+  .fs-15 { font-size: calc(var(--sm-fs) + 1px); line-height: 1.4; }
+  .fs-14 { font-size: var(--sm-fs); line-height: 1.45; }
+  .fs-13 { font-size: calc(var(--sm-fs) - 1px); line-height: 1.45; }
+  .fs-12 { font-size: calc(var(--sm-fs) - 2px); line-height: 1.4; }
+  .fs-11 { font-size: calc(var(--sm-fs) - 3px); line-height: 1.35; }
+  .fs-10 { font-size: calc(var(--sm-fs) - 4px); line-height: 1.35; }
+
+  /* ============ 3. 原型切换条 ============ */
+  .pb {
+    height: 44px; padding: 0 14px;
+    background: var(--dsw-specific-sidebar-fill);
+    border-bottom: 1px solid var(--dsw-alias-border-l2);
+    display: flex; align-items: center; justify-content: space-between; gap: 12px;
+    position: relative; z-index: 100;
+  }
+  .pb-left, .pb-right { display: flex; align-items: center; gap: 8px; min-width: 0; }
+  .pb-brand { font-size: 12px; font-weight: 600; color: var(--dsw-alias-label-primary); white-space: nowrap; }
+  .pb-ver { font-size: 10px; color: var(--dsw-alias-label-caption); border: 1px solid var(--dsw-alias-border-l2); padding: 1px 5px; border-radius: 999px; white-space: nowrap; }
+  .pb-label { font-size: 11px; color: var(--dsw-alias-label-caption); white-space: nowrap; }
+  .proto-select, .proto-btn {
+    height: 27px; padding: 0 9px; border-radius: 8px;
+    background: var(--dsw-alias-bg-layer-1);
+    border: 1px solid var(--dsw-alias-border-l2);
+    color: var(--dsw-alias-label-secondary);
+    font-size: 12px; display: inline-flex; align-items: center; gap: 4px;
+  }
+  .proto-select { max-width: 380px; }
+  .proto-btn:hover, .proto-select:hover { background: var(--dsw-alias-interactive-bg-hover); color: var(--dsw-alias-label-primary); }
+  .pb-date { font-size: 11px; color: var(--dsw-alias-label-caption); white-space: nowrap; }
+
+  /* ============ 4. 宿主壳 ============ */
+  .sm-root { height: calc(100vh - 44px); display: flex; flex-direction: column; background: var(--dsw-alias-bg-base); }
+  #dsh-shell { display: flex; width: 100%; height: 100%; overflow: hidden; }
+  #dsh-sidebar {
+    width: 210px; height: 100%; flex-shrink: 0;
+    background: var(--dsw-specific-sidebar-fill);
+    border-right: 1px solid var(--dsw-alias-border-l1);
+    padding: 12px 10px; display: flex; flex-direction: column; justify-content: space-between;
+    user-select: none;
+  }
+  .sm-nav { display: flex; flex-direction: column; gap: 4px; width: 100%; }
+  .sm-nav-row {
+    height: 36px; padding: 7px 9px; border-radius: 12px;
+    display: flex; align-items: center; gap: 6px; width: 100%; text-align: left;
+    color: var(--dsw-alias-label-secondary); font-size: var(--sm-fs);
+  }
+  .sm-nav-row:hover { background: var(--dsw-alias-interactive-bg-hover); color: var(--dsw-alias-label-primary); }
+  .sm-nav-row[aria-current="page"] { background: var(--dsw-alias-interactive-bg-hover); color: var(--dsw-alias-label-primary); font-weight: 500; }
+  .sm-nav-glyph { width: 16px; height: 16px; display: inline-flex; align-items: center; justify-content: center; flex-shrink: 0; }
+  .sm-nav-ver { font-size: calc(var(--sm-fs) - 4px); color: var(--dsw-alias-label-caption); padding: 4px 8px; }
+
+  #main-panel { flex: 1; height: 100%; overflow-y: auto; padding: 28px 48px 48px; background: var(--dsw-alias-bg-base); }
+  .page-col { width: 100%; max-width: 960px; margin: 0 auto; }
+
+  /* ============ 5. 页头、工具栏、Tab ============ */
+  .sm-page-head { display: flex; align-items: flex-start; justify-content: space-between; gap: 16px; flex-wrap: wrap; margin-bottom: 12px; }
+  .sm-page-title { margin: 0; font-size: calc(var(--sm-fs) + 2px); line-height: 1.4; font-weight: 500; }
+  .sm-page-desc { margin: 4px 0 0; font-size: calc(var(--sm-fs) - 1px); color: var(--dsw-alias-label-secondary); }
+  .sm-toolbar { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+  .sm-search { position: relative; width: 232px; height: 33px; }
+  .sm-search input {
+    width: 100%; height: 33px; padding: 0 28px 0 32px; border-radius: 12px;
+    background: var(--dsw-alias-bg-layer-1); border: 1px solid var(--dsw-alias-border-l2);
+    color: var(--dsw-alias-label-primary); font-size: calc(var(--sm-fs) - 1px);
+  }
+  .sm-search input::placeholder { color: var(--dsw-alias-label-caption); }
+  .sm-search .sm-search-icon { position: absolute; left: 10px; top: 50%; transform: translateY(-50%); color: var(--dsw-alias-label-caption); pointer-events: none; display: inline-flex; }
+  .sm-search kbd {
+    position: absolute; right: 8px; top: 50%; transform: translateY(-50%);
+    font-size: calc(var(--sm-fs) - 4px); color: var(--dsw-alias-label-caption);
+    padding: 0 5px; border-radius: 4px; border: 1px solid var(--dsw-alias-border-l2); pointer-events: none;
+  }
+  .btn {
+    height: 32px; padding: 0 12px; border-radius: 12px; font-size: calc(var(--sm-fs) - 1px); font-weight: 500;
+    display: inline-flex; align-items: center; justify-content: center; gap: 6px; white-space: nowrap;
+  }
+  .btn-sm { height: 28px; padding: 0 10px; border-radius: 10px; font-size: calc(var(--sm-fs) - 2px); }
+  .btn-primary { background: var(--dsw-alias-button-primary-fill); color: var(--dsw-alias-label-primary-foreground); }
+  .btn-primary:hover:not(:disabled) { opacity: 0.9; }
+  .btn-secondary { background: var(--dsw-alias-bg-layer-2); color: var(--dsw-alias-label-primary); border: 1px solid var(--dsw-alias-border-l2); }
+  .btn-secondary:hover:not(:disabled) { background: var(--dsw-alias-bg-layer-3); }
+  .btn-ghost { background: transparent; color: var(--dsw-alias-label-secondary); padding: 0 10px; }
+  .btn-ghost:hover:not(:disabled) { background: var(--dsw-alias-interactive-bg-hover); color: var(--dsw-alias-label-primary); }
+  .btn-danger { background: color-mix(in srgb, var(--dsw-alias-state-error-primary) 88%, var(--dsw-alias-bg-base)); color: var(--dsw-alias-label-primary); }
+  .btn-danger-ghost { background: transparent; color: var(--dsw-alias-state-error-primary); border: 1px solid color-mix(in srgb, var(--dsw-alias-state-error-primary) 32%, transparent); }
+  .btn-danger-ghost:hover:not(:disabled) { background: color-mix(in srgb, var(--dsw-alias-state-error-primary) 12%, transparent); }
+  .sm-icon-btn {
+    width: 32px; height: 32px; padding: 0; border-radius: 12px;
+    background: var(--dsw-alias-bg-layer-1); border: 1px solid var(--dsw-alias-border-l2);
+    color: var(--dsw-alias-label-secondary); display: inline-flex; align-items: center; justify-content: center;
+  }
+  .sm-icon-btn:hover { background: var(--dsw-alias-interactive-bg-hover); color: var(--dsw-alias-label-primary); }
+  .sm-icon-btn.plain { background: transparent; border-color: transparent; }
+  .sm-icon-btn.plain:hover { background: var(--dsw-alias-interactive-bg-hover); }
+  .sm-select {
+    height: 33px; padding: 0 10px; border-radius: 12px;
+    background: var(--dsw-alias-bg-layer-1); border: 1px solid var(--dsw-alias-border-l2);
+    color: var(--dsw-alias-label-secondary); font-size: calc(var(--sm-fs) - 1px);
+  }
+  .sm-tabs-row { display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap; margin-bottom: 12px; }
+  .sm-segmented { height: 34px; background: var(--dsw-alias-bg-layer-3); border-radius: 14px; padding: 2px; display: inline-flex; align-items: center; gap: 2px; }
+  .sm-seg-tab { height: 30px; padding: 0 14px; border-radius: 12px; font-size: var(--sm-fs); color: var(--dsw-alias-label-secondary); display: inline-flex; align-items: center; gap: 6px; }
+  .sm-seg-tab[aria-selected="true"] { background: var(--dsw-alias-bg-layer-1); color: var(--dsw-alias-label-primary); font-weight: 500; }
+  .sm-meta-link { display: inline-flex; align-items: center; gap: 5px; color: var(--dsw-alias-brand-primary); font-size: calc(var(--sm-fs) - 2px); }
+  .sm-meta-link:hover { text-decoration: underline; }
+  .sm-tabs-meta { font-size: calc(var(--sm-fs) - 2px); color: var(--dsw-alias-label-caption); }
+
+  /* ============ 6. 提示条 ============ */
+  .sm-banner {
+    display: flex; align-items: center; gap: 10px;
+    padding: 8px 14px; border-radius: 14px; margin-bottom: 14px;
+    border: 1px solid var(--dsw-alias-border-l2); font-size: calc(var(--sm-fs) - 1px);
+  }
+  .sm-banner-warn { background: color-mix(in srgb, var(--dsw-alias-state-warn-primary) 11%, transparent); border-color: color-mix(in srgb, var(--dsw-alias-state-warn-primary) 30%, transparent); }
+  .sm-banner-ok { background: color-mix(in srgb, var(--dsw-alias-state-success-primary) 10%, transparent); border-color: color-mix(in srgb, var(--dsw-alias-state-success-primary) 26%, transparent); }
+  .sm-banner-icon { display: inline-flex; color: var(--dsw-alias-state-warn-primary); flex-shrink: 0; }
+  .sm-banner-ok .sm-banner-icon { color: var(--dsw-alias-state-success-primary); }
+  .sm-banner-text { flex: 1; min-width: 0; color: var(--dsw-alias-label-secondary); display: flex; align-items: baseline; gap: 8px; flex-wrap: wrap; }
+  .sm-banner-text strong { color: var(--dsw-alias-label-primary); font-weight: 500; }
+  .sm-link { color: var(--dsw-alias-state-warn-primary); font-size: calc(var(--sm-fs) - 2px); font-weight: 500; white-space: nowrap; }
+  .sm-link:hover { text-decoration: underline; }
+  .sm-link.brand { color: var(--dsw-alias-brand-primary); }
+
+  /* ============ 7. 分组与行 ============ */
+  .sm-groups { display: flex; flex-direction: column; gap: 32px; }
+  .sm-group { display: flex; flex-direction: column; gap: 8px; }
+  .sm-group-head {
+    height: 22px; padding: 0 8px; display: flex; align-items: center; gap: 8px;
+    width: 100%; text-align: left; color: var(--dsw-alias-label-primary);
+  }
+  .sm-group-head:hover .sm-group-title { color: var(--dsw-alias-brand-primary); }
+  .sm-chevron { display: inline-flex; color: var(--dsw-alias-label-caption); width: 14px; }
+  .sm-group-title { font-size: var(--sm-fs); font-weight: 500; white-space: nowrap; }
+  .sm-group-sub { font-size: calc(var(--sm-fs) - 2px); color: var(--dsw-alias-label-caption); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .sm-group-count { font-size: calc(var(--sm-fs) - 3px); color: var(--dsw-alias-label-secondary); background: var(--dsw-alias-bg-layer-2); border: 1px solid var(--dsw-alias-border-l1); padding: 0 7px; border-radius: 999px; flex-shrink: 0; }
+  .sm-rows { display: flex; flex-direction: column; gap: 8px; }
+
+  .sm-row {
+    height: 72px; border-radius: 20px; padding: 8px 12px 8px 8px;
+    display: flex; align-items: center; gap: 12px; cursor: pointer;
+    transition: background 120ms, outline-color 120ms;
+  }
+  .sm-row:hover { background: var(--dsw-alias-interactive-bg-hover); }
+  .sm-row.is-highlight { outline: 1.5px solid var(--dsw-alias-brand-primary); outline-offset: -1px; }
+  .sm-row.is-disabled { opacity: 0.62; }
+  .sm-row-icon {
+    width: 49px; height: 49px; border-radius: 16px; flex-shrink: 0; position: relative;
+    background: var(--dsw-alias-bg-layer-1); border: 1px solid var(--dsw-alias-border-l2);
+    display: flex; align-items: center; justify-content: center; color: var(--dsw-alias-label-secondary);
+  }
+  .sm-dot { position: absolute; left: 5px; bottom: 5px; width: 8px; height: 8px; border-radius: 999px; border: 1.5px solid var(--dsw-alias-bg-base); }
+  .sm-dot-ok { background: var(--dsw-alias-state-success-primary); }
+  .sm-dot-warn { background: var(--dsw-alias-state-warn-primary); }
+  .sm-dot-idle { background: var(--dsw-alias-label-caption); }
+  .sm-dot-error { background: var(--dsw-alias-state-error-primary); }
+  .sm-dot-update { background: var(--dsw-alias-brand-primary); }
+
+  .sm-row-main { flex: 1; min-width: 0; display: flex; flex-direction: column; justify-content: center; gap: 4px; }
+  .sm-row-title { display: flex; align-items: center; gap: 8px; min-width: 0; }
+  .sm-name { font-size: var(--sm-fs); font-weight: 500; color: var(--dsw-alias-label-primary); white-space: nowrap; flex-shrink: 0; }
+  .sm-row.is-disabled .sm-name { color: var(--dsw-alias-label-caption); }
+  .sm-tagbar { display: inline-flex; align-items: center; gap: 5px; max-width: 340px; overflow: hidden; flex-wrap: nowrap; flex-shrink: 1; }
+  .sm-desc { font-size: calc(var(--sm-fs) - 1px); color: var(--dsw-alias-label-tertiary); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .sm-row.is-disabled .sm-desc { color: var(--dsw-alias-label-caption); }
+  .sm-badge {
+    font-size: calc(var(--sm-fs) - 3px); padding: 1px 8px; border-radius: 999px;
+    background: var(--dsw-alias-bg-layer-2); color: var(--dsw-alias-label-secondary);
+    border: 1px solid var(--dsw-alias-border-l1); white-space: nowrap;
+    display: inline-flex; align-items: center; gap: 3px; flex-shrink: 0;
+  }
+  .sm-badge.update {
+    background: color-mix(in srgb, var(--dsw-alias-state-success-primary) 12%, transparent);
+    color: color-mix(in srgb, var(--dsw-alias-state-success-primary) 82%, var(--dsw-alias-label-primary));
+    border-color: color-mix(in srgb, var(--dsw-alias-state-success-primary) 28%, transparent);
+    font-weight: 500;
+  }
+  .sm-badge.warn { background: color-mix(in srgb, var(--dsw-alias-state-warn-primary) 14%, transparent); color: var(--dsw-alias-state-warn-primary); border-color: color-mix(in srgb, var(--dsw-alias-state-warn-primary) 32%, transparent); }
+  .sm-badge.error { background: color-mix(in srgb, var(--dsw-alias-state-error-primary) 14%, transparent); color: var(--dsw-alias-state-error-primary); border-color: color-mix(in srgb, var(--dsw-alias-state-error-primary) 32%, transparent); }
+  .sm-badge.success { background: color-mix(in srgb, var(--dsw-alias-state-success-primary) 14%, transparent); color: var(--dsw-alias-state-success-primary); border-color: color-mix(in srgb, var(--dsw-alias-state-success-primary) 32%, transparent); }
+  .sm-row-tail { display: flex; align-items: center; gap: 8px; flex-shrink: 0; }
+
+  /* 市场 */
+  .sm-market-filters { display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap; margin-bottom: 18px; }
+  .sm-chips { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }
+  .sm-chip {
+    height: 26px; padding: 0 11px; border-radius: 999px; font-size: calc(var(--sm-fs) - 2px);
+    color: var(--dsw-alias-label-secondary); background: var(--dsw-alias-bg-layer-1);
+    border: 1px solid var(--dsw-alias-border-l1); display: inline-flex; align-items: center; gap: 4px;
+  }
+  .sm-chip:hover { background: var(--dsw-alias-interactive-bg-hover); color: var(--dsw-alias-label-primary); }
+  .sm-chip.active { background: var(--dsw-specific-sidebar-nav-item-active); color: var(--dsw-alias-label-primary); font-weight: 500; }
+  .sm-market-count { font-size: calc(var(--sm-fs) - 2px); color: var(--dsw-alias-label-caption); }
+  .sm-market-rows { display: flex; flex-direction: column; gap: 8px; }
+  .sm-market-row { background: var(--dsw-alias-bg-layer-1); border: 1px solid var(--dsw-alias-border-l1); }
+  .sm-market-row:hover { background: var(--dsw-alias-bg-layer-2); border-color: var(--dsw-alias-border-l2); }
+
+  /* 空态 / 搜索无结果 */
+  .sm-empty { padding: 64px 24px; display: flex; flex-direction: column; align-items: center; text-align: center; gap: 10px; }
+  .sm-empty-icon {
+    width: 96px; height: 96px; border-radius: 24px; margin-bottom: 6px;
+    background: var(--dsw-alias-bg-layer-1); border: 1px solid var(--dsw-alias-border-l2);
+    display: flex; align-items: center; justify-content: center; color: var(--dsw-alias-label-caption);
+  }
+  .sm-empty-title { font-size: calc(var(--sm-fs) + 1px); font-weight: 500; color: var(--dsw-alias-label-primary); }
+  .sm-empty-desc { font-size: calc(var(--sm-fs) - 1px); color: var(--dsw-alias-label-secondary); max-width: 400px; }
+  .sm-empty-actions { display: flex; align-items: center; gap: 8px; margin-top: 8px; flex-wrap: wrap; justify-content: center; }
+
+  /* ============ 8. 详情 ============ */
+  .sm-back { font-size: calc(var(--sm-fs) - 2px); color: var(--dsw-alias-label-tertiary); display: inline-flex; align-items: center; gap: 5px; padding: 2px 4px; border-radius: 8px; margin-bottom: 14px; }
+  .sm-back:hover { color: var(--dsw-alias-label-primary); background: var(--dsw-alias-interactive-bg-hover); }
+  .sm-detail-head { display: flex; align-items: flex-start; gap: 14px; flex-wrap: wrap; }
+  .sm-detail-icon {
+    width: 56px; height: 56px; border-radius: 16px; flex-shrink: 0; position: relative;
+    background: var(--dsw-alias-bg-layer-1); border: 1px solid var(--dsw-alias-border-l2);
+    display: flex; align-items: center; justify-content: center; color: var(--dsw-alias-label-secondary);
+  }
+  .sm-detail-heading { flex: 1; min-width: 220px; display: flex; flex-direction: column; gap: 4px; }
+  .sm-detail-title-line { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+  .sm-detail-name { font-size: calc(var(--sm-fs) + 2px); font-weight: 500; line-height: 1.3; }
+  .sm-detail-ver { font-size: calc(var(--sm-fs) - 2px); color: var(--dsw-alias-label-caption); }
+  .sm-detail-desc { font-size: calc(var(--sm-fs) - 1px); color: var(--dsw-alias-label-secondary); max-width: 640px; }
+  .sm-detail-actions { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+  .sm-detail-grid { display: grid; grid-template-columns: minmax(0, 2fr) minmax(250px, 1fr); gap: 24px; align-items: start; margin-top: 22px; }
+  .sm-detail-col { display: flex; flex-direction: column; gap: 16px; min-width: 0; }
+  .sm-card { padding: 16px 18px; border-radius: 20px; background: var(--dsw-alias-bg-layer-1); border: 1px solid var(--dsw-alias-border-l2); display: flex; flex-direction: column; gap: 10px; min-width: 0; }
+  .sm-card-title { font-size: var(--sm-fs); font-weight: 500; color: var(--dsw-alias-label-primary); display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+  .sm-prose { font-size: calc(var(--sm-fs) - 1px); color: var(--dsw-alias-label-secondary); line-height: 1.7; margin: 0; }
+  .sm-code { border-radius: 14px; background: var(--dsw-alias-bg-base); border: 1px solid var(--dsw-alias-border-l1); padding: 10px 12px; max-height: 300px; overflow: auto; }
+  .sm-code-line { display: flex; gap: 12px; font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace; font-size: calc(var(--sm-fs) - 2px); line-height: 1.7; white-space: pre-wrap; word-break: break-word; }
+  .sm-ln { width: 20px; flex-shrink: 0; text-align: right; color: var(--dsw-alias-label-caption); user-select: none; }
+  .sm-code-text { color: var(--dsw-alias-label-primary); }
+  .sm-kv { display: flex; align-items: flex-start; justify-content: space-between; gap: 14px; padding: 8px 0; border-bottom: 1px solid var(--dsw-alias-border-l1); }
+  .sm-kv:last-child { border-bottom: none; padding-bottom: 0; }
+  .sm-kv-label { font-size: calc(var(--sm-fs) - 2px); color: var(--dsw-alias-label-caption); flex-shrink: 0; }
+  .sm-kv-value { font-size: calc(var(--sm-fs) - 2px); color: var(--dsw-alias-label-secondary); text-align: right; min-width: 0; display: inline-flex; align-items: center; gap: 6px; flex-wrap: wrap; justify-content: flex-end; }
+  .sm-kv-value .mono { overflow-wrap: anywhere; }
+  .sm-status-line { display: inline-flex; align-items: center; gap: 6px; }
+  .sm-status-line .sm-dot { position: static; border: none; }
+  .sm-action-stack { display: flex; flex-direction: column; gap: 8px; }
+  .sm-action-stack .btn { width: 100%; }
+  .sm-note { padding: 10px 12px; border-radius: 12px; background: color-mix(in srgb, var(--dsw-alias-state-warn-primary) 10%, transparent); border: 1px solid color-mix(in srgb, var(--dsw-alias-state-warn-primary) 26%, transparent); font-size: calc(var(--sm-fs) - 2px); color: var(--dsw-alias-label-secondary); line-height: 1.6; }
+  .sm-note.neutral { background: var(--dsw-alias-bg-base); border-color: var(--dsw-alias-border-l1); }
+  .sm-file-list { display: flex; flex-direction: column; gap: 0; }
+  .sm-file { display: flex; align-items: center; justify-content: space-between; gap: 10px; padding: 8px 0; border-bottom: 1px solid var(--dsw-alias-border-l1); font-size: calc(var(--sm-fs) - 2px); }
+  .sm-file:last-child { border-bottom: none; }
+  .sm-file-name { color: var(--dsw-alias-label-secondary); display: inline-flex; align-items: center; gap: 6px; min-width: 0; overflow-wrap: anywhere; }
+  .sm-file-size { color: var(--dsw-alias-label-caption); flex-shrink: 0; }
+  .sm-choice-row { display: flex; gap: 6px; flex-wrap: wrap; }
+  .sm-choice { height: 30px; padding: 0 10px; border-radius: 10px; font-size: calc(var(--sm-fs) - 2px); color: var(--dsw-alias-label-secondary); background: var(--dsw-alias-bg-base); border: 1px solid var(--dsw-alias-border-l2); }
+  .sm-choice:hover { background: var(--dsw-alias-interactive-bg-hover); }
+  .sm-choice.active { background: var(--dsw-alias-bg-layer-3); color: var(--dsw-alias-label-primary); font-weight: 500; }
+  .sm-footer { margin-top: 44px; padding-top: 16px; border-top: 1px solid var(--dsw-alias-border-l1); text-align: center; font-size: calc(var(--sm-fs) - 3px); color: var(--dsw-alias-label-caption); }
+
+  /* ============ 9. 抽屉 ============ */
+  .sm-drawer-backdrop { position: fixed; top: 44px; left: 0; right: 0; bottom: 0; background: transparent; z-index: 1100; }
+  .sm-drawer {
+    position: fixed; top: 44px; right: 0; bottom: 0; width: 520px; max-width: 94vw;
+    background: var(--dsw-static-neutral-bluish-850, var(--dsw-alias-bg-layer-1));
+    border-left: 1px solid var(--dsw-alias-border-l2);
+    border-top-left-radius: 20px; border-bottom-left-radius: 20px;
+    box-shadow: none; z-index: 1200; display: flex; flex-direction: column; overflow: hidden;
+  }
+  .sm-drawer.sources { width: 560px; }
+  .sm-drawer-head { padding: 16px 20px; display: flex; align-items: center; justify-content: space-between; gap: 10px; border-bottom: 1px solid var(--dsw-alias-border-l1); flex-shrink: 0; }
+  .sm-drawer-head-left { display: flex; align-items: center; gap: 8px; min-width: 0; }
+  .sm-drawer-title { font-size: calc(var(--sm-fs) + 1px); font-weight: 500; }
+  .sm-drawer-body { padding: 18px 20px 28px; overflow-y: auto; min-height: 0; }
+  .sm-drawer-intro { margin: 0 0 16px; font-size: calc(var(--sm-fs) - 2px); color: var(--dsw-alias-label-caption); line-height: 1.6; }
+  .sm-issue { padding: 14px; border-radius: 16px; background: var(--dsw-alias-bg-layer-1); border: 1px solid var(--dsw-alias-border-l2); display: flex; flex-direction: column; gap: 8px; }
+  .sm-issue-head { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+  .sm-issue-icon { width: 30px; height: 30px; border-radius: 10px; background: color-mix(in srgb, var(--dsw-alias-state-warn-primary) 14%, transparent); color: var(--dsw-alias-state-warn-primary); display: inline-flex; align-items: center; justify-content: center; flex-shrink: 0; }
+  .sm-issue-reason { margin: 0; font-size: calc(var(--sm-fs) - 1px); color: var(--dsw-alias-label-secondary); line-height: 1.65; }
+  .sm-issue-actions { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }
+  .sm-details { border-top: 1px solid var(--dsw-alias-border-l1); padding-top: 8px; }
+  .sm-details summary { cursor: pointer; font-size: calc(var(--sm-fs) - 2px); color: var(--dsw-alias-label-caption); list-style: none; display: inline-flex; align-items: center; gap: 5px; user-select: none; }
+  .sm-details summary::-webkit-details-marker { display: none; }
+  .sm-details summary:hover { color: var(--dsw-alias-label-secondary); }
+  .sm-details[open] summary .sm-chevron { transform: rotate(90deg); }
+  .sm-details-body { padding-top: 8px; }
+  .sm-details-body .sm-kv { padding: 6px 0; }
+  .sm-drawer-note { margin: 14px 0 0; font-size: calc(var(--sm-fs) - 3px); color: var(--dsw-alias-label-caption); line-height: 1.6; }
+  .sm-issue-ok { border-color: color-mix(in srgb, var(--dsw-alias-state-success-primary) 30%, transparent); }
+  .sm-issue-ok .sm-issue-icon { background: color-mix(in srgb, var(--dsw-alias-state-success-primary) 14%, transparent); color: var(--dsw-alias-state-success-primary); }
+
+  /* 源 */
+  .sm-source { padding: 12px 14px; border-radius: 14px; background: var(--dsw-alias-bg-layer-1); border: 1px solid var(--dsw-alias-border-l2); display: flex; flex-direction: column; gap: 6px; margin-bottom: 10px; }
+  .sm-source.is-off { opacity: 0.6; }
+  .sm-source-top { display: flex; align-items: center; gap: 8px; }
+  .sm-source-top .sm-dot { position: static; border: none; flex-shrink: 0; }
+  .sm-source-name { font-size: var(--sm-fs); font-weight: 500; flex: 1; min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .sm-source-actions { display: flex; align-items: center; gap: 4px; flex-shrink: 0; }
+  .sm-source-actions .sm-icon-btn { width: 28px; height: 28px; border-radius: 9px; }
+  .sm-source-url { font-size: calc(var(--sm-fs) - 3px); color: var(--dsw-alias-label-caption); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .sm-source-meta { font-size: calc(var(--sm-fs) - 3px); color: var(--dsw-alias-label-caption); }
+  .sm-source-error { font-size: calc(var(--sm-fs) - 3px); color: var(--dsw-alias-state-error-primary); line-height: 1.5; }
+  .sm-switch { width: 36px; height: 20px; border-radius: 999px; background: var(--dsw-alias-border-l3); position: relative; display: inline-flex; align-items: center; padding: 2px; flex-shrink: 0; }
+  .sm-switch[aria-checked="true"] { background: var(--dsw-alias-button-primary-fill); }
+  .sm-switch-thumb { width: 16px; height: 16px; border-radius: 50%; background: var(--dsw-alias-bg-base); transform: translateX(0); transition: transform 150ms ease; }
+  .sm-switch[aria-checked="true"] .sm-switch-thumb { transform: translateX(16px); }
+  .sm-add-source { margin-top: 20px; padding-top: 16px; border-top: 1px solid var(--dsw-alias-border-l1); display: flex; flex-direction: column; gap: 8px; }
+  .sm-add-label { font-size: calc(var(--sm-fs) - 2px); font-weight: 500; color: var(--dsw-alias-label-secondary); }
+  .sm-add-row { display: flex; align-items: center; gap: 8px; }
+  .sm-input {
+    width: 100%; height: 33px; padding: 0 12px; border-radius: 12px;
+    background: var(--dsw-alias-bg-layer-1); border: 1px solid var(--dsw-alias-border-l2);
+    color: var(--dsw-alias-label-primary); font-size: calc(var(--sm-fs) - 1px);
+  }
+  .sm-input::placeholder, textarea.sm-input::placeholder { color: var(--dsw-alias-label-caption); }
+  .sm-add-row .sm-input { flex: 1; min-width: 0; }
+
+  /* ============ 10. 弹窗 ============ */
+  .sm-modal-layer { position: fixed; inset: 0; z-index: 1300; display: flex; align-items: center; justify-content: center; padding: 16px; background: transparent; }
+  .sm-dialog {
+    width: 560px; max-width: 92vw; max-height: 88vh;
+    background: var(--dsw-static-neutral-bluish-850, var(--dsw-alias-bg-layer-1));
+    border: 1px solid var(--dsw-alias-border-l2); border-radius: 20px;
+    box-shadow: none; display: flex; flex-direction: column; overflow: hidden;
+  }
+  .sm-dialog.small { width: 360px; border-radius: 14px; }
+  .sm-dialog-head { padding: 18px 20px 0; display: flex; align-items: flex-start; justify-content: space-between; gap: 10px; flex-shrink: 0; }
+  .sm-dialog-title { font-size: calc(var(--sm-fs) + 1px); font-weight: 500; }
+  .sm-dialog-sub { margin: 4px 0 0; font-size: calc(var(--sm-fs) - 2px); color: var(--dsw-alias-label-caption); }
+  .sm-dialog-body { padding: 16px 20px; overflow-y: auto; min-height: 0; }
+  .sm-dialog-foot { padding: 14px 20px 18px; border-top: 1px solid var(--dsw-alias-border-l1); display: flex; justify-content: flex-end; gap: 8px; flex-shrink: 0; }
+  .sm-form-field { display: flex; flex-direction: column; gap: 6px; margin-bottom: 14px; }
+  .sm-form-field:last-child { margin-bottom: 0; }
+  .sm-form-label { font-size: calc(var(--sm-fs) - 2px); font-weight: 500; color: var(--dsw-alias-label-secondary); display: flex; justify-content: space-between; gap: 8px; }
+  .sm-form-hint { font-size: calc(var(--sm-fs) - 3px); color: var(--dsw-alias-label-caption); font-weight: 400; }
+  textarea.sm-input { height: auto; padding: 8px 12px; resize: vertical; min-height: 62px; line-height: 1.55; }
+  .sm-confirm { padding: 2px 0 4px; display: flex; flex-direction: column; gap: 10px; }
+  .sm-confirm-ver { display: flex; align-items: center; gap: 8px; font-size: calc(var(--sm-fs) - 1px); color: var(--dsw-alias-label-secondary); flex-wrap: wrap; }
+  .sm-confirm-ver .mono { color: var(--dsw-alias-label-primary); }
+  .sm-confirm-note { font-size: calc(var(--sm-fs) - 2px); color: var(--dsw-alias-label-caption); line-height: 1.65; margin: 0; }
+  .sm-confirm-warn { padding: 9px 11px; border-radius: 10px; background: color-mix(in srgb, var(--dsw-alias-state-warn-primary) 10%, transparent); border: 1px solid color-mix(in srgb, var(--dsw-alias-state-warn-primary) 26%, transparent); font-size: calc(var(--sm-fs) - 2px); color: var(--dsw-alias-label-secondary); line-height: 1.55; }
+  .sm-danger-text { color: var(--dsw-alias-state-error-primary); }
+
+  /* ============ 11. 菜单 / Toast / Tooltip ============ */
+  .sm-menu {
+    position: fixed; z-index: 1600; width: 184px; padding: 4px;
+    border-radius: 12px; background: var(--dsw-static-neutral-bluish-850, var(--dsw-alias-bg-layer-2));
+    border: 1px solid var(--dsw-alias-border-l2); box-shadow: none; display: flex; flex-direction: column; gap: 2px;
+  }
+  .sm-menu-item {
+    height: 32px; padding: 0 10px; border-radius: 8px; display: flex; align-items: center; gap: 8px;
+    font-size: calc(var(--sm-fs) - 1px); color: var(--dsw-alias-label-primary); text-align: left; width: 100%;
+  }
+  .sm-menu-item:hover { background: var(--dsw-alias-interactive-bg-hover); }
+  .sm-menu-item .sm-menu-icon { display: inline-flex; color: var(--dsw-alias-label-secondary); width: 16px; }
+  .sm-menu-item.danger { color: var(--dsw-alias-state-error-primary); }
+  .sm-menu-item.danger .sm-menu-icon { color: var(--dsw-alias-state-error-primary); }
+  .sm-menu-sep { height: 1px; background: var(--dsw-alias-border-l1); margin: 3px 4px; }
+
+  #toast-host { position: fixed; bottom: 28px; left: 50%; transform: translateX(-50%); z-index: 1800; display: flex; flex-direction: column; gap: 8px; pointer-events: none; }
+  .sm-toast {
+    padding: 8px 14px; border-radius: 12px; background: var(--dsw-alias-bg-layer-3);
+    border: 1px solid var(--dsw-alias-border-l2); color: var(--dsw-alias-label-primary);
+    font-size: calc(var(--sm-fs) - 1px); box-shadow: none; display: inline-flex; align-items: center; gap: 8px; pointer-events: auto;
+  }
+  #sm-tooltip {
+    position: fixed; z-index: 2000; font-size: calc(var(--sm-fs) - 4px); color: var(--dsw-alias-label-secondary);
+    background: var(--dsw-alias-bg-layer-2); border: 1px solid var(--dsw-alias-border-l2);
+    box-shadow: none; border-radius: 7px; padding: 6px 10px; max-width: 290px; line-height: 1.35;
+    pointer-events: none; opacity: 0; transition: opacity 110ms;
+  }
+  #sm-tooltip.visible { opacity: 1; }
+
+  /* ============ 12. 响应式 ============ */
+  @media (max-width: 1120px) {
+    #main-panel { padding: 24px 24px 40px; }
+    .sm-search { width: 200px; }
+    .sm-detail-grid { gap: 16px; }
+  }
+  @media (max-width: 900px) {
+    .sm-detail-grid { grid-template-columns: 1fr; }
+  }
+</style>
+</head>
+<body>
+
+<header class="pb" aria-label="原型画面切换">
+  <div class="pb-left">
+    <span class="pb-brand">DSH · 技能管理</span>
+    <span class="pb-ver">v3.0</span>
+    <span class="pb-label">画面</span>
+    <select id="screen-select" class="proto-select" onchange="applyScreen(this.value)" aria-label="切换原型画面"></select>
+    <button class="proto-btn" onclick="stepScreen(-1)" title="上一画面">←</button>
+    <button class="proto-btn" onclick="stepScreen(1)" title="下一画面">→</button>
+  </div>
+  <div class="pb-right">
+    <span class="pb-label">字号</span>
+    <select id="font-select" class="proto-select" onchange="setFont(this.value)" aria-label="模拟字号设置" style="max-width:96px;">
+      <option value="14" selected>14px</option>
+      <option value="16">16px</option>
+      <option value="12">12px</option>
+    </select>
+    <span class="pb-date">v3.0 · 2026-11-09</span>
+  </div>
+</header>
+
+<div id="app" class="sm-root">
+  <div id="dsh-shell">
+    <aside id="dsh-sidebar" aria-label="宿主主导航">
+      <div class="sm-nav">
+        <button class="sm-nav-row" aria-label="插件">
+          <span class="sm-nav-glyph">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path stroke-linecap="round" stroke-linejoin="round" d="M14.25 6.087c0-.355.186-.676.401-.959.221-.29.349-.634.349-1.003 0-1.036-1.007-1.875-2.25-1.875s-2.25.84-2.25 1.875c0 .369.128.713.349 1.003.215.283.401.604.401.959v0a.64.64 0 01-.657.643 48.39 48.39 0 01-4.163-.3c.186 1.613.293 3.25.315 4.907a.656.656 0 01-.658.663v0c-.355 0-.676-.186-.959-.401a1.647 1.647 0 00-1.003-.349c-1.036 0-1.875 1.007-1.875 2.25s.84 2.25 1.875 2.25c.369 0 .713-.128 1.003-.349.283-.215.604-.401.959-.401v0c.31 0 .555.26.532.57a48.039 48.039 0 01-.642 5.056c1.518.19 3.058.309 4.616.354a.64.64 0 00.657-.643v0c0-.355-.186-.676-.401-.959a1.647 1.647 0 01-.349-1.003c0-1.035 1.008-1.875 2.25-1.875 1.243 0 2.25.84 2.25 1.875 0 .369-.128.713-.349 1.003-.215.283-.4.604-.4.959v0c0 .333.277.599.61.58a48.1 48.1 0 005.427-.63 48.05 48.05 0 00.582-4.717.532.532 0 00-.533-.57v0c-.355 0-.676.186-.959.401-.29.221-.634.349-1.003.349-1.035 0-1.875-1.007-1.875-2.25s.84-2.25 1.875-2.25c.37 0 .713.128 1.003.349.283.215.604.401.96.401v0a.656.656 0 00.658-.663 48.422 48.422 0 00-.37-5.36c-1.886.342-3.81.574-5.766.689a.578.578 0 01-.61-.58v0z"/></svg>
+          </span>
+          <span>插件</span>
+        </button>
+        <button class="sm-nav-row" aria-label="自动化任务">
+          <span class="sm-nav-glyph">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path stroke-linecap="round" stroke-linejoin="round" d="M12 6v6h4.5m4.5 0a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>
+          </span>
+          <span>自动化任务</span>
+        </button>
+        <button class="sm-nav-row" aria-current="page" aria-label="技能">
+          <span class="sm-nav-glyph">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path stroke-linecap="round" stroke-linejoin="round" d="M12 6.042A8.967 8.967 0 006 3.75c-1.052 0-2.062.18-3 .512v14.25A8.987 8.987 0 016 18c2.305 0 4.408.867 6 2.292m0-14.25a8.966 8.966 0 016-2.292c1.052 0 2.062.18 3 .512v14.25A8.987 8.987 0 0018 18a8.967 8.967 0 00-6 2.292m0-14.25v14.25"/></svg>
+          </span>
+          <span>技能</span>
+        </button>
+      </div>
+      <div class="sm-nav-ver">DSH v0.2.1-rc.5</div>
+    </aside>
+
+    <main id="main-panel">
+      <div class="page-col" id="page-root"></div>
+    </main>
+  </div>
+
+  <div id="overlay-root"></div>
+  <div id="menu-root"></div>
+  <div id="tooltip" role="tooltip"></div>
+  <div id="toast-host" aria-live="polite"></div>
+</div>
+
+<script>
+/*************************************************************************
+ * 0. 图标
+ *************************************************************************/
+const ICONS = {
+  skill: '<path stroke-linecap="round" stroke-linejoin="round" d="M12 6.042A8.967 8.967 0 006 3.75c-1.052 0-2.062.18-3 .512v14.25A8.987 8.987 0 016 18c2.305 0 4.408.867 6 2.292m0-14.25a8.966 8.966 0 016-2.292c1.052 0 2.062.18 3 .512v14.25A8.987 8.987 0 0018 18a8.967 8.967 0 00-6 2.292m0-14.25v14.25"/>',
+  search: '<path stroke-linecap="round" stroke-linejoin="round" d="M21 21l-5.197-5.197m0 0A7.5 7.5 0 105.196 5.196a7.5 7.5 0 0010.607 10.607z"/>',
+  plus: '<path stroke-linecap="round" stroke-linejoin="round" d="M12 4.5v15m7.5-7.5h-15"/>',
+  more: '<path stroke-linecap="round" stroke-linejoin="round" d="M6.75 12a.75.75 0 11-1.5 0 .75.75 0 011.5 0zM12.75 12a.75.75 0 11-1.5 0 .75.75 0 011.5 0zM18.75 12a.75.75 0 11-1.5 0 .75.75 0 011.5 0z"/>',
+  'chevron-down': '<path stroke-linecap="round" stroke-linejoin="round" d="M19.5 8.25l-7.5 7.5-7.5-7.5"/>',
+  'chevron-right': '<path stroke-linecap="round" stroke-linejoin="round" d="M8.25 4.5l7.5 7.5-7.5 7.5"/>',
+  x: '<path stroke-linecap="round" stroke-linejoin="round" d="M6 18L18 6M6 6l12 12"/>',
+  alert: '<path stroke-linecap="round" stroke-linejoin="round" d="M12 9v3.75m-9.303 3.376c-.866 1.5.217 3.374 1.948 3.374h14.71c1.73 0 2.813-1.874 1.948-3.374L13.949 3.378c-.866-1.5-3.032-1.5-3.898 0L2.697 16.126zM12 15.75h.007v.008H12v-.008z"/>',
+  info: '<path stroke-linecap="round" stroke-linejoin="round" d="M11.25 11.25l.041-.02a.75.75 0 011.063.852l-.708 2.836a.75.75 0 001.063.853l.041-.021M21 12a9 9 0 11-18 0 9 9 0 0118 0zm-9-3.75h.008v.008H12V8.25z"/>',
+  'arrow-up': '<path stroke-linecap="round" stroke-linejoin="round" d="M12 19.5v-15m0 0l-6 6m6-6l6 6"/>',
+  check: '<path stroke-linecap="round" stroke-linejoin="round" d="M4.5 12.75l6 6 9-13.5"/>',
+  edit: '<path stroke-linecap="round" stroke-linejoin="round" d="M16.862 4.487l1.687-1.688a1.875 1.875 0 112.652 2.652L10.582 16.07a4.5 4.5 0 01-1.897 1.13L6 18l.8-2.685a4.5 4.5 0 011.13-1.897l8.932-8.931zM16.862 4.487L19.5 7.125"/>',
+  trash: '<path stroke-linecap="round" stroke-linejoin="round" d="M14.74 9l-.346 9m-4.788 0L9.26 9m9.968-3.21c.342.052.682.107 1.022.166m-1.022-.165L18.16 19.673a2.25 2.25 0 01-2.244 2.077H8.084a2.25 2.25 0 01-2.244-2.077L4.772 5.79m14.456 0a48.108 48.108 0 00-3.478-.397m-12 .562c.34-.059.68-.114 1.022-.165m0 0a48.11 48.11 0 013.478-.397m7.5 0v-.916c0-1.18-.91-2.164-2.09-2.201a51.964 51.964 0 00-3.32 0c-1.18.037-2.09 1.022-2.09 2.201v.916m7.5 0a48.667 48.667 0 00-7.5 0"/>',
+  power: '<path stroke-linecap="round" stroke-linejoin="round" d="M5.636 5.636a9 9 0 1012.728 0M12 3v9"/>',
+  copy: '<path stroke-linecap="round" stroke-linejoin="round" d="M15.75 17.25v3.375c0 .621-.504 1.125-1.125 1.125h-9.75a1.125 1.125 0 01-1.125-1.125V7.875c0-.621.504-1.125 1.125-1.125H8.25m7.5 10.5h3.375c.621 0 1.125-.504 1.125-1.125V9.375c0-.621-.504-1.125-1.125-1.125H9.375c-.621 0-1.125.504-1.125 1.125v9.75c0 .621.504 1.125 1.125 1.125H15.75z"/>',
+  refresh: '<path stroke-linecap="round" stroke-linejoin="round" d="M16.023 9.348h4.992v-.001M2.985 19.644v-4.992m0 0h4.992m-4.993 0l3.181 3.183a8.25 8.25 0 0013.803-3.7M4.031 9.865a8.25 8.25 0 0113.803-3.7l3.181 3.182m0-4.991v4.99"/>',
+  sliders: '<path stroke-linecap="round" stroke-linejoin="round" d="M10.5 6h9.75M10.5 6a1.5 1.5 0 11-3 0m3 0a1.5 1.5 0 10-3 0M3.75 6H7.5m3 12h9.75m-9.75 0a1.5 1.5 0 01-3 0m3 0a1.5 1.5 0 00-3 0m-3.75 0H7.5m9-6h3.75m-3.75 0a1.5 1.5 0 01-3 0m3 0a1.5 1.5 0 00-3 0m-9.75 0h9.75"/>',
+  user: '<path stroke-linecap="round" stroke-linejoin="round" d="M15.75 6a3.75 3.75 0 11-7.5 0 3.75 3.75 0 017.5 0zM4.501 20.118a7.5 7.5 0 0114.998 0A17.933 17.933 0 0112 21.75c-2.676 0-5.216-.584-7.499-1.632z"/>',
+  users: '<path stroke-linecap="round" stroke-linejoin="round" d="M15 19.128a9.38 9.38 0 002.625.372 9.337 9.337 0 004.121-.952 4.125 4.125 0 00-7.533-2.493M15 19.128v-.003c0-1.113-.285-2.16-.786-3.07M15 19.128v.106A12.318 12.318 0 018.624 21c-2.331 0-4.512-.645-6.374-1.766l-.001-.109a6.375 6.375 0 0111.964-3.07M12 6.375a3.375 3.375 0 11-6.75 0 3.375 3.375 0 016.75 0zm8.25 2.25a2.625 2.625 0 11-5.25 0 2.625 2.625 0 015.25 0z"/>',
+  folder: '<path stroke-linecap="round" stroke-linejoin="round" d="M2.25 12.75V12A2.25 2.25 0 014.5 9.75h15A2.25 2.25 0 0121.75 12v.75m-8.69-6.44l-2.12-2.12a1.5 1.5 0 00-1.061-.44H4.5A2.25 2.25 0 002.25 6v12a2.25 2.25 0 002.25 2.25h15A2.25 2.25 0 0021.75 18V9a2.25 2.25 0 00-2.25-2.25h-5.379a1.5 1.5 0 01-1.06-.44z"/>',
+  package: '<path stroke-linecap="round" stroke-linejoin="round" d="M21 7.5l-9-5.25L3 7.5m18 0l-9 5.25m9-5.25v9l-9 5.25M3 7.5l9 5.25M3 7.5v9l9 5.25m0-9v9"/>',
+  market: '<path stroke-linecap="round" stroke-linejoin="round" d="M13.5 21v-7.5a.75.75 0 01.75-.75h3a.75.75 0 01.75.75V21m-4.5 0H2.36m11.14 0H18m0 0h3.64m-1.39 0V9.349m-16.5 11.65V9.35m0 0a3.001 3.001 0 003.75-.615A2.993 2.993 0 009.75 9.75c.896 0 1.7-.393 2.25-1.016a2.993 2.993 0 002.25 1.016c.896 0 1.7-.393 2.25-1.016a3.001 3.001 0 003.75.614m-16.5 0a3.004 3.004 0 01-.621-4.72L4.318 3.44A1.5 1.5 0 015.378 3h13.243a1.5 1.5 0 011.06.44l1.19 1.189a3 3 0 01-.621 4.72m-13.5 8.65h3.75a.75.75 0 00.75-.75V13.5a.75.75 0 00-.75-.75H6.75a.75.75 0 00-.75.75v3.75c0 .415.336.75.75.75z"/>',
+  download: '<path stroke-linecap="round" stroke-linejoin="round" d="M3 16.5v2.25A2.25 2.25 0 005.25 21h13.5A2.25 2.25 0 0021 18.75V16.5M16.5 12L12 16.5m0 0L7.5 12m4.5 4.5V3"/>',
+  upload: '<path stroke-linecap="round" stroke-linejoin="round" d="M3 16.5v2.25A2.25 2.25 0 005.25 21h13.5A2.25 2.25 0 0021 18.75V16.5m-13.5-9L12 3m0 0l4.5 4.5M12 3v13.5"/>',
+  link: '<path stroke-linecap="round" stroke-linejoin="round" d="M13.19 8.688a4.5 4.5 0 011.242 7.244l-4.5 4.5a4.5 4.5 0 01-6.364-6.364l1.757-1.757m13.35-.622l1.757-1.757a4.5 4.5 0 00-6.364-6.364l-4.5 4.5a4.5 4.5 0 001.242 7.244"/>',
+  file: '<path stroke-linecap="round" stroke-linejoin="round" d="M19.5 14.25v-2.625a3.375 3.375 0 00-3.375-3.375h-1.5A1.125 1.125 0 0113.5 7.125v-1.5a3.375 3.375 0 00-3.375-3.375H8.25M9 16.5v.75m3-3v3M15 12v5.25m-8.25 3h10.5a2.25 2.25 0 002.25-2.25V6.75a2.25 2.25 0 00-2.25-2.25H5.25A2.25 2.25 0 003 6.75v10.5a2.25 2.25 0 002.25 2.25z"/>',
+  clock: '<path stroke-linecap="round" stroke-linejoin="round" d="M12 6v6h4.5m4.5 0a9 9 0 11-18 0 9 9 0 0118 0z"/>',
+  external: '<path stroke-linecap="round" stroke-linejoin="round" d="M13.5 6H5.25A2.25 2.25 0 003 8.25v10.5A2.25 2.25 0 005.25 21h10.5A2.25 2.25 0 0018 18.75V10.5m-10.5 6L21 3m0 0h-5.25M21 3v5.25"/>',
+  sparkle: '<path stroke-linecap="round" stroke-linejoin="round" d="M9.813 15.904L9 18.75l-.813-2.846a4.5 4.5 0 00-3.09-3.09L2.25 12l2.846-.813a4.5 4.5 0 003.09-3.09L9 5.25l.813 2.846a4.5 4.5 0 003.09 3.09L15.75 12l-2.846.813a4.5 4.5 0 00-3.09 3.09zM18.259 8.715L18 9.75l-.259-1.035a3.375 3.375 0 00-2.455-2.456L14.25 6l1.036-.259a3.375 3.375 0 002.455-2.456L18 2.25l.259 1.035a3.375 3.375 0 002.456 2.456L21.75 6l-1.035.259a3.375 3.375 0 00-2.456 2.456z"/>'
+};
+
+function icon(name, size) {
+  const s = size || 16;
+  return '<svg width="' + s + '" height="' + s + '" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true">' + (ICONS[name] || ICONS.skill) + '</svg>';
+}
+
+/*************************************************************************
+ * 1. 示例数据
+ *************************************************************************/
+const GROUPS = [
+  { key: 'mine', title: '我的技能', sub: '我自己装的，只在这台机器可见' },
+  { key: 'shared', title: '共享技能', sub: '所有 Agent 都能用' },
+  { key: 'project', title: '项目技能', sub: '跟随当前项目' },
+  { key: 'system', title: '系统内置', sub: 'Harness 自带，只读' }
+];
+
+const SKILLS = [
+  {
+    id: 'git-commit', group: 'mine', name: 'git-commit',
+    desc: '按团队约定写提交信息，并把改动整理成发布说明。',
+    when: '当你准备提交代码、整理 PR 描述或生成版本说明时使用。',
+    status: 'active', writable: true,
+    version: '1.4.0', update: '1.5.0', author: 'deepseek-ai',
+    source: '来自市场：DSH 官方技能索引', market: true,
+    path: '~/.dsh/skills/git-commit/SKILL.md', modified: '2 天前', mtime: 80,
+    localModified: true,
+    body: '---\nname: git-commit\ndescription: 按团队约定写提交信息，并把改动整理成发布说明。\nwhenToUse: 当你准备提交代码、整理 PR 描述或生成版本说明时使用。\n---\n\n# 提交信息\n\n1. 先看 git diff，按改动类型拆分提交。\n2. 提交信息使用 feat: / fix: / docs: 等前缀。\n3. 一次提交只做一件事，标题不超过 72 个字符。\n4. 正文写清楚「为什么改」，不要重复「改了什么」。'
+  },
+  {
+    id: 'agent-experience', group: 'mine', name: 'agent-experience',
+    desc: '把一次任务里踩过的坑沉淀成可复用的 Agent 经验。',
+    when: '当完成一段较长的探索，想把经验和教训留给下次时使用。',
+    status: 'active', writable: true,
+    version: null, update: null, author: null,
+    source: '本地文件', market: false,
+    path: '~/.dsh/skills/agent-experience/SKILL.md', modified: '昨天', mtime: 70,
+    body: '---\nname: agent-experience\ndescription: 把一次任务里踩过的坑沉淀成可复用的 Agent 经验。\nwhenToUse: 当完成一段较长的探索，想把经验和教训留给下次时使用。\n---\n\n# Agent Experience\n\n- 先写清任务背景与约束。\n- 记录失败过的路径，而不只是最终答案。\n- 把可复用的步骤整理成清单。'
+  },
+  {
+    id: 'legacy-jira-sync', group: 'mine', name: 'legacy-jira-sync',
+    desc: '旧版 Jira 工单同步脚本，已停止使用。',
+    when: '已停用，不会再被 Agent 调用。',
+    status: 'disabled', writable: true,
+    version: null, update: null, author: null,
+    source: '本地文件', market: false,
+    path: '~/.dsh/skills/.disabled/legacy-jira-sync/SKILL.md', modified: '2 周前', mtime: 10,
+    body: '---\nname: legacy-jira-sync\ndescription: 旧版 Jira 工单同步脚本，已停止使用。\n---\n\n# Legacy Jira Sync\n\n这个技能已停用，文件仍保留在 .disabled 目录里。'
+  },
+  {
+    id: 'ego-browser', group: 'shared', name: 'ego-browser',
+    desc: '用 ego 浏览器完成网页操作、截图与信息提取。',
+    when: '当需要打开网页、点击页面或抓取网页内容时使用。',
+    status: 'broken', writable: true,
+    version: null, update: null, author: null,
+    source: '本地文件', market: false,
+    path: '~/.agents/skills/ego-browser/SKILL.md', modified: '1 周前', mtime: 40,
+    reason: 'ego-browser 的文件链接已失效，指向的位置不存在，Agent 现在用不到它。',
+    body: '---\nname: ego-browser\ndescription: 用 ego 浏览器完成网页操作、截图与信息提取。\nwhenToUse: 当需要打开网页、点击页面或抓取网页内容时使用。\n---\n\n# Ego Browser\n\n1. 打开目标页面并等待加载完成。\n2. 按可访问名称定位元素，避免脆弱的层级选择器。\n3. 截图或提取正文后，把结果写回当前任务。'
+  },
+  {
+    id: 'cordis-plugin-development', group: 'project', name: 'cordis-plugin-development',
+    desc: '为这个项目开发 Cordis 插件：包结构、生命周期与 UI 槽位。',
+    when: '当为这个仓库编写或修改 Cordis 插件时使用。',
+    status: 'active', writable: true,
+    version: null, update: null, author: null,
+    source: '本地文件', market: false,
+    path: '.dsh/skills/cordis-plugin-development/SKILL.md', modified: '3 小时前', mtime: 95,
+    body: '---\nname: cordis-plugin-development\ndescription: 为这个项目开发 Cordis 插件：包结构、生命周期与 UI 槽位。\nwhenToUse: 当为这个仓库编写或修改 Cordis 插件时使用。\n---\n\n# Cordis Plugin Development\n\n1. 插件入口导出 name、inject 与 apply。\n2. 浏览器半只 require("react")，不要引入其它运行时依赖。\n3. UI 槽位注册放在 apply 里，卸载时清理监听。\n4. 所有颜色使用 --dsw-* 语义变量。'
+  },
+  {
+    id: 'editing-cordis-compositions', group: 'project', name: 'editing-cordis-compositions',
+    desc: '修改 Cordis 组合配置时，保持服务依赖与界面插槽一致。',
+    when: '当调整 cordis.yml 或新增插件组合时使用。',
+    status: 'active', writable: true,
+    version: null, update: null, author: null,
+    source: '本地文件', market: false,
+    path: '.dsh/skills/editing-cordis-compositions/SKILL.md', modified: '昨天', mtime: 60,
+    body: '---\nname: editing-cordis-compositions\ndescription: 修改 Cordis 组合配置时，保持服务依赖与界面插槽一致。\nwhenToUse: 当调整 cordis.yml 或新增插件组合时使用。\n---\n\n# Editing Cordis Compositions\n\n1. 先确认服务依赖顺序。\n2. 新增插件后检查插槽是否重复注册。\n3. 用最小配置验证，再合并完整组合。'
+  },
+  {
+    id: 'office', group: 'system', name: 'office',
+    desc: '处理 Word、Excel、PowerPoint 文档的入口技能，按文件类型分派。',
+    when: '当用户要求创建、修改或读取办公文档时使用。',
+    status: 'active', writable: false,
+    version: null, update: null, author: 'DeepSeek',
+    source: 'Harness 内置', market: false, builtin: true,
+    path: '内置资源，无本地路径', modified: '内置版本', mtime: 0,
+    body: '---\nname: office\ndescription: 处理 Word、Excel、PowerPoint 文档的入口技能，按文件类型分派。\n---\n\n# Office\n\n按文件类型交给 office-docx、office-xlsx 或 office-pptx。\n\n- 先确认目标格式与版式要求。\n- 再选择对应的文档技能。'
+  },
+  {
+    id: 'office-docx', group: 'system', name: 'office-docx',
+    desc: '创建、编辑与校验 Word (.docx) 文档，保持样式统一。',
+    when: '当需要生成或修改 Word 文档时使用。',
+    status: 'active', writable: false,
+    version: null, update: null, author: 'DeepSeek',
+    source: 'Harness 内置', market: false, builtin: true,
+    path: '内置资源，无本地路径', modified: '内置版本', mtime: 0,
+    body: '---\nname: office-docx\ndescription: 创建、编辑与校验 Word (.docx) 文档，保持样式统一。\n---\n\n# Office Docx\n\n使用 python-docx 创建和修改文档，输出前检查段落与表格样式。'
+  },
+  {
+    id: 'office-pptx', group: 'system', name: 'office-pptx',
+    desc: '生成和修改演示文稿 (.pptx)，保持版式与配色一致。',
+    when: '当需要制作或调整幻灯片时使用。',
+    status: 'active', writable: false,
+    version: null, update: null, author: 'DeepSeek',
+    source: 'Harness 内置', market: false, builtin: true,
+    path: '内置资源，无本地路径', modified: '内置版本', mtime: 0,
+    body: '---\nname: office-pptx\ndescription: 生成和修改演示文稿 (.pptx)，保持版式与配色一致。\n---\n\n# Office Pptx\n\n先确定母版与版式，再逐页填充内容，最后检查溢出与对齐。'
+  },
+  {
+    id: 'office-xlsx', group: 'system', name: 'office-xlsx',
+    desc: '读写表格 (.xlsx)，完成公式、筛选与图表。',
+    when: '当需要处理表格数据或制作报表时使用。',
+    status: 'active', writable: false,
+    version: null, update: null, author: 'DeepSeek',
+    source: 'Harness 内置', market: false, builtin: true,
+    path: '内置资源，无本地路径', modified: '内置版本', mtime: 0,
+    body: '---\nname: office-xlsx\ndescription: 读写表格 (.xlsx)，完成公式、筛选与图表。\n---\n\n# Office Xlsx\n\n保留原始数据表，新增计算列与图表，输出前检查公式引用范围。'
+  },
+  {
+    id: 'personalized-pages', group: 'system', name: 'personalized-pages',
+    desc: '生成个性化的网页与分享页面，套用统一的视觉样式。',
+    when: '当需要把内容整理成可分享的网页时使用。',
+    status: 'active', writable: false,
+    version: null, update: null, author: 'DeepSeek',
+    source: 'Harness 内置', market: false, builtin: true,
+    path: '内置资源，无本地路径', modified: '内置版本', mtime: 0,
+    body: '---\nname: personalized-pages\ndescription: 生成个性化的网页与分享页面，套用统一的视觉样式。\n---\n\n# Personalized Pages\n\n使用一致的字号阶梯与留白，优先保证在窄屏上的可读性。'
+  }
+];
+
+const MARKET = [
+  {
+    id: 'code-review', name: 'code-review', cat: '代码质量', version: '1.3.0',
+    desc: '深度审查代码安全性、边界条件与并发问题，并给出修复建议。',
+    tags: ['安全', '代码审查'], author: 'deepseek-ai', license: 'MIT',
+    sourceName: 'DSH 官方技能索引', sourceUrl: 'https://skills.deepseek.com/index.json',
+    updated: '2026-11-05', engines: '>=0.2.1-rc.5 <0.3.0',
+    files: [['SKILL.md', '4.2 KB'], ['references/security-checklist.md', '1.4 KB']],
+    readme: '先通读改动范围，再按注入、越权、竞态与资源清理四条线检查。输出必须包含最小复现路径和可应用的修复建议。'
+  },
+  {
+    id: 'playwright-e2e-gen', name: 'playwright-e2e-gen', cat: '测试', version: '2.1.0',
+    desc: '根据页面结构生成稳定的 Playwright 端到端测试与无障碍断言。',
+    tags: ['端到端', '前端', '无障碍'], author: 'deepseek-ai', license: 'Apache-2.0',
+    sourceName: 'DSH 官方技能索引', sourceUrl: 'https://skills.deepseek.com/index.json',
+    updated: '2026-11-04', engines: '>=0.2.1-rc.5 <0.3.0',
+    files: [['SKILL.md', '5.0 KB'], ['scripts/verify_selectors.mjs', '2.3 KB'], ['references/locator-rules.md', '1.9 KB']],
+    readme: '按页面语义生成用例，优先使用可访问名称定位元素，禁止脆弱的层级选择器。每条用例都附带一个失败时的截图点。'
+  },
+  {
+    id: 'release-notes-writer', name: 'release-notes-writer', cat: '文档', version: '0.8.2',
+    desc: '从合并记录整理面向用户的版本说明，语气统一、重点清楚。',
+    tags: ['发布', '文档'], author: 'team-platform', license: 'MIT',
+    sourceName: '团队内部技能索引', sourceUrl: 'https://skills.internal.example.com/index.json',
+    updated: '2026-10-31', engines: '>=0.2.1-rc.5 <0.3.0',
+    files: [['SKILL.md', '3.4 KB'], ['templates/release.md', '0.9 KB']],
+    readme: '把内部改动翻译成用户能理解的价值，按「新增 / 改进 / 修复」分组，不堆砌术语。'
+  },
+  {
+    id: 'k8s-incident-triage', name: 'k8s-incident-triage', cat: '运维', version: '1.0.4',
+    desc: '定位 Kubernetes 崩溃重启、内存溢出与网络策略故障的五步方法。',
+    tags: ['Kubernetes', '运维', '排障'], author: 'deepseek-ai', license: 'MIT',
+    sourceName: 'DSH 官方技能索引', sourceUrl: 'https://skills.deepseek.com/index.json',
+    updated: '2026-10-31', engines: '>=0.2.1-rc.5 <0.3.0',
+    files: [['SKILL.md', '6.1 KB']],
+    readme: '按事件时间线、容器退出码、前序日志、网络连通性与资源配额五步排查，每一步给出可直接执行的命令。'
+  },
+  {
+    id: 'sql-query-optimizer', name: 'sql-query-optimizer', cat: '数据库', version: '1.0.0',
+    desc: '分析 PostgreSQL 慢查询执行计划，给出索引与重写建议。',
+    tags: ['PostgreSQL', '性能'], author: 'db-guild', license: 'MIT',
+    sourceName: 'DSH 官方技能索引', sourceUrl: 'https://skills.deepseek.com/index.json',
+    updated: '2026-11-05', engines: '>=0.2.1-rc.5 <0.3.0',
+    files: [['SKILL.md', '5.2 KB']],
+    readme: '先确认扫描行数与实际耗时，再检查过滤条件、连接顺序与索引列序，最后给出可回滚的改写方案。'
+  },
+  {
+    id: 'openapi-sdk-builder', name: 'openapi-sdk-builder', cat: '代码质量', version: '1.4.2',
+    desc: '从 OpenAPI 规范生成类型安全的客户端与契约测试。',
+    tags: ['接口', '代码生成', 'TypeScript'], author: 'api-craft', license: 'MIT',
+    sourceName: '团队内部技能索引', sourceUrl: 'https://skills.internal.example.com/index.json',
+    updated: '2026-10-28', engines: '>=0.2.1-rc.5 <0.3.0',
+    files: [['SKILL.md', '4.8 KB'], ['scripts/generate.mjs', '1.7 KB']],
+    readme: '支持 OpenAPI 3.0 与 3.1，生成类型、请求封装与契约测试，保留接口变更的兼容性说明。'
+  }
+];
+
+const SOURCES = [
+  { id: 'official', name: 'DSH 官方技能索引', url: 'https://skills.deepseek.com/index.json', enabled: true, status: 'ok', count: 4, checked: '5 分钟前', error: null },
+  { id: 'team', name: '团队内部技能索引', url: 'https://skills.internal.example.com/index.json', enabled: true, status: 'ok', count: 2, checked: '1 小时前', error: null },
+  { id: 'legacy', name: '旧版社区索引', url: 'https://old.skills-community.dev/v1/index.json', enabled: false, status: 'error', count: 0, checked: '3 天前', error: '无法连接：请求超时。这个源已停用。' }
+];
+
+const SCREENS = [
+  { id: 'list', label: '列表 · 默认态（内置折叠）', state: {} },
+  { id: 'builtin', label: '列表 · 系统内置展开', state: { groups: { system: true }, scrollTo: 'system' } },
+  { id: 'search', label: '列表 · 搜索有结果（office）', state: { search: 'office' } },
+  { id: 'search-empty', label: '列表 · 搜索无结果', state: { search: 'kubernetes' } },
+  { id: 'empty', label: '列表 · 空态', state: { empty: true } },
+  { id: 'detail', label: '详情 · 可写技能（git-commit）', state: { view: 'detail', detail: { kind: 'installed', id: 'git-commit' } } },
+  { id: 'detail-builtin', label: '详情 · 内置只读（office）', state: { view: 'detail', detail: { kind: 'installed', id: 'office' } } },
+  { id: 'diagnostics', label: '诊断抽屉 · 1 个未生效', state: { diagOpen: true } },
+  { id: 'disabled', label: '列表 · 已停用行内状态', state: { highlight: 'legacy-jira-sync' } },
+  { id: 'market', label: '市场 · 有源有结果', state: { tab: 'market' } },
+  { id: 'market-empty', label: '市场 · 无源空态', state: { tab: 'market', noSources: true } },
+  { id: 'market-detail', label: '市场详情 · 未安装', state: { tab: 'market', view: 'detail', detail: { kind: 'market', id: 'playwright-e2e-gen' } } },
+  { id: 'sources', label: '管理源抽屉', state: { tab: 'market', sourcesOpen: true } },
+  { id: 'modal-new', label: '弹窗 · 新建技能', state: { modal: { kind: 'new' } } },
+  { id: 'modal-update', label: '弹窗 · 更新确认', state: { modal: { kind: 'update', id: 'git-commit' } } },
+  { id: 'modal-uninstall', label: '弹窗 · 卸载确认', state: { modal: { kind: 'uninstall', id: 'git-commit' } } }
+];
+
+/*************************************************************************
+ * 2. 状态
+ *************************************************************************/
+function baseState() {
+  return {
+    screen: 'list',
+    tab: 'skills',
+    view: 'list',
+    detail: null,
+    search: '',
+    marketSearch: '',
+    sort: 'name',
+    marketSort: 'recommend',
+    marketCat: 'all',
+    groups: { mine: true, shared: true, project: true, system: false },
+    empty: false,
+    noSources: false,
+    diagOpen: false,
+    sourcesOpen: false,
+    modal: null,
+    issueFixed: false,
+    highlight: null,
+    menu: null,
+    sources: SOURCES.map(s => Object.assign({}, s))
+  };
+}
+
+const state = baseState();
+
+function applyScreen(id) {
+  const preset = SCREENS.find(s => s.id === id) || SCREENS[0];
+  const next = baseState();
+  const patch = preset.state || {};
+  Object.keys(patch).forEach(k => {
+    if (k === 'groups') {
+      next.groups = Object.assign({}, next.groups, patch.groups);
+    } else {
+      next[k] = patch[k];
+    }
+  });
+  next.screen = preset.id;
+  Object.keys(state).forEach(k => { delete state[k]; });
+  Object.assign(state, next);
+  const sel = document.getElementById('screen-select');
+  if (sel) sel.value = preset.id;
+  render();
+}
+
+function stepScreen(dir) {
+  const idx = SCREENS.findIndex(s => s.id === state.screen);
+  const next = (idx + dir + SCREENS.length) % SCREENS.length;
+  applyScreen(SCREENS[next].id);
+}
+
+function setFont(v) {
+  document.getElementById('app').style.setProperty('--sm-fs', v + 'px');
+}
+
+function initScreenSelect() {
+  const sel = document.getElementById('screen-select');
+  sel.innerHTML = SCREENS.map(s => '<option value="' + s.id + '">' + escapeHtml(s.label) + '</option>').join('');
+  const q = new URLSearchParams(location.search).get('screen');
+  applyScreen(q || 'list');
+}
+/*************************************************************************
+ * 3. 渲染工具
+ *************************************************************************/
+function escapeHtml(str) {
+  return String(str == null ? '' : str)
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;');
+}
+
+function effectiveStatus(skill) {
+  if (skill.id === 'ego-browser' && state.issueFixed) return 'active';
+  return skill.status;
+}
+
+function statusLabel(st) {
+  if (st === 'active') return '生效中';
+  if (st === 'broken') return '未生效';
+  if (st === 'disabled') return '已停用';
+  return '生效中';
+}
+
+function statusDot(st) {
+  if (st === 'active') return 'sm-dot-ok';
+  if (st === 'broken') return 'sm-dot-warn';
+  if (st === 'disabled') return 'sm-dot-idle';
+  return 'sm-dot-ok';
+}
+
+function updateBadge(version, id) {
+  const attr = id
+    ? ' style="cursor:pointer" onclick="event.stopPropagation();openModal(\'update\',\'' + id + '\')"'
+    : '';
+  return '<span class="sm-badge update mono"' + attr + ' data-tip="可更新到 v' + escapeHtml(version) + '">'
+    + '<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path stroke-linecap="round" stroke-linejoin="round" d="M8.5 11.5L12 8m0 0l3.5 3.5M12 8v8"/></svg>'
+    + '<span>v' + escapeHtml(version) + '</span></span>';
+}
+
+function codeBlock(text) {
+  const lines = String(text || '').split('\n');
+  return '<div class="sm-code">' + lines.map((line, i) =>
+    '<div class="sm-code-line"><span class="sm-ln">' + (i + 1) + '</span><span class="sm-code-text">' + (escapeHtml(line) || ' ') + '</span></div>'
+  ).join('') + '</div>';
+}
+
+function renderFooter() {
+  return '<footer class="sm-footer">v3.0 · 2026-11-09</footer>';
+}
+
+/*************************************************************************
+ * 4. 列表页公共头部
+ *************************************************************************/
+function renderListHeader(tab) {
+  const isMarket = tab === 'market';
+  const searchValue = isMarket ? state.marketSearch : state.search;
+  const searchPlaceholder = isMarket ? '搜索市场技能' : '搜索技能名称或描述';
+
+  const toolbar = isMarket
+    ? `<div class="sm-toolbar">
+        <div class="sm-search">
+          ${icon('search', 15).replace('<svg', '<svg class="sm-search-icon"')}
+          <input id="search-input" type="text" value="${escapeHtml(searchValue)}" placeholder="${searchPlaceholder}" aria-label="搜索市场技能" oninput="onSearch(this.value)">
+          <kbd>/</kbd>
+        </div>
+        <select class="sm-select" onchange="setMarketSort(this.value)" aria-label="市场排序">
+          <option value="recommend"${state.marketSort === 'recommend' ? ' selected' : ''}>推荐</option>
+          <option value="updated"${state.marketSort === 'updated' ? ' selected' : ''}>最近更新</option>
+          <option value="name"${state.marketSort === 'name' ? ' selected' : ''}>按名称</option>
+        </select>
+        <button class="btn btn-secondary" onclick="openSources()">${icon('sliders', 15)} 管理源</button>
+      </div>`
+    : `<div class="sm-toolbar">
+        <div class="sm-search">
+          ${icon('search', 15).replace('<svg', '<svg class="sm-search-icon"')}
+          <input id="search-input" type="text" value="${escapeHtml(searchValue)}" placeholder="${searchPlaceholder}" aria-label="搜索技能" oninput="onSearch(this.value)">
+          <kbd>/</kbd>
+        </div>
+        <select class="sm-select" onchange="setSort(this.value)" aria-label="排序方式">
+          <option value="name"${state.sort === 'name' ? ' selected' : ''}>按名称</option>
+          <option value="recent"${state.sort === 'recent' ? ' selected' : ''}>最近修改</option>
+        </select>
+        <button class="btn btn-primary" onclick="openModal('new')">${icon('plus', 15)} 新建技能</button>
+        <button class="sm-icon-btn" aria-label="更多" data-tip="更多：导入技能、检查更新" onclick="event.stopPropagation();openTopMenu(event)">${icon('more', 16)}</button>
+      </div>`;
+
+  const meta = isMarket
+    ? (state.noSources
+        ? '<span class="sm-tabs-meta">还没有索引源</span>'
+        : '<span class="sm-tabs-meta">上次检查 5 分钟前</span>')
+    : (state.empty
+        ? '<span class="sm-tabs-meta">还没有技能</span>'
+        : `<button class="sm-meta-link" onclick="openModal('update','git-commit')" data-tip="检查更新在工具栏的 ⋯ 里">
+            ${icon('arrow-up', 13)} 1 个技能有更新 · 上次检查 5 分钟前
+          </button>`);
+
+  return `
+    <div class="sm-page-head">
+      <div class="sm-page-heading">
+        <h1 class="sm-page-title">技能</h1>
+        <p class="sm-page-desc">管理 Agent 可用的技能，看看哪些没生效。</p>
+      </div>
+      ${toolbar}
+    </div>
+    <div class="sm-tabs-row">
+      <div class="sm-segmented" role="tablist" aria-label="技能与市场">
+        <button class="sm-seg-tab" role="tab" aria-selected="${tab === 'skills' ? 'true' : 'false'}" onclick="switchTab('skills')">技能</button>
+        <button class="sm-seg-tab" role="tab" aria-selected="${tab === 'market' ? 'true' : 'false'}" onclick="switchTab('market')">市场</button>
+      </div>
+      ${meta}
+    </div>`;
+}
+
+function renderBanner() {
+  if (state.issueFixed) {
+    return `<div class="sm-banner sm-banner-ok">
+      <span class="sm-banner-icon">${icon('check', 16)}</span>
+      <div class="sm-banner-text"><strong>所有技能都已生效</strong><span>刚才的文件链接问题已经修复。</span></div>
+      <button class="sm-link brand" onclick="openDiag()">查看诊断</button>
+    </div>`;
+  }
+  return `<div class="sm-banner sm-banner-warn">
+    <span class="sm-banner-icon">${icon('alert', 16)}</span>
+    <div class="sm-banner-text"><strong>1 个技能未生效</strong><span>ego-browser 的文件链接已失效，Agent 现在用不到它。</span></div>
+    <button class="sm-link" onclick="openDiag()">查看原因 →</button>
+  </div>`;
+}
+
+/*************************************************************************
+ * 5. 技能 Tab
+ *************************************************************************/
+function renderSkillsPage() {
+  let content = renderListHeader('skills');
+
+  if (state.empty) {
+    content += `<div class="sm-empty">
+      <div class="sm-empty-icon">${icon('skill', 40)}</div>
+      <div class="sm-empty-title">还没有技能</div>
+      <div class="sm-empty-desc">从市场安装一个，或把自己写的 SKILL.md 放进技能目录。</div>
+      <div class="sm-empty-actions">
+        <button class="btn btn-primary" onclick="switchTab('market')">去市场看看</button>
+        <button class="btn btn-secondary" onclick="openModal('new')">${icon('plus', 15)} 新建技能</button>
+        <button class="btn btn-ghost" onclick="toast('导入入口在工具栏的 ⋯ 里')">导入技能</button>
+      </div>
+    </div>`;
+    return '<div class="page-col">' + content + renderFooter() + '</div>';
+  }
+
+  content += renderBanner();
+
+  const q = state.search.trim().toLowerCase();
+  const matches = s => {
+    if (!q) return true;
+    return (s.name + ' ' + s.desc + ' ' + (s.when || '')).toLowerCase().includes(q);
+  };
+  const filtered = SKILLS.filter(matches);
+
+  if (q && filtered.length === 0) {
+    content += `<div class="sm-empty">
+      <div class="sm-empty-icon">${icon('search', 36)}</div>
+      <div class="sm-empty-title">没有匹配「${escapeHtml(state.search.trim())}」的技能</div>
+      <div class="sm-empty-desc">换个关键词，或清除搜索看看全部技能。</div>
+      <div class="sm-empty-actions"><button class="btn btn-secondary" onclick="clearSearch()">清除搜索</button></div>
+    </div>`;
+    return '<div class="page-col">' + content + renderFooter() + '</div>';
+  }
+
+  let groupsHtml = '';
+  GROUPS.forEach(g => {
+    const items = filtered.filter(s => s.group === g.key);
+    if (items.length === 0) return;
+    const expanded = q ? true : state.groups[g.key];
+    const sorted = items.slice().sort((a, b) => {
+      if (state.sort === 'recent') return b.mtime - a.mtime;
+      return a.name.localeCompare(b.name);
+    });
+    groupsHtml += `<section class="sm-group" data-group="${g.key}" aria-label="${g.title}">
+      <button class="sm-group-head" aria-expanded="${expanded ? 'true' : 'false'}" onclick="toggleGroup('${g.key}')">
+        <span class="sm-chevron">${icon(expanded ? 'chevron-down' : 'chevron-right', 14)}</span>
+        <span class="sm-group-title">${g.title}</span>
+        <span class="sm-group-sub">${g.sub}</span>
+        <span class="sm-group-count">${sorted.length}</span>
+      </button>
+      ${expanded ? '<div class="sm-rows">' + sorted.map(renderSkillRow).join('') + '</div>' : ''}
+    </section>`;
+  });
+
+  content += '<div class="sm-groups">' + groupsHtml + '</div>';
+  return '<div class="page-col">' + content + renderFooter() + '</div>';
+}
+
+function renderSkillRow(skill) {
+  const st = effectiveStatus(skill);
+  const isDisabled = st === 'disabled';
+  const isBroken = st === 'broken';
+  const isHighlight = state.highlight === skill.id;
+
+  let badges = '';
+  if (skill.update) badges += updateBadge(skill.update, skill.id);
+  if (isBroken) badges += '<span class="sm-badge warn">未生效</span>';
+  if (isDisabled) badges += '<span class="sm-badge">已停用</span>';
+
+  return `<div class="sm-row${isDisabled ? ' is-disabled' : ''}${isHighlight ? ' is-highlight' : ''}" data-skill-id="${skill.id}" role="button" tabindex="0"
+      onclick="openDetail('installed','${skill.id}')" onkeydown="if(event.key==='Enter') openDetail('installed','${skill.id}')">
+    <div class="sm-row-icon">${icon('skill', 24)}<span class="sm-dot ${statusDot(st)}" data-tip="${statusLabel(st)}"></span></div>
+    <div class="sm-row-main">
+      <div class="sm-row-title">
+        <span class="sm-name mono">${escapeHtml(skill.name)}</span>
+        ${badges ? '<span class="sm-tagbar">' + badges + '</span>' : ''}
+      </div>
+      <div class="sm-desc">${escapeHtml(skill.desc)}</div>
+    </div>
+    <div class="sm-row-tail" onclick="event.stopPropagation()">
+      ${skill.update ? '<button class="btn btn-secondary btn-sm" onclick="openModal(\'update\',\'' + skill.id + '\')">更新</button>' : ''}
+      <button class="sm-icon-btn" aria-label="更多操作" data-tip="更多操作" onclick="event.stopPropagation();openRowMenu(event,'${skill.id}')">${icon('more', 16)}</button>
+    </div>
+  </div>`;
+}
+
+/*************************************************************************
+ * 6. 市场 Tab
+ *************************************************************************/
+function renderMarketPage() {
+  let content = renderListHeader('market');
+
+  if (state.noSources) {
+    content += `<div class="sm-empty">
+      <div class="sm-empty-icon">${icon('market', 40)}</div>
+      <div class="sm-empty-title">还没有技能索引源</div>
+      <div class="sm-empty-desc">添加一个技能索引源，就能浏览和安装市场里的技能。</div>
+      <div class="sm-empty-actions">
+        <button class="btn btn-primary" onclick="openSources()">${icon('plus', 15)} 添加源</button>
+      </div>
+    </div>`;
+    return '<div class="page-col">' + content + renderFooter() + '</div>';
+  }
+
+  const cats = ['all', '代码质量', '测试', '文档', '运维', '数据库'];
+  const q = state.marketSearch.trim().toLowerCase();
+  let list = MARKET.filter(m => {
+    if (state.marketCat !== 'all' && m.cat !== state.marketCat) return false;
+    if (!q) return true;
+    return (m.name + ' ' + m.desc + ' ' + m.tags.join(' ')).toLowerCase().includes(q);
+  });
+  if (state.marketSort === 'name') list = list.slice().sort((a, b) => a.name.localeCompare(b.name));
+  if (state.marketSort === 'updated') list = list.slice().sort((a, b) => b.updated.localeCompare(a.updated));
+
+  content += `<div class="sm-market-filters">
+    <div class="sm-chips" role="radiogroup" aria-label="分类">
+      ${cats.map(c => '<button class="sm-chip' + (state.marketCat === c ? ' active' : '') + '" onclick="setMarketCat(\'' + c + '\')">' + (c === 'all' ? '全部' : c) + '</button>').join('')}
+    </div>
+    <span class="sm-market-count">${list.length} 个技能 · ${state.sources.filter(s => s.enabled).length} 个源</span>
+  </div>`;
+
+  if (list.length === 0) {
+    content += `<div class="sm-empty">
+      <div class="sm-empty-icon">${icon('search', 36)}</div>
+      <div class="sm-empty-title">没有找到匹配的技能</div>
+      <div class="sm-empty-desc">换个关键词，或切换一个分类。</div>
+      <div class="sm-empty-actions"><button class="btn btn-secondary" onclick="clearMarketSearch()">清除筛选</button></div>
+    </div>`;
+    return '<div class="page-col">' + content + renderFooter() + '</div>';
+  }
+
+  content += '<div class="sm-market-rows">' + list.map(renderMarketRow).join('') + '</div>';
+  return '<div class="page-col">' + content + renderFooter() + '</div>';
+}
+
+function renderMarketRow(item) {
+  const tags = item.tags.slice(0, 3).map(t => '<span class="sm-badge">' + escapeHtml(t) + '</span>').join('');
+  return `<div class="sm-row sm-market-row" data-market-id="${item.id}" role="button" tabindex="0"
+      onclick="openDetail('market','${item.id}')" onkeydown="if(event.key==='Enter') openDetail('market','${item.id}')">
+    <div class="sm-row-icon">${icon('skill', 24)}<span class="sm-dot sm-dot-idle" data-tip="未安装"></span></div>
+    <div class="sm-row-main">
+      <div class="sm-row-title">
+        <span class="sm-name mono">${escapeHtml(item.name)}</span>
+        <span class="fs-11 mono" style="color:var(--dsw-alias-label-caption);flex-shrink:0;">v${escapeHtml(item.version)}</span>
+        <span class="sm-tagbar">${tags}</span>
+      </div>
+      <div class="sm-desc">${escapeHtml(item.desc)}</div>
+    </div>
+    <div class="sm-row-tail" onclick="event.stopPropagation()">
+      <button class="btn btn-primary btn-sm" onclick="installSkill('${item.id}')">安装</button>
+    </div>
+  </div>`;
+}
+
+/*************************************************************************
+ * 7. 详情页
+ *************************************************************************/
+function renderDetailPage() {
+  if (!state.detail) return renderSkillsPage();
+  if (state.detail.kind === 'market') {
+    const item = MARKET.find(m => m.id === state.detail.id) || MARKET[0];
+    return '<div class="page-col">' + renderMarketDetail(item) + renderFooter() + '</div>';
+  }
+  const skill = SKILLS.find(s => s.id === state.detail.id) || SKILLS[0];
+  return '<div class="page-col">' + renderInstalledDetail(skill) + renderFooter() + '</div>';
+}
+
+function renderInstalledDetail(skill) {
+  const st = effectiveStatus(skill);
+  const isBroken = st === 'broken';
+  const isDisabled = st === 'disabled';
+  const isReadonly = !skill.writable;
+
+  let actions = '';
+  if (isBroken) {
+    actions += '<button class="btn btn-secondary" onclick="openDiag()">查看诊断</button>';
+  } else if (isDisabled) {
+    actions += '<button class="btn btn-secondary" onclick="toast(\'已恢复 ' + skill.id + '（原型）\')">恢复技能</button>';
+  } else if (!isReadonly) {
+    if (skill.update) actions += '<button class="btn btn-primary" onclick="openModal(\'update\',\'' + skill.id + '\')">更新到 v' + skill.update + '</button>';
+    actions += '<button class="btn btn-secondary" onclick="toast(\'已进入编辑态（原型）\')">' + icon('edit', 15) + ' 编辑原文</button>';
+  } else {
+    actions += '<button class="btn btn-secondary" onclick="copyCommand(\'' + skill.id + '\')">' + icon('copy', 15) + ' 复制调用命令</button>';
+  }
+
+  const versionText = skill.version ? 'v' + skill.version : (skill.builtin ? '随 Harness 更新' : '—');
+
+  let actionCard = '';
+  if (isReadonly) {
+    actionCard = `<div class="sm-card">
+      <div class="sm-card-title">操作</div>
+      <div class="sm-note neutral">这是 Harness 自带的内置技能，不能修改或删除。升级 Harness 时会自动更新。</div>
+      <button class="btn btn-secondary" onclick="copyCommand('${skill.id}')">${icon('copy', 15)} 复制调用命令</button>
+    </div>`;
+  } else if (isBroken) {
+    actionCard = `<div class="sm-card">
+      <div class="sm-card-title">操作</div>
+      <div class="sm-note">${escapeHtml(skill.reason || '')}</div>
+      <div class="sm-action-stack">
+        <button class="btn btn-secondary" onclick="fixIssue()">删除失效项</button>
+        <button class="btn btn-danger-ghost" onclick="toast('已删除 ${escapeHtml(skill.name)}（原型）')">删除技能</button>
+      </div>
+    </div>`;
+  } else if (isDisabled) {
+    actionCard = `<div class="sm-card">
+      <div class="sm-card-title">操作</div>
+      <div class="sm-note neutral">已停用的技能不会被 Agent 调用，文件仍保留在原目录。</div>
+      <div class="sm-action-stack">
+        <button class="btn btn-secondary" onclick="toast('已恢复 ${escapeHtml(skill.name)}（原型）')">恢复技能</button>
+        <button class="btn btn-danger-ghost" onclick="toast('已删除 ${escapeHtml(skill.name)}（原型）')">删除技能</button>
+      </div>
+    </div>`;
+  } else {
+    actionCard = `<div class="sm-card">
+      <div class="sm-card-title">操作</div>
+      <div class="sm-action-stack">
+        <button class="btn btn-secondary" onclick="toast('已停用 ${escapeHtml(skill.name)}（原型）')">${icon('power', 15)} 停用技能</button>
+        ${skill.market
+          ? '<button class="btn btn-danger-ghost" onclick="openModal(\'uninstall\',\'' + skill.id + '\')">' + icon('trash', 15) + ' 卸载技能</button>'
+          : '<button class="btn btn-danger-ghost" onclick="toast(\'已删除 ' + escapeHtml(skill.name) + '（原型）\')">' + icon('trash', 15) + ' 删除技能</button>'}
+      </div>
+    </div>`;
+  }
+
+  return `
+    <button class="sm-back" onclick="backToList()">← 返回</button>
+    <div class="sm-detail-head">
+      <div class="sm-detail-icon">${icon('skill', 28)}<span class="sm-dot ${statusDot(st)}"></span></div>
+      <div class="sm-detail-heading">
+        <div class="sm-detail-title-line">
+          <span class="sm-detail-name mono">${escapeHtml(skill.name)}</span>
+          ${skill.version ? '<span class="sm-detail-ver mono">v' + escapeHtml(skill.version) + '</span>' : ''}
+          ${skill.update ? updateBadge(skill.update, skill.id) : ''}
+          ${isBroken ? '<span class="sm-badge warn">未生效</span>' : ''}
+          ${isDisabled ? '<span class="sm-badge">已停用</span>' : ''}
+        </div>
+        <div class="sm-detail-desc">${escapeHtml(skill.desc)}</div>
+      </div>
+      <div class="sm-detail-actions">${actions}</div>
+    </div>
+
+    <div class="sm-detail-grid">
+      <div class="sm-detail-col">
+        <div class="sm-card">
+          <div class="sm-card-title">这个技能做什么</div>
+          <p class="sm-prose">${escapeHtml(skill.desc)}</p>
+        </div>
+        <div class="sm-card">
+          <div class="sm-card-title">什么时候用</div>
+          <p class="sm-prose">${escapeHtml(skill.when || '没有单独写明，Agent 会按描述自动判断。')}</p>
+        </div>
+        <div class="sm-card">
+          <div class="sm-card-title">
+            <span>SKILL.md</span>
+            ${isReadonly
+              ? '<span class="sm-badge">只读</span>'
+              : '<button class="btn btn-secondary btn-sm" onclick="toast(\'已进入编辑态（原型）\')">' + icon('edit', 14) + ' 编辑</button>'}
+          </div>
+          ${codeBlock(skill.body)}
+        </div>
+      </div>
+
+      <div class="sm-detail-col">
+        <div class="sm-card">
+          <div class="sm-card-title">状态与来源</div>
+          <div class="sm-kv"><span class="sm-kv-label">状态</span><span class="sm-kv-value"><span class="sm-status-line"><span class="sm-dot ${statusDot(st)}"></span>${statusLabel(st)}</span></span></div>
+          <div class="sm-kv"><span class="sm-kv-label">版本</span><span class="sm-kv-value mono">${escapeHtml(versionText)}</span></div>
+          <div class="sm-kv"><span class="sm-kv-label">作者</span><span class="sm-kv-value">${escapeHtml(skill.author || '—')}</span></div>
+          <div class="sm-kv"><span class="sm-kv-label">来源</span><span class="sm-kv-value">${escapeHtml(skill.source)}</span></div>
+          <div class="sm-kv"><span class="sm-kv-label">最近修改</span><span class="sm-kv-value">${escapeHtml(skill.modified)}</span></div>
+          <div class="sm-kv"><span class="sm-kv-label">文件位置</span><span class="sm-kv-value"><span class="mono">${escapeHtml(skill.path)}</span><button class="sm-icon-btn plain" style="width:24px;height:24px;border-radius:7px;" aria-label="复制路径" data-tip="复制路径" onclick="copySkillPath('${skill.id}')">${icon('copy', 13)}</button></span></div>
+        </div>
+        ${actionCard}
+      </div>
+    </div>`;
+}
+
+function renderMarketDetail(item) {
+  const tags = item.tags.map(t => '<span class="sm-badge">' + escapeHtml(t) + '</span>').join('');
+  const target = state.installTarget || 'mine';
+  const targetLabel = target === 'mine' ? '我的技能' : target === 'shared' ? '共享技能' : '项目技能';
+
+  return `
+    <button class="sm-back" onclick="backToList()">← 返回</button>
+    <div class="sm-detail-head">
+      <div class="sm-detail-icon">${icon('skill', 28)}<span class="sm-dot sm-dot-idle" data-tip="未安装"></span></div>
+      <div class="sm-detail-heading">
+        <div class="sm-detail-title-line">
+          <span class="sm-detail-name mono">${escapeHtml(item.name)}</span>
+          <span class="sm-detail-ver mono">v${escapeHtml(item.version)}</span>
+          <span class="sm-tagbar">${tags}</span>
+        </div>
+        <div class="sm-detail-desc">${escapeHtml(item.desc)}</div>
+      </div>
+      <div class="sm-detail-actions">
+        <button class="btn btn-primary" onclick="installSkill('${item.id}')">${icon('download', 15)} 安装</button>
+      </div>
+    </div>
+
+    <div class="sm-detail-grid">
+      <div class="sm-detail-col">
+        <div class="sm-card">
+          <div class="sm-card-title">介绍</div>
+          <p class="sm-prose">${escapeHtml(item.readme)}</p>
+        </div>
+        <div class="sm-card">
+          <div class="sm-card-title">包含文件</div>
+          <div class="sm-file-list">
+            ${item.files.map(f => '<div class="sm-file"><span class="sm-file-name">' + icon('file', 14) + '<span class="mono">' + escapeHtml(f[0]) + '</span></span><span class="sm-file-size">' + escapeHtml(f[1]) + '</span></div>').join('')}
+          </div>
+        </div>
+      </div>
+
+      <div class="sm-detail-col">
+        <div class="sm-card">
+          <div class="sm-card-title">安装</div>
+          <div class="sm-form-field">
+            <span class="sm-form-label">安装到</span>
+            <div class="sm-choice-row">
+              <button class="sm-choice${target === 'mine' ? ' active' : ''}" onclick="setInstallTarget('mine')">我的技能</button>
+              <button class="sm-choice${target === 'shared' ? ' active' : ''}" onclick="setInstallTarget('shared')">共享技能</button>
+              <button class="sm-choice${target === 'project' ? ' active' : ''}" onclick="setInstallTarget('project')">项目技能</button>
+            </div>
+          </div>
+          <button class="btn btn-primary" onclick="installSkill('${item.id}')">${icon('download', 15)} 安装到${targetLabel}</button>
+          <p class="sm-confirm-note">安装后可以在「技能」Tab 里查看和停用。</p>
+        </div>
+        <div class="sm-card">
+          <div class="sm-card-title">详情</div>
+          <div class="sm-kv"><span class="sm-kv-label">来源</span><span class="sm-kv-value">${escapeHtml(item.sourceName)}</span></div>
+          <div class="sm-kv"><span class="sm-kv-label">版本</span><span class="sm-kv-value mono">v${escapeHtml(item.version)}</span></div>
+          <div class="sm-kv"><span class="sm-kv-label">作者</span><span class="sm-kv-value">${escapeHtml(item.author)}</span></div>
+          <div class="sm-kv"><span class="sm-kv-label">许可</span><span class="sm-kv-value">${escapeHtml(item.license)}</span></div>
+          <div class="sm-kv"><span class="sm-kv-label">需要 Harness</span><span class="sm-kv-value mono">${escapeHtml(item.engines)}</span></div>
+          <div class="sm-kv"><span class="sm-kv-label">最近更新</span><span class="sm-kv-value">${escapeHtml(item.updated)}</span></div>
+        </div>
+      </div>
+    </div>`;
+}
+
+/*************************************************************************
+ * 8. 抽屉与弹窗
+ *************************************************************************/
+function renderOverlays() {
+  let html = '';
+  if (state.diagOpen) html += renderDiagnosticsDrawer();
+  if (state.sourcesOpen) html += renderSourcesDrawer();
+  if (state.modal) html += renderModal();
+  return html;
+}
+
+function renderDiagnosticsDrawer() {
+  let body = '';
+  if (state.issueFixed) {
+    body = `<div class="sm-issue sm-issue-ok">
+      <div class="sm-issue-head">
+        <span class="sm-issue-icon">${icon('check', 16)}</span>
+        <span class="mono fs-14">ego-browser</span>
+        <span class="sm-badge success">已修复</span>
+      </div>
+      <p class="sm-issue-reason">失效的文件链接已经删除，ego-browser 重新生效了。</p>
+    </div>
+    <p class="sm-drawer-note">刚刚又检查了一遍，其它技能都正常。</p>`;
+  } else {
+    body = `<div class="sm-issue">
+      <div class="sm-issue-head">
+        <span class="sm-issue-icon">${icon('alert', 16)}</span>
+        <span class="mono fs-14">ego-browser</span>
+        <span class="sm-badge warn">未生效</span>
+      </div>
+      <p class="sm-issue-reason">ego-browser 的文件链接已失效，指向的位置不存在，Agent 现在用不到它。</p>
+      <div class="sm-issue-actions">
+        <button class="btn btn-primary btn-sm" onclick="fixIssue()">${icon('trash', 14)} 删除失效项</button>
+        <button class="btn btn-ghost btn-sm" onclick="toast('已打开所在目录（原型）')">打开所在目录</button>
+      </div>
+      <details class="sm-details">
+        <summary><span class="sm-chevron">${icon('chevron-right', 12)}</span>详细信息</summary>
+        <div class="sm-details-body">
+          <div class="sm-kv"><span class="sm-kv-label">技能位置</span><span class="sm-kv-value">共享技能（所有 Agent 都能用）</span></div>
+          <div class="sm-kv"><span class="sm-kv-label">文件</span><span class="sm-kv-value mono">~/.agents/skills/ego-browser</span></div>
+          <div class="sm-kv"><span class="sm-kv-label">链接指向</span><span class="sm-kv-value mono">/Volumes/ExternalSSD/skills/ego-browser</span></div>
+          <div class="sm-kv"><span class="sm-kv-label">最近检查</span><span class="sm-kv-value">刚刚</span></div>
+        </div>
+      </details>
+    </div>
+    <p class="sm-drawer-note">修复后会自动重新检查，不需要重启。其它 10 个技能都正常。</p>`;
+  }
+
+  return `<div class="sm-drawer-backdrop" onclick="closeDiag()"></div>
+    <aside class="sm-drawer" role="dialog" aria-label="技能诊断">
+      <header class="sm-drawer-head">
+        <div class="sm-drawer-head-left">
+          <span class="sm-drawer-title">诊断</span>
+          <span class="sm-badge ${state.issueFixed ? 'success' : 'warn'}">${state.issueFixed ? '0 个问题' : '1 个问题'}</span>
+        </div>
+        <button class="sm-icon-btn plain" aria-label="关闭" onclick="closeDiag()">${icon('x', 16)}</button>
+      </header>
+      <div class="sm-drawer-body">${body}</div>
+    </aside>`;
+}
+
+function renderSourcesDrawer() {
+  const rows = state.sources.map(src => {
+    const dot = src.status === 'ok' ? 'sm-dot-ok' : src.status === 'checking' ? 'sm-dot-update' : 'sm-dot-error';
+    return `<div class="sm-source${src.enabled ? '' : ' is-off'}">
+      <div class="sm-source-top">
+        <span class="sm-dot ${dot}" data-tip="${src.status === 'ok' ? '正常' : src.status === 'checking' ? '正在检查' : '有错误'}"></span>
+        <span class="sm-source-name">${escapeHtml(src.name)}</span>
+        <span class="sm-badge">${src.count} 个技能</span>
+        <span class="sm-source-actions">
+          <button class="sm-switch" role="switch" aria-checked="${src.enabled ? 'true' : 'false'}" aria-label="启用或停用 ${escapeHtml(src.name)}" onclick="toggleSource('${src.id}')"><span class="sm-switch-thumb"></span></button>
+          <button class="sm-icon-btn plain" aria-label="刷新" data-tip="刷新" onclick="refreshSource('${src.id}')">${icon('refresh', 14)}</button>
+          <button class="sm-icon-btn plain" aria-label="删除" data-tip="删除源" onclick="removeSource('${src.id}')">${icon('trash', 14)}</button>
+        </span>
+      </div>
+      <div class="sm-source-url mono">${escapeHtml(src.url)}</div>
+      <div class="sm-source-meta">最近检查：${escapeHtml(src.checked)}</div>
+      ${src.error ? '<div class="sm-source-error">' + escapeHtml(src.error) + '</div>' : ''}
+    </div>`;
+  }).join('');
+
+  return `<div class="sm-drawer-backdrop" onclick="closeSources()"></div>
+    <aside class="sm-drawer sources" role="dialog" aria-label="管理源">
+      <header class="sm-drawer-head">
+        <div class="sm-drawer-head-left">
+          <span class="sm-drawer-title">管理源</span>
+          <span class="sm-badge">${state.sources.length} 个源</span>
+        </div>
+        <button class="sm-icon-btn plain" aria-label="关闭" onclick="closeSources()">${icon('x', 16)}</button>
+      </header>
+      <div class="sm-drawer-body">
+        <p class="sm-drawer-intro">市场里的技能来自这些索引源。停用后不再检查更新，已安装的技能不受影响。</p>
+        ${rows}
+        <div class="sm-add-source">
+          <span class="sm-add-label">添加索引源</span>
+          <div class="sm-add-row">
+            <input id="new-source-url" class="sm-input mono" placeholder="https://…/index.json" aria-label="新索引源地址">
+            <button class="btn btn-primary btn-sm" onclick="addSource()">${icon('plus', 14)} 添加</button>
+          </div>
+          <p class="sm-confirm-note">支持 JSON 索引地址，添加后会先检查一次。</p>
+        </div>
+      </div>
+    </aside>`;
+}
+
+function renderModal() {
+  const m = state.modal;
+  if (!m) return '';
+  if (m.kind === 'new') return renderNewModal();
+  if (m.kind === 'update') return renderUpdateModal();
+  if (m.kind === 'uninstall') return renderUninstallModal();
+  return '';
+}
+
+function renderNewModal() {
+  const target = state.saveTo || 'mine';
+  return `<div class="sm-modal-layer" onclick="if(event.target===this) closeModal()">
+    <div class="sm-dialog" role="dialog" aria-modal="true" aria-label="新建技能">
+      <div class="sm-dialog-head">
+        <div>
+          <div class="sm-dialog-title">新建技能</div>
+          <p class="sm-dialog-sub">创建一个新的 SKILL.md，保存到本地技能目录。</p>
+        </div>
+        <button class="sm-icon-btn plain" aria-label="关闭" onclick="closeModal()">${icon('x', 16)}</button>
+      </div>
+      <div class="sm-dialog-body">
+        <div class="sm-form-field">
+          <span class="sm-form-label">保存到</span>
+          <div class="sm-choice-row">
+            <button class="sm-choice${target === 'mine' ? ' active' : ''}" onclick="setSaveTo('mine')">我的技能</button>
+            <button class="sm-choice${target === 'shared' ? ' active' : ''}" onclick="setSaveTo('shared')">共享技能</button>
+            <button class="sm-choice${target === 'project' ? ' active' : ''}" onclick="setSaveTo('project')">项目技能</button>
+          </div>
+        </div>
+        <div class="sm-form-field">
+          <label class="sm-form-label" for="new-skill-name">名称 <span class="sm-form-hint">小写字母、数字和连字符</span></label>
+          <input id="new-skill-name" class="sm-input mono" value="release-notes-writer" autocomplete="off">
+        </div>
+        <div class="sm-form-field">
+          <label class="sm-form-label" for="new-skill-desc">描述</label>
+          <textarea id="new-skill-desc" class="sm-input">从合并记录整理面向用户的版本说明，语气统一、重点清楚。</textarea>
+        </div>
+        <div class="sm-form-field">
+          <label class="sm-form-label" for="new-skill-when">什么时候用 <span class="sm-form-hint">可选</span></label>
+          <textarea id="new-skill-when" class="sm-input">当需要为一个版本写发布说明，或把内部改动整理成用户能读懂的更新时使用。</textarea>
+        </div>
+      </div>
+      <div class="sm-dialog-foot">
+        <button class="btn btn-ghost" onclick="closeModal()">取消</button>
+        <button class="btn btn-primary" onclick="createSkill()">创建技能</button>
+      </div>
+    </div>
+  </div>`;
+}
+
+function renderUpdateModal() {
+  const id = state.modal.id || 'git-commit';
+  const skill = SKILLS.find(s => s.id === id) || SKILLS[0];
+  return `<div class="sm-modal-layer" onclick="if(event.target===this) closeModal()">
+    <div class="sm-dialog small" role="dialog" aria-modal="true" aria-label="更新确认">
+      <div class="sm-dialog-head">
+        <div class="sm-dialog-title">更新 ${escapeHtml(skill.name)}？</div>
+        <button class="sm-icon-btn plain" aria-label="关闭" onclick="closeModal()">${icon('x', 16)}</button>
+      </div>
+      <div class="sm-dialog-body">
+        <div class="sm-confirm">
+          <div class="sm-confirm-ver"><span class="mono">v${escapeHtml(skill.version || '1.4.0')}</span>${icon('arrow-up', 14)}<span class="mono">v${escapeHtml(skill.update || '1.5.0')}</span><span>来自 ${escapeHtml(skill.source.replace('来自市场：', ''))}</span></div>
+          ${skill.localModified ? '<div class="sm-confirm-warn">这个技能有本地修改，更新前会先备份，不会直接覆盖。</div>' : ''}
+          <p class="sm-confirm-note">更新会把新版本写入当前技能目录，旧文件保留在备份里。</p>
+        </div>
+      </div>
+      <div class="sm-dialog-foot">
+        <button class="btn btn-ghost" onclick="closeModal()">取消</button>
+        <button class="btn btn-primary" onclick="doUpdate('${skill.id}')">更新</button>
+      </div>
+    </div>
+  </div>`;
+}
+
+function renderUninstallModal() {
+  const id = state.modal.id || 'git-commit';
+  const skill = SKILLS.find(s => s.id === id) || SKILLS[0];
+  return `<div class="sm-modal-layer" onclick="if(event.target===this) closeModal()">
+    <div class="sm-dialog small" role="dialog" aria-modal="true" aria-label="卸载确认">
+      <div class="sm-dialog-head">
+        <div class="sm-dialog-title">卸载 ${escapeHtml(skill.name)}？</div>
+        <button class="sm-icon-btn plain" aria-label="关闭" onclick="closeModal()">${icon('x', 16)}</button>
+      </div>
+      <div class="sm-dialog-body">
+        <div class="sm-confirm">
+          <p class="sm-confirm-note">会从「我的技能」移除，文件移到备份目录，7 天内可以恢复。</p>
+          <p class="sm-confirm-note">卸载后 Agent 就不能再调用这个技能了。</p>
+        </div>
+      </div>
+      <div class="sm-dialog-foot">
+        <button class="btn btn-ghost" onclick="closeModal()">取消</button>
+        <button class="btn btn-danger" onclick="doUninstall('${skill.id}')">卸载</button>
+      </div>
+    </div>
+  </div>`;
+}
+
+/*************************************************************************
+ * 9. 菜单
+ *************************************************************************/
+function renderMenu() {
+  if (!state.menu) return '';
+  const m = state.menu;
+  let items = '';
+
+  if (m.type === 'top') {
+    items = `<button class="sm-menu-item" onclick="menuAction('import')"><span class="sm-menu-icon">${icon('upload', 15)}</span>导入技能</button>
+      <button class="sm-menu-item" onclick="menuAction('check')"><span class="sm-menu-icon">${icon('refresh', 15)}</span>检查更新</button>
+      <button class="sm-menu-item" onclick="menuAction('refresh')"><span class="sm-menu-icon">${icon('refresh', 15)}</span>刷新列表</button>`;
+  } else {
+    const skill = SKILLS.find(s => s.id === m.id) || SKILLS[0];
+    const st = effectiveStatus(skill);
+    items = `<button class="sm-menu-item" onclick="menuAction('detail','${skill.id}')"><span class="sm-menu-icon">${icon('skill', 15)}</span>查看详情</button>`;
+    if (!skill.builtin) {
+      items += `<button class="sm-menu-item" onclick="menuAction('copy','${skill.id}')"><span class="sm-menu-icon">${icon('copy', 15)}</span>复制文件位置</button>`;
+    } else {
+      items += `<button class="sm-menu-item" onclick="menuAction('copy-command','${skill.id}')"><span class="sm-menu-icon">${icon('copy', 15)}</span>复制调用命令</button>`;
+    }
+    if (skill.writable && st !== 'broken') {
+      items += `<button class="sm-menu-item" onclick="menuAction('toggle','${skill.id}')"><span class="sm-menu-icon">${icon('power', 15)}</span>${st === 'disabled' ? '恢复技能' : '停用技能'}</button>`;
+    }
+    items += '<div class="sm-menu-sep"></div>';
+    if (skill.builtin) {
+      items += `<button class="sm-menu-item" onclick="menuAction('why','${skill.id}')"><span class="sm-menu-icon">${icon('info', 15)}</span>为什么不能修改</button>`;
+    } else if (skill.market) {
+      items += `<button class="sm-menu-item danger" onclick="menuAction('uninstall','${skill.id}')"><span class="sm-menu-icon">${icon('trash', 15)}</span>卸载…</button>`;
+    } else {
+      items += `<button class="sm-menu-item danger" onclick="menuAction('uninstall','${skill.id}')"><span class="sm-menu-icon">${icon('trash', 15)}</span>删除…</button>`;
+    }
+  }
+
+  return '<div class="sm-menu" role="menu" style="left:' + m.x + 'px;top:' + m.y + 'px;" onclick="event.stopPropagation()">' + items + '</div>';
+}
+
+/*************************************************************************
+ * 10. 渲染入口
+ *************************************************************************/
+function render() {
+  const active = document.activeElement;
+  const focusId = active && active.id ? active.id : null;
+  const selStart = focusId && active.setSelectionRange ? active.selectionStart : null;
+
+  const page = state.view === 'detail' ? renderDetailPage() : (state.tab === 'market' ? renderMarketPage() : renderSkillsPage());
+  document.getElementById('page-root').innerHTML = page;
+  document.getElementById('overlay-root').innerHTML = renderOverlays();
+  document.getElementById('menu-root').innerHTML = renderMenu();
+
+  if (focusId) {
+    const el = document.getElementById(focusId);
+    if (el && el.focus) {
+      el.focus();
+      if (selStart != null && el.setSelectionRange) {
+        try { el.setSelectionRange(selStart, selStart); } catch (e) { /* noop */ }
+      }
+    }
+  }
+
+  if (state.scrollTo) {
+    const target = state.scrollTo;
+    state.scrollTo = null;
+    const groupEl = document.querySelector('[data-group="' + target + '"]');
+    if (groupEl) groupEl.scrollIntoView({ block: 'start' });
+  }
+
+  if (state.highlight) {
+    const row = document.querySelector('[data-skill-id="' + state.highlight + '"]');
+    if (row) row.scrollIntoView({ block: 'nearest' });
+  }
+}
+/*************************************************************************
+ * 11. 交互
+ *************************************************************************/
+function switchTab(tab) {
+  state.tab = tab;
+  state.view = 'list';
+  state.detail = null;
+  state.search = '';
+  state.marketSearch = '';
+  state.highlight = null;
+  state.menu = null;
+  render();
+}
+
+function onSearch(value) {
+  if (state.tab === 'market') state.marketSearch = value;
+  else state.search = value;
+  render();
+}
+
+function clearSearch() {
+  state.search = '';
+  render();
+}
+
+function clearMarketSearch() {
+  state.marketSearch = '';
+  state.marketCat = 'all';
+  render();
+}
+
+function setSort(value) {
+  state.sort = value;
+  render();
+}
+
+function setMarketSort(value) {
+  state.marketSort = value;
+  render();
+}
+
+function setMarketCat(value) {
+  state.marketCat = value;
+  render();
+}
+
+function toggleGroup(key) {
+  if (state.search) {
+    state.search = '';
+    state.groups[key] = true;
+  } else {
+    state.groups[key] = !state.groups[key];
+  }
+  render();
+}
+
+function openDetail(kind, id) {
+  state.view = 'detail';
+  state.detail = { kind: kind, id: id };
+  state.tab = kind === 'market' ? 'market' : 'skills';
+  state.menu = null;
+  state.highlight = null;
+  render();
+}
+
+function backToList() {
+  state.view = 'list';
+  state.detail = null;
+  render();
+}
+
+function openDiag() {
+  state.diagOpen = true;
+  state.sourcesOpen = false;
+  state.menu = null;
+  render();
+}
+
+function closeDiag() {
+  state.diagOpen = false;
+  render();
+}
+
+function openSources() {
+  state.sourcesOpen = true;
+  state.diagOpen = false;
+  state.menu = null;
+  render();
+}
+
+function closeSources() {
+  state.sourcesOpen = false;
+  render();
+}
+
+function fixIssue() {
+  state.issueFixed = true;
+  state.diagOpen = true;
+  render();
+  toast('已删除失效项，ego-browser 重新生效了');
+}
+
+function toggleSource(id) {
+  const src = state.sources.find(s => s.id === id);
+  if (!src) return;
+  src.enabled = !src.enabled;
+  render();
+}
+
+function refreshSource(id) {
+  const src = state.sources.find(s => s.id === id);
+  if (!src) return;
+  src.status = 'checking';
+  src.checked = '正在检查…';
+  src.error = null;
+  render();
+  setTimeout(() => {
+    const again = state.sources.find(s => s.id === id);
+    if (!again) return;
+    again.status = 'ok';
+    again.checked = '刚刚';
+    render();
+  }, 900);
+}
+
+function removeSource(id) {
+  state.sources = state.sources.filter(s => s.id !== id);
+  render();
+  toast('已删除这个源');
+}
+
+function addSource() {
+  const input = document.getElementById('new-source-url');
+  const url = input ? input.value.trim() : '';
+  if (!url) {
+    toast('请先填入索引地址');
+    if (input) input.focus();
+    return;
+  }
+  state.sources.push({
+    id: 'custom-' + Date.now(),
+    name: '新索引源',
+    url: url,
+    enabled: true,
+    status: 'checking',
+    count: 0,
+    checked: '正在检查…',
+    error: null
+  });
+  render();
+  toast('已添加索引源，正在检查…');
+  setTimeout(() => {
+    const added = state.sources[state.sources.length - 1];
+    if (!added || added.name !== '新索引源') return;
+    added.status = 'ok';
+    added.checked = '刚刚';
+    added.count = 3;
+    render();
+  }, 1200);
+}
+
+function openModal(kind, id) {
+  state.modal = { kind: kind, id: id };
+  state.menu = null;
+  render();
+}
+
+function closeModal() {
+  state.modal = null;
+  render();
+}
+
+function setSaveTo(value) {
+  state.saveTo = value;
+  render();
+}
+
+function setInstallTarget(value) {
+  state.installTarget = value;
+  render();
+}
+
+function createSkill() {
+  const input = document.getElementById('new-skill-name');
+  const name = input && input.value.trim() ? input.value.trim() : 'release-notes-writer';
+  state.modal = null;
+  render();
+  toast('已创建 ' + name);
+}
+
+function doUpdate(id) {
+  state.modal = null;
+  render();
+  toast('正在更新 ' + id + '，完成后会通知你');
+}
+
+function doUninstall(id) {
+  state.modal = null;
+  render();
+  toast('已卸载 ' + id + '，文件已移到备份目录');
+}
+
+function installSkill(id) {
+  toast('已开始安装 ' + id + '…');
+}
+
+function copyText(text) {
+  if (navigator.clipboard && navigator.clipboard.writeText) {
+    navigator.clipboard.writeText(text).then(() => toast('已复制')).catch(() => toast('已复制'));
+  } else {
+    toast('已复制');
+  }
+}
+
+function copySkillPath(id) {
+  const skill = SKILLS.find(s => s.id === id);
+  copyText(skill ? skill.path : id);
+}
+
+function copyCommand(id) {
+  copyText('/' + id);
+}
+
+function openRowMenu(e, id) {
+  e.stopPropagation();
+  const r = e.currentTarget.getBoundingClientRect();
+  const width = 184;
+  let x = Math.min(Math.max(8, r.right - width), window.innerWidth - width - 8);
+  let y = r.bottom + 6;
+  if (y + 280 > window.innerHeight) y = Math.max(52, r.top - 280);
+  state.menu = { type: 'row', id: id, x: x, y: y };
+  render();
+}
+
+function openTopMenu(e) {
+  e.stopPropagation();
+  const r = e.currentTarget.getBoundingClientRect();
+  const width = 184;
+  let x = Math.min(Math.max(8, r.left), window.innerWidth - width - 8);
+  let y = r.bottom + 6;
+  if (y + 160 > window.innerHeight) y = Math.max(52, r.top - 160);
+  state.menu = { type: 'top', x: x, y: y };
+  render();
+}
+
+function menuAction(action, id) {
+  state.menu = null;
+  if (action === 'detail') {
+    openDetail('installed', id);
+    return;
+  }
+  if (action === 'copy') {
+    copySkillPath(id);
+    render();
+    return;
+  }
+  if (action === 'copy-command') {
+    copyCommand(id);
+    render();
+    return;
+  }
+  if (action === 'toggle') {
+    const skill = SKILLS.find(s => s.id === id);
+    const wasDisabled = skill && effectiveStatus(skill) === 'disabled';
+    render();
+    toast(wasDisabled ? '已恢复 ' + id + '（原型）' : '已停用 ' + id + '（原型）');
+    return;
+  }
+  if (action === 'uninstall') {
+    openModal('uninstall', id);
+    return;
+  }
+  if (action === 'why') {
+    render();
+    toast('Harness 自带的内置技能不能修改，升级 Harness 时会自动更新。');
+    return;
+  }
+  if (action === 'import') {
+    render();
+    toast('导入入口已打开（原型）');
+    return;
+  }
+  if (action === 'check') {
+    render();
+    toast('正在检查更新…');
+    return;
+  }
+  if (action === 'refresh') {
+    render();
+    toast('已刷新');
+    return;
+  }
+  render();
+}
+
+/*************************************************************************
+ * 12. Toast / Tooltip / 键盘
+ *************************************************************************/
+function toast(message) {
+  const host = document.getElementById('toast-host');
+  if (!host) return;
+  const el = document.createElement('div');
+  el.className = 'sm-toast';
+  el.innerHTML = '<span style="color:var(--dsw-alias-state-success-primary);display:inline-flex;">' + icon('check', 15) + '</span><span>' + escapeHtml(message) + '</span>';
+  host.appendChild(el);
+  setTimeout(() => { if (el.parentElement) el.remove(); }, 3200);
+}
+
+let tipTimer = null;
+let tipTarget = null;
+
+function hideTooltip() {
+  if (tipTimer) { clearTimeout(tipTimer); tipTimer = null; }
+  tipTarget = null;
+  const el = document.getElementById('tooltip');
+  if (el) el.classList.remove('visible');
+}
+
+document.addEventListener('mouseover', (e) => {
+  const el = e.target.closest ? e.target.closest('[data-tip]') : null;
+  if (!el) { hideTooltip(); return; }
+  if (el === tipTarget) return;
+  hideTooltip();
+  tipTarget = el;
+  tipTimer = setTimeout(() => {
+    if (!tipTarget || !document.body.contains(tipTarget)) return;
+    const tip = document.getElementById('tooltip');
+    if (!tip) return;
+    tip.textContent = tipTarget.getAttribute('data-tip');
+    tip.classList.add('visible');
+    const r = tipTarget.getBoundingClientRect();
+    const tr = tip.getBoundingClientRect();
+    let left = r.left + r.width / 2 - tr.width / 2;
+    let top = r.top - tr.height - 6;
+    if (left < 8) left = 8;
+    if (left + tr.width > window.innerWidth - 8) left = window.innerWidth - tr.width - 8;
+    if (top < 8) top = r.bottom + 6;
+    tip.style.left = Math.round(left) + 'px';
+    tip.style.top = Math.round(top) + 'px';
+  }, 300);
+});
+
+document.addEventListener('mouseout', (e) => {
+  if (tipTarget && (!e.relatedTarget || !tipTarget.contains(e.relatedTarget))) hideTooltip();
+});
+document.addEventListener('mousedown', hideTooltip);
+
+document.addEventListener('click', (e) => {
+  if (!state.menu) return;
+  if (e.target.closest && e.target.closest('.sm-menu')) return;
+  state.menu = null;
+  render();
+});
+
+document.addEventListener('keydown', (e) => {
+  if (e.key === 'Escape') {
+    if (state.menu) { state.menu = null; render(); return; }
+    if (state.modal) { state.modal = null; render(); return; }
+    if (state.diagOpen) { state.diagOpen = false; render(); return; }
+    if (state.sourcesOpen) { state.sourcesOpen = false; render(); return; }
+    if (state.view === 'detail') { backToList(); return; }
+  }
+  const tag = document.activeElement ? document.activeElement.tagName : '';
+  if (e.key === '/' && tag !== 'INPUT' && tag !== 'TEXTAREA' && tag !== 'SELECT') {
+    const el = document.getElementById('search-input');
+    if (el) { e.preventDefault(); el.focus(); }
+  }
+});
+
+/*************************************************************************
+ * 13. 启动
+ *************************************************************************/
+initScreenSelect();
+</script>
+</body>
+</html>
