@@ -397,6 +397,8 @@ function marketSkillView(entry, context) {
       row?.name === entry?.name
       && row?.sourceId === updateSourceId
       && row?.location === installed.location
+      // Cross-project isolation: an update row belongs to one install root only.
+      && String(row?.rootPath ?? '') === String(installed?.rootPath ?? '')
     ))
     : undefined
 
@@ -462,6 +464,8 @@ function marketListView(entry, context) {
       row?.name === entry?.name
       && row?.sourceId === context.sourceId
       && row?.location === installed.location
+      // Cross-project isolation: an update row belongs to one install root only.
+      && String(row?.rootPath ?? '') === String(installed?.rootPath ?? '')
     ))
     : undefined
   const installedVersion = installed !== undefined && typeof installed.version === 'string' && installed.version !== ''
@@ -819,6 +823,9 @@ export function apply(ctx, config) {
   // `/check-updates` is single-flight at the route level so the index-cache/scan refresh
   // around the update check also runs at most once (contract §4.3).
   let checkUpdatesInflight = null
+  // Sources whose last update check failed. `/market` keeps serving their last good cache
+  // but must report `stale: true` until a later check (or explicit refresh) succeeds.
+  const staleSources = new Set()
 
   ctx.effect(() => () => indexFetcher.dispose(), 'skill-manager: index fetcher')
 
@@ -973,6 +980,7 @@ export function apply(ctx, config) {
               const update = requireStoreMethod(state, 'updateSource')
               const updated = await update(id, { lastCheckedAt: checkedAt, lastError: null })
               sourceTracker.markOk(id, count, checkedAt)
+              staleSources.delete(id)
               sendJson(res, 200, { ok: true, data: { source: sourceTracker.view(updated) } })
             } catch (error) {
               sourceTracker.markError(id, message(error))
@@ -1036,11 +1044,14 @@ export function apply(ctx, config) {
     const cwd = await resolveCwd(ctx, query.cwd || settings.cwd)
     const path = requireString(query.path, 'path')
     const [installed, sources] = await Promise.all([readInstalled(state), readSources(state)])
-    return readSkillDetail(ctx, path, cwd, {
+    const detail = await readSkillDetail(ctx, path, cwd, {
       installed,
       sources,
       updates: updateStateOf(updateChecker),
     })
+    // Contract §3.2: the detail route returns the same key set as `GET /installed`,
+    // including the `author` / `whenToUse` `string | null` placeholders.
+    return { ...detail, skill: skillView(detail.skill) }
   })
 
   route('POST', `${API_PREFIX}/skill`, async (req) => {
@@ -1253,6 +1264,9 @@ export function apply(ctx, config) {
     let stale = false
     for (const source of selected) {
       const blockName = sourceNameOf(source, null) || source.id
+      // A failed `/check-updates` marks the source stale even while its cached index is
+      // still within the fetch TTL, so the client can show the "last good" hint.
+      if (staleSources.has(source.id)) stale = true
       sourceTracker.markChecking(source.id)
       try {
         const result = await fetchIndex(source.url, { refresh: truthyFlag(query.refresh) })
@@ -1266,6 +1280,8 @@ export function apply(ctx, config) {
         } else {
           const count = Array.isArray(index?.skills) ? index.skills.length : 0
           sourceTracker.markOk(source.id, count, nowSeconds())
+          // An explicit refresh that succeeds clears an earlier check failure.
+          if (truthyFlag(query.refresh)) staleSources.delete(source.id)
         }
         // `tag` is a label in the common case; accept a declared category too.
         // A source that declares neither contributes an empty block.
@@ -1459,6 +1475,13 @@ export function apply(ctx, config) {
             /* invalidation is best-effort */
           }
         }
+      }
+      // Observation fix P2: a failed check keeps the last good market cache but must be
+      // visible as `stale: true` on `/market` until a later successful check clears it.
+      for (const source of sources) {
+        if (typeof source?.id !== 'string' || source.id === '') continue
+        if (globalFailure || failedSources.has(source.id)) staleSources.add(source.id)
+        else staleSources.delete(source.id)
       }
       // P2-4: `/check-updates` always refreshes the installed scan, even with zero enabled
       // sources (contract §4.3), so a stale `GET /installed` cache cannot survive the check.

@@ -388,15 +388,15 @@
 
 | 问题类型 | 一句人话 | 主修复动作 | 执行前 | 执行后 |
 | --- | --- | --- | --- | --- |
-| 与另一个技能同名 | `{name} 与『{location}』里的另一个技能同名，现在生效的是后者。` | 查看生效项 | 该卡片标记未生效；警示图标计数 +1 | 打开生效技能详情；问题卡保留，直到用户停用 / 重命名 / 删除被覆盖项；处理后重新检查消失 |
+| 与另一个技能同名 | `{name} 与『{location}』里的另一个技能同名，现在生效的是后者。` | 查看生效项 | 该卡片标记未生效；警示图标计数 +1 | 打开生效技能详情；问题卡保留，直到用户停用 / 改名 / 删除被覆盖项；处理后重新检查消失 |
 | 文件开头格式不对 | `{name} 的文件开头格式不对，Agent 读不到它。` | 打开文件修正 | 技能被跳过；问题卡存在 | 打开 DL-03 编辑原文；保存成功后重新检查，问题卡消失；保存失败则保留并显示原因 |
-| 名称不符合规则 | `{name} 的名字不符合规则：只能用小写字母、数字和连字符。` | 重命名 | 技能不可用；问题卡存在 | 打开重命名框，预填建议值；成功后卡片与问题卡同步更新；失败保留 |
+| 名称不符合规则 | `{name} 的名字不符合规则：只能用小写字母、数字和连字符。` | 打开文件修正 | 技能不可用；问题卡存在 | 打开 SKILL.md 供用户修改 frontmatter 的 name；保存后重新检查，问题卡消失；失败保留 |
 | 链接失效 | `{name} 指向的位置已经不存在了。` | 删除失效项 | 卡片可能不出现在列表；警示图标计数 +1 | 删除链接与失效记录；问题卡消失；计数 -1；toast「已处理」+「撤销」8s |
 | 文件夹打不开 | `{name} 所在的文件夹打不开，可能是权限问题。` | 打开所在目录 | 技能不可见；问题卡存在 | 打开目录；用户处理后点「重新检查」；成功则消失，失败保留 |
 | 正文偏大（需要留意） | `{name} 的内容比较大，加载会变慢，有些 Agent 可能读不全。` | 查看并精简正文 | 不进入警示图标计数 | 打开详情原文；问题卡保留（信息性） |
 | 来源连不上（需要留意） | `{name} 来自市场源『{source}』，这个源暂时连不上；已安装的版本仍然能用，只是暂时不能检查更新。` | 去管理源处理 | 不进入警示图标计数 | 打开管理源弹窗并定位到该源；源恢复后重新检查，问题卡消失 |
 
-- 「重命名」「删除失效项」是写操作：完成后统一重新拉取 `/diagnostics` 与 `/installed`，不让前端自行猜测计数。
+- 「打开文件修正」「删除失效项」是写操作：完成后统一重新拉取 `/diagnostics` 与 `/installed`，不让前端自行猜测计数。
 - 「查看生效项」只导航，不修改数据；抽屉可保持打开，返回后仍在原滚动位置。同名问题的主按钮只给「查看生效项」，「停用其中一个」在生效项详情的操作区完成。
 - 修复失败：问题卡内联错误「没能处理这个问题：{reason}」+ 保留原动作；不弹全局 toast。
 - 「详细信息」默认收起；展开显示路径（mono）、问题类型、当前生效项、修复提示；路径可复制；技术词只在此层出现。
@@ -487,7 +487,7 @@
 | 4 | 搜索框聚焦且有内容 | 清空搜索；再次 `Esc` 退出焦点 |
 | 5 | 其他 | 不处理，不阻止宿主默认行为 |
 
-- 嵌套场景按栈处理：例如「详情 → 诊断抽屉 → 重命名框」，一次 `Esc` 只关最上层。
+- 嵌套场景按栈处理：例如「详情 → 诊断抽屉 → 编辑弹窗」，一次 `Esc` 只关最上层。
 - 对话框打开时锁定背景滚动；关闭后恢复。
 - 所有图标按钮必须有 `aria-label`；二级 Tab、卡片、菜单、状态图标、开关、进度条按 §7 的可访问性要求标注。
 
@@ -641,7 +641,6 @@
 | `action.removeLink` | 删除失效项 | Remove broken item |
 | `action.openFile` | 打开文件修正 | Open file to fix |
 | `action.viewFile` | 查看并精简正文 | View and trim content |
-| `action.rename` | 重命名 | Rename |
 | `action.disable` | 停用 | Disable |
 | `action.enable` | 恢复 | Restore |
 | `action.delete` | 删除 | Delete |
@@ -783,7 +782,7 @@
 | `diag.fix.openFolder` | 打开所在目录 | Open containing folder |
 | `diag.fix.manageSources` | 去管理源处理 | Go to sources |
 | `diag.toast.fixed` | 已处理 | Fixed |
-| `diag.toast.renamed` | 已重命名为 {name} | Renamed to {name} |
+| `diag.toast.opened` | 已打开文件，修正后重新检查 | File opened; re-check after saving |
 
 ---
 
@@ -886,9 +885,9 @@
 | `form.edit.discard.body` | 关闭后，这次的修改不会保留。 | Your changes won't be kept. |
 | `form.edit.discard.confirm` | 放弃修改 | Discard |
 | `form.mtimeConflict` | 文件已被外部修改，请刷新后重试。 | The file changed elsewhere. Refresh and try again. |
-| `form.rename.title` | 重命名技能 | Rename skill |
-| `form.rename.label` | 新名称 | New name |
-| `form.rename.placeholder` | 例如：code-review | e.g. code-review |
+| `form.rename.title` | 打开文件修正 | Open file |
+| `form.rename.label` | 文件位置 | File location |
+| `form.rename.placeholder` | ~/.dsh/skills/example/SKILL.md | ~/.dsh/skills/example/SKILL.md |
 | `install.title` | 安装技能 | Install skill |
 | `install.target` | 安装到 | Install to |
 | `install.target.project` | 当前项目 | Current project |
@@ -1002,7 +1001,7 @@
 | `appState.search` | 单一搜索词 | 技能 / 市场各自记忆：`skillsSearch` + `marketSearch`（或 `searchByTab`）；技能搜索跨分类 | 切 Tab 记忆、跨分类命中 |
 | 折叠与滚动状态 | 无 | 删除 `collapsedGroups`；新增 `listScroll`（按 Tab）、`skillCategory`、`sourceOrder`（本地持久）；技能列表分组由 `sourceOrder` + 安装记录 `sourceId` 派生，不另存状态 | 本地记忆 + 返回恢复 + 分组渲染 |
 | `30-sources.js` | 渲染「来源」Tab | 改为管理源**弹窗**内容：`renderSourcesDialog()`；删除 `moveSource(id, dir)`，新增 `reorderSources(fromIndex, toIndex)`、`beginSourceDrag()` / `dropSource()` / `moveSourceByKeyboard(id, dir)`，共用同一 `sourceOrder` | 文件名可保留，职责改变 |
-| `50-modals.js` 模态数量 | 6 个标准模态 | 10 类：新建 / 导入 / 安装 / 更新 / 全部更新 / 卸载 / 删除 / 添加源 / 删除源 / 重命名；另加管理源弹窗（720 档，MS-01～MS-05）；宽度改为 488 / 480 / 720 | 弹窗栈、Escape 分层 |
+| `50-modals.js` 模态数量 | 6 个标准模态 | 10 类：新建 / 导入 / 安装 / 更新 / 全部更新 / 卸载 / 删除 / 添加源 / 删除源 / 编辑原文；另加管理源弹窗（720 档，MS-01～MS-05）；宽度改为 488 / 480 / 720 | 弹窗栈、Escape 分层 |
 | `tab.*` 文案 | `tab.installed` / `tab.market` / `tab.sources` | `tab.skills` / `tab.market` / `tab.count` / `tab.skills.label`；删除 `tab.sources`；新增 `group.local` / `group.source` / `group.count` | 字典键集 |
 | `icon()` 集合 | 34 个图标 | 现有 `alert` / `arrow-up` 覆盖状态图标；`sources` 图标复用于市场「管理源」按钮；新增 `grip`（拖动手柄）、`plus`（新建）、`download`（导入）、`refresh`（检查更新转圈时替换）四个图标 | C1 图标集 |
 
@@ -1145,7 +1144,7 @@
 
 ### 7.7 对话框与流程
 
-- [ ] 新建、导入、编辑原文、安装、更新、全部更新、卸载、删除、添加源、删除源、重命名均有明确入口与关闭路径。
+- [ ] 新建、导入、编辑原文、安装、更新、全部更新、卸载、删除、添加源、删除源均有明确入口与关闭路径。
 - [ ] 所有弹窗无阴影、遮罩透明；Escape 只关最上层；关闭后焦点回到触发元素。
 - [ ] 表单弹窗宽度 ≤ 488px、确认弹窗 ≤ 480px、编辑原文 / 预览 ≤ 720px、管理源 ≤ 720px 且留 32px 视口余量；圆角、`.5px` 边框与内部 gap 符合 §4.9。
 - [ ] 安装 ≤ 3 步（选择 → 落点 / 冲突 → 完成）；安装中可取消，取消后清理临时文件。
@@ -1157,7 +1156,7 @@
 ### 7.8 键盘与可访问性
 
 - [ ] `/` 聚焦当前 Tab 搜索框；输入框内不触发。
-- [ ] Escape 按 §4.5 的 5 层顺序关闭；嵌套「详情 → 诊断抽屉 → 重命名框」逐层关闭。
+- [ ] Escape 按 §4.5 的 5 层顺序关闭；嵌套「详情 → 诊断抽屉 → 编辑弹窗」逐层关闭。
 - [ ] 二级 Tab `role="tablist"` / `role="tab"` / `aria-selected`；`←` / `→` / `Home` / `End` 切换，`Enter` / `Space` 激活。
 - [ ] 卡片支持 `←` / `→` / `↑` / `↓` / `Home` / `End` 移动；`Enter` / `Space` 进入详情；`Tab` 可到卡片主按钮与 `⋯`。
 - [ ] 卡片右侧按钮与 `⋯` 阻止冒泡，不触发详情；状态图标可聚焦并读出完整 tooltip。

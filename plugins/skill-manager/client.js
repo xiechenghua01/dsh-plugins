@@ -28,8 +28,10 @@ window.__ModuleLoader__.load({
     /** Secondary tabs of the skills page, in fixed display order. */
     const SKILL_CATEGORIES = ['mine', 'shared', 'project', 'system']
 
-    /** Skills-page sort values (interaction spec: name / recently modified). */
-    const SKILL_SORTS = ['name', 'modified']
+    /** Skills-page sort values (contract 3.1: name / modified / source). */
+    const SKILL_SORTS = ['name', 'modified', 'source']
+    /** Literal label keys: the checker only sees keys written as string literals. */
+    const SKILL_SORT_LABEL_KEYS = { name: 'sort.name', modified: 'sort.modified', source: 'sort.source' }
 
     /** Market sort values (contract 3.5). */
     const MARKET_SORTS = ['recommend', 'updated', 'name']
@@ -1629,12 +1631,38 @@ window.__ModuleLoader__.load({
         return h('div', { className: 'sm-status-icons' }, items)
     }
 
+    /* Primary tabs, in display order. Roving tabindex: only the selected tab
+     * is reachable with Tab; the arrow keys move between them. */
+    const PRIMARY_TABS = ['skills', 'market']
+
+    function focusPrimaryTab(id) {
+        if (typeof document === 'undefined' || document === null || typeof document.querySelector !== 'function') return
+        const node = document.querySelector('.sm-tabs [data-tab="' + id + '"]')
+        if (node !== null && node !== undefined && typeof node.focus === 'function') node.focus()
+    }
+
+    function primaryTabKeyDown(event) {
+        const keys = PRIMARY_TABS
+        const index = keys.indexOf(appState.tab)
+        let next = null
+        if (event.key === 'ArrowRight') next = keys[(index + 1) % keys.length]
+        else if (event.key === 'ArrowLeft') next = keys[(index - 1 + keys.length) % keys.length]
+        else if (event.key === 'Home') next = keys[0]
+        else if (event.key === 'End') next = keys[keys.length - 1]
+        else return
+        event.preventDefault()
+        switchTab(next)
+        const focus = function () { focusPrimaryTab(next) }
+        if (typeof requestAnimationFrame === 'function') requestAnimationFrame(focus)
+        else focus()
+    }
+
     function renderPrimaryTabs() {
         const items = [
             { id: 'skills', label: t('tab.skills') },
             { id: 'market', label: t('tab.market') },
         ]
-        return h('div', { className: 'sm-tabs', role: 'tablist' },
+        return h('div', { className: 'sm-tabs', role: 'tablist', onKeyDown: primaryTabKeyDown },
             items.map(function (item) {
                 const active = appState.tab === item.id
                 return h('button', {
@@ -1644,6 +1672,7 @@ window.__ModuleLoader__.load({
                     className: cx('sm-tab', active && 'sm-tab-active'),
                     'aria-selected': active,
                     tabIndex: active ? 0 : -1,
+                    'data-tab': item.id,
                     onClick: function () { switchTab(item.id) },
                 }, h('span', null, item.label))
             }))
@@ -1652,7 +1681,10 @@ window.__ModuleLoader__.load({
     /* Skills-page toolbar (contract 7.4): search · sort · new / import / check. */
     function renderSkillsToolbar() {
         const search = String(appState.search === undefined || appState.search === null ? '' : appState.search)
-        const sort = String(appState.sort === undefined || appState.sort === null ? '' : appState.sort)
+        /* v1 persisted `recent`; contract §3.1 renames it to `modified`.
+         * Normalize on read so the dropdown shows the value the sorter uses. */
+        const rawSort = String(appState.sort === undefined || appState.sort === null ? '' : appState.sort)
+        const sort = rawSort === 'recent' ? 'modified' : rawSort
         const checking = appState.checking === true
         return h('div', { className: 'sm-toolbar sm-skills-toolbar' },
             h('div', { className: 'sm-search' },
@@ -1682,7 +1714,7 @@ window.__ModuleLoader__.load({
                     : null),
             h('select', {
                 className: 'sm-select',
-                value: sort === 'modified' || sort === 'source' ? sort : 'name',
+                value: SKILL_SORTS.indexOf(sort) !== -1 ? sort : 'name',
                 'aria-label': t('sort.label'),
                 onChange: function (event) {
                     const value = event !== null && event !== undefined && event.target !== null && event.target !== undefined
@@ -1691,9 +1723,9 @@ window.__ModuleLoader__.load({
                     setState({ sort: value })
                 },
             },
-            h('option', { value: 'name' }, t('sort.name')),
-            h('option', { value: 'modified' }, t('sort.modified')),
-            h('option', { value: 'source' }, t('sort.source'))),
+            SKILL_SORTS.map(function (key) {
+                return h('option', { key: key, value: key }, t(SKILL_SORT_LABEL_KEYS[key] || 'sort.name'))
+            })),
             h('div', { className: 'sm-toolbar-icons' },
                 h('button', {
                     type: 'button',

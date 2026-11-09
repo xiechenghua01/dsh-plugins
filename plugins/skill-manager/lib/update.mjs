@@ -604,6 +604,9 @@ export function createUpdateChecker(options = {}) {
             location: record.location,
             // P2-7: consumers must be able to require the same source, not just the same name.
             sourceId: sourceKey,
+            // Cross-project isolation: the install root is part of the record identity, so
+            // project A's up-to-date copy never produces an update row for project B's copy.
+            rootPath: typeof record.rootPath === 'string' ? record.rootPath : '',
             current: String(record.version ?? ''),
             available: String(candidate.version),
             localModified,
@@ -614,13 +617,20 @@ export function createUpdateChecker(options = {}) {
       const seen = new Set()
       const deduped = []
       for (const update of updates) {
-        // P2-7: the source is part of the identity, so two sources cannot shadow each other.
-        const key = `${update.sourceId}\u0000${update.location}\u0000${update.name}`
+        // P2-7 + cross-project isolation: the source *and* the install root are part of
+        // the identity, so neither another source nor another project can shadow a row.
+        const key = `${update.sourceId}\u0000${update.location}\u0000${update.name}\u0000${update.rootPath ?? ''}`
         if (seen.has(key)) continue
         seen.add(key)
         deduped.push(update)
       }
-      deduped.sort((left, right) => (left.name < right.name ? -1 : left.name > right.name ? 1 : 0))
+      deduped.sort((left, right) => {
+        if (left.name !== right.name) return left.name < right.name ? -1 : 1
+        if (left.location !== right.location) return left.location < right.location ? -1 : 1
+        const leftRoot = left.rootPath ?? ''
+        const rightRoot = right.rootPath ?? ''
+        return leftRoot === rightRoot ? 0 : leftRoot < rightRoot ? -1 : 1
+      })
 
       view = {
         checking: false,

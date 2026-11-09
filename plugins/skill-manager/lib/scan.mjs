@@ -1197,6 +1197,15 @@ function buildLocations(scans, skills, presetInfo, presetViews, globalInfo) {
 // Market metadata (attached per call, never cached)
 // ---------------------------------------------------------------------------
 
+/**
+ * Install-record root identity. Update rows and install records both carry the same
+ * persisted `rootPath` string, so comparing the raw value is exact and avoids the
+ * logical-vs-realpath mismatch between `skill._root.path` and the installer root.
+ */
+function installRootKey(value) {
+  return typeof value === 'string' ? value : ''
+}
+
 function attachMarket(skills, options) {
   const installed = Array.isArray(options?.installed) ? options.installed : []
   const sourceNames = new Map()
@@ -1208,14 +1217,16 @@ function attachMarket(skills, options) {
     }
   }
   // Contract §3.4 / P2-7: an update row only applies to the install record it belongs to.
-  // The map key therefore carries the source id as well as the location and name.
+  // The map key therefore carries the source id, the location, the name *and* the install
+  // root: projects A and B can install the same skill at different versions, so a row from
+  // one project's record must never light up the other project's skill.
   const updates = new Map()
   if (Array.isArray(options?.updates?.updates)) {
     for (const update of options.updates.updates) {
       if (update === null || typeof update !== 'object') continue
       const sourceId = typeof update.sourceId === 'string' ? update.sourceId : ''
       if (sourceId === '') continue
-      updates.set(`${sourceId}\u0000${update.location}\u0000${update.name}`, update)
+      updates.set(`${sourceId}\u0000${update.location}\u0000${update.name}\u0000${installRootKey(update.rootPath)}`, update)
     }
   }
 
@@ -1242,7 +1253,7 @@ function attachMarket(skills, options) {
     // `sourceId` gets no update at all rather than matching any same-name row.
     const update = sourceId === ''
       ? undefined
-      : updates.get(`${sourceId}\u0000${skill.location}\u0000${skill.name}`)
+      : updates.get(`${sourceId}\u0000${skill.location}\u0000${skill.name}\u0000${installRootKey(record.rootPath)}`)
     skill.market = {
       sourceId,
       sourceName,
