@@ -503,8 +503,30 @@ export function createUpdateChecker(options = {}) {
     }
 
     try {
-      const index = await fetchIndex(source, { fetcher, signal })
-      cache.set(key, { url, index, fetchedAtMs: nowMs, error: null, retryAtMs: 0 })
+      const fetched = await fetchIndex(source, { fetcher, signal })
+      // P2-5: validate *before* replacing the cache. A structurally invalid new index must
+      // not evict the last good one; the previous index stays usable and is marked stale.
+      let validated
+      try {
+        validated = validateIndex(fetched, url)
+      } catch (error) {
+        const detail = error !== null && typeof error === 'object' && typeof error.message === 'string'
+          ? error.message
+          : String(error)
+        const previous = entry?.index ?? null
+        const failure = `invalid index: ${detail}`
+        cache.set(key, {
+          url,
+          index: previous,
+          fetchedAtMs: entry?.fetchedAtMs ?? 0,
+          error: failure,
+          retryAtMs: nowMs + SOURCE_RETRY_MS,
+          stale: previous !== null,
+        })
+        return { index: previous, error: failure, stale: previous !== null }
+      }
+      const index = validated?.index ?? fetched
+      cache.set(key, { url, index, fetchedAtMs: nowMs, error: null, retryAtMs: 0, stale: false })
       return { index, error: null, stale: false }
     } catch (error) {
       const message = error !== null && typeof error === 'object' && typeof error.message === 'string'
@@ -517,6 +539,7 @@ export function createUpdateChecker(options = {}) {
         fetchedAtMs: entry?.fetchedAtMs ?? 0,
         error: message,
         retryAtMs: nowMs + SOURCE_RETRY_MS,
+        stale: previous !== null,
       })
       return { index: previous, error: message, stale: previous !== null }
     }
@@ -561,19 +584,9 @@ export function createUpdateChecker(options = {}) {
         }
         const index = result.index
         if (index === null || index === undefined) continue
-        // Run the same validator as the market: a structurally invalid index must not produce
-        // update prompts for this source.
-        let validated
-        try {
-          validated = validateIndex(index, String(source.url ?? ''))
-        } catch (error) {
-          const detail = error !== null && typeof error === 'object' && typeof error.message === 'string'
-            ? error.message
-            : String(error)
-          errors.push({ sourceId: sourceKey, message: `invalid index: ${detail}` })
-          continue
-        }
-        const skills = Array.isArray(validated?.index?.skills) ? validated.index.skills : []
+        // `ensureIndex` validates before caching, so this index is structurally sound (and on
+        // failure it is the last good index, not the invalid new one).
+        const skills = Array.isArray(index.skills) ? index.skills : []
         const byName = new Map()
         for (const skill of skills) {
           if (skill !== null && typeof skill === 'object' && typeof skill.name === 'string') byName.set(skill.name, skill)
@@ -589,6 +602,8 @@ export function createUpdateChecker(options = {}) {
           updates.push({
             name: record.name,
             location: record.location,
+            // P2-7: consumers must be able to require the same source, not just the same name.
+            sourceId: sourceKey,
             current: String(record.version ?? ''),
             available: String(candidate.version),
             localModified,
@@ -599,7 +614,8 @@ export function createUpdateChecker(options = {}) {
       const seen = new Set()
       const deduped = []
       for (const update of updates) {
-        const key = `${update.location}\u0000${update.name}`
+        // P2-7: the source is part of the identity, so two sources cannot shadow each other.
+        const key = `${update.sourceId}\u0000${update.location}\u0000${update.name}`
         if (seen.has(key)) continue
         seen.add(key)
         deduped.push(update)

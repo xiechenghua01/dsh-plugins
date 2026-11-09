@@ -26,12 +26,13 @@
      * Placeholders use {name} and are interpolated by t().                *
      * ------------------------------------------------------------------ */
 
-        const zh = {
+            const zh = {
       'action.addSource': '添加源',
       'action.back.market': '返回市场',
       'action.back.skills': '返回技能列表',
       'action.backup': '保留一份备份',
       'action.cancel': '取消',
+      'action.checkUpdates': '检查更新',
       'action.clear': '清除',
       'action.close': '关闭',
       'action.copyPath': '复制路径',
@@ -86,7 +87,9 @@
       'detail.source.market': '来自市场：{source}',
       'detail.status.active': '生效中',
       'detail.status.builtin': '系统内置',
+      'detail.status.disabled': '已停用',
       'detail.status.issue': '未生效',
+      'detail.status.readonly': '只读',
       'detail.updated': '最近修改 {time}',
       'detail.version': '版本',
       'detail.whenToUse': '什么时候用',
@@ -214,10 +217,12 @@
       'panel.title': '技能',
       'search.clear': '清除搜索',
       'search.market.placeholder': '搜索市场技能',
+      'search.skills.placeholder': '搜索技能名称或描述',
       'sort.label': '排序',
       'sort.modified': '最近修改',
       'sort.name': '按名称',
       'sort.recommended': '推荐',
+      'sort.source': '按来源',
       'sort.updated': '最近更新',
       'source.add.title': '添加技能索引源',
       'source.confirmDelete.body': '已安装的技能不会被删除，但之后无法再检查更新。',
@@ -312,12 +317,13 @@
       'update.versionChange': '{current} → {next}',
     }
 
-        const en = {
+            const en = {
       'action.addSource': 'Add source',
       'action.back.market': 'Back to market',
       'action.back.skills': 'Back to skills',
       'action.backup': 'Keep a backup',
       'action.cancel': 'Cancel',
+      'action.checkUpdates': 'Check for updates',
       'action.clear': 'Clear',
       'action.close': 'Close',
       'action.copyPath': 'Copy path',
@@ -372,7 +378,9 @@
       'detail.source.market': 'From market: {source}',
       'detail.status.active': 'Active',
       'detail.status.builtin': 'Built-in',
+      'detail.status.disabled': 'Disabled',
       'detail.status.issue': 'Not active',
+      'detail.status.readonly': 'Read-only',
       'detail.updated': 'Modified {time}',
       'detail.version': 'Version',
       'detail.whenToUse': 'When to use',
@@ -500,10 +508,12 @@
       'panel.title': 'Skills',
       'search.clear': 'Clear search',
       'search.market.placeholder': 'Search market',
+      'search.skills.placeholder': 'Search skills',
       'sort.label': 'Sort',
       'sort.modified': 'Recently modified',
       'sort.name': 'Name',
       'sort.recommended': 'Recommended',
+      'sort.source': 'By source',
       'sort.updated': 'Recently updated',
       'source.add.title': 'Add skill index source',
       'source.confirmDelete.body': 'Installed skills will not be deleted, but they cannot be checked for updates afterward.',
@@ -1626,10 +1636,89 @@
             }))
     }
 
+    /* Skills-page toolbar (contract 7.4): search · sort · new / import / check. */
+    function renderSkillsToolbar() {
+        const search = String(appState.search === undefined || appState.search === null ? '' : appState.search)
+        const sort = String(appState.sort === undefined || appState.sort === null ? '' : appState.sort)
+        const checking = appState.checking === true
+        return h('div', { className: 'sm-toolbar sm-skills-toolbar' },
+            h('div', { className: 'sm-search' },
+                icon('search', 15),
+                h('input', {
+                    className: 'sm-search-input',
+                    type: 'search',
+                    value: search,
+                    placeholder: t('search.skills.placeholder'),
+                    'aria-label': t('search.skills.placeholder'),
+                    spellCheck: false,
+                    onChange: function (event) {
+                        const value = event !== null && event !== undefined && event.target !== null && event.target !== undefined
+                            ? String(event.target.value || '')
+                            : ''
+                        setState({ search: value })
+                    },
+                }),
+                search !== ''
+                    ? h('button', {
+                        type: 'button',
+                        className: 'sm-search-clear',
+                        'aria-label': t('search.clear'),
+                        'data-tip': t('search.clear'),
+                        onClick: function () { setState({ search: '' }) },
+                    }, icon('x', 14))
+                    : null),
+            h('select', {
+                className: 'sm-select',
+                value: sort === 'modified' || sort === 'source' ? sort : 'name',
+                'aria-label': t('sort.label'),
+                onChange: function (event) {
+                    const value = event !== null && event !== undefined && event.target !== null && event.target !== undefined
+                        ? String(event.target.value || 'name')
+                        : 'name'
+                    setState({ sort: value })
+                },
+            },
+            h('option', { value: 'name' }, t('sort.name')),
+            h('option', { value: 'modified' }, t('sort.modified')),
+            h('option', { value: 'source' }, t('sort.source'))),
+            h('div', { className: 'sm-toolbar-icons' },
+                h('button', {
+                    type: 'button',
+                    className: 'sm-tool-btn',
+                    'aria-label': t('action.newSkill'),
+                    'data-tip': t('action.newSkill'),
+                    onClick: function () {
+                        if (typeof openModal === 'function') openModal('new-skill', {})
+                    },
+                }, icon('plus', 16)),
+                h('button', {
+                    type: 'button',
+                    className: 'sm-tool-btn',
+                    'aria-label': t('action.import'),
+                    'data-tip': t('action.import'),
+                    onClick: function () {
+                        if (typeof openModal === 'function') openModal('import-skill', {})
+                    },
+                }, icon('import', 16)),
+                h('button', {
+                    type: 'button',
+                    className: 'sm-tool-btn',
+                    'aria-label': t('action.checkUpdates'),
+                    'data-tip': checking ? t('status.checking') : t('action.checkUpdates'),
+                    disabled: checking,
+                    'aria-busy': checking ? 'true' : undefined,
+                    onClick: function () {
+                        if (typeof checkUpdates === 'function') void checkUpdates()
+                    },
+                }, icon('refresh', 16))))
+    }
+
     function renderPageHeader() {
         return h('div', { className: 'sm-header sm-page-head' },
-            h('h1', { className: 'sm-title sm-page-title' }, t('panel.title')),
-            h('p', { className: 'sm-desc sm-page-desc' }, t('panel.desc')))
+            h('div', { className: 'sm-page-head-text' },
+                h('h1', { className: 'sm-title sm-page-title' }, t('panel.title')),
+                h('p', { className: 'sm-desc sm-page-desc' }, t('panel.desc'))),
+            appState.tab === 'skills' ? renderSkillsToolbar() : null)
     }
 
     function renderActiveTab() {

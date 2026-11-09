@@ -16,6 +16,7 @@
  */
 
 import { randomBytes } from 'node:crypto'
+import { realpathSync } from 'node:fs'
 import { chmod, copyFile, mkdir, open, readFile, rename, rm } from 'node:fs/promises'
 import { homedir } from 'node:os'
 import { join, resolve, sep } from 'node:path'
@@ -199,6 +200,79 @@ function normalizeInstall(value) {
   }
 }
 
+/** Memoised logical → canonical root mapping (bounded; roots rarely change). */
+const rootKeyCache = new Map()
+
+/**
+ * Canonical key for a location root used in install-record matching.
+ *
+ * New records store the absolute install root; records written before the round-1 fix
+ * store it home-abbreviated (`~/...`). Both forms collapse to the same key, so an
+ * upgraded record can still be found. An empty value marks a legacy record that has
+ * no root information at all.
+ * @param {unknown} value
+ * @returns {string}
+ */
+function rootPathKey(value) {
+  const raw = asString(value)
+  if (raw === '') return ''
+  const absolute = resolve(expandHome(raw))
+  let canonical = rootKeyCache.get(absolute)
+  if (canonical === undefined) {
+    try {
+      // The installer realpaths its roots while the scanner reports the logical project
+      // root; canonicalising here makes both forms compare equal (e.g. macOS /var →
+      // /private/var). A root that does not exist yet simply falls back to `resolve`.
+      canonical = abbreviateHome(realpathSync(absolute))
+      if (rootKeyCache.size >= 1024) rootKeyCache.clear()
+      rootKeyCache.set(absolute, canonical)
+    } catch {
+      canonical = abbreviateHome(absolute)
+    }
+  }
+  return canonical
+}
+
+/** Matching key `(location, name, rootPath)` for install records. */
+function installKeyOf(record) {
+  return `${record.location}\u0000${record.name}\u0000${rootPathKey(record.rootPath)}`
+}
+
+/**
+ * Find the install record for `(location, name, rootPath)`.
+ *
+ * Round-1 fix P1-1 matching rules:
+ *   1. an exact `(location, name, rootPath)` match wins, so the same skill installed
+ *      in two projects resolves to two independent records;
+ *   2. a legacy record without `rootPath` is adopted only when it is the single
+ *      `(location, name)` record missing a root;
+ *   3. when `rootPath` is omitted, the previous first-match-by-`(location, name)`
+ *      behavior is preserved for callers that have not been updated yet.
+ *
+ * @param {object[]} records install records (from `state.listInstalled()`)
+ * @param {string} location
+ * @param {string} name
+ * @param {string} [rootPath] absolute or home-abbreviated location root
+ * @returns {object | undefined}
+ */
+export function findInstallRecord(records, location, name, rootPath) {
+  const list = Array.isArray(records) ? records : []
+  const where = asString(location)
+  const wanted = asString(name)
+  if (where === '' || wanted === '') return undefined
+  const candidates = list.filter((record) => (
+    record !== null && typeof record === 'object' && record.location === where && record.name === wanted
+  ))
+  if (candidates.length === 0) return undefined
+  const wantRoot = rootPathKey(rootPath)
+  // No root given: keep the pre-fix behavior (first record for the location+name).
+  if (wantRoot === '') return candidates[0]
+  const exact = candidates.find((record) => rootPathKey(record.rootPath) === wantRoot)
+  if (exact !== undefined) return exact
+  const legacy = candidates.filter((record) => rootPathKey(record.rootPath) === '')
+  return legacy.length === 1 ? legacy[0] : undefined
+}
+
 /**
  * Reconcile a persisted `sourceOrder` with the live source list (contract §4.2):
  * keep known ids in their saved order, drop stale/duplicate entries, and append any
@@ -219,8 +293,15 @@ function normalizeSourceOrder(value, sources) {
       order.push(id)
     }
   }
-  for (const id of ids) {
-    if (seen.has(id)) continue
+  // Contract §4.2 / P2-3: sources missing from the stored order append by creation time.
+  const byAddedAt = sources.slice().sort((a, b) => {
+    const ta = Number(a?.addedAt) || 0
+    const tb = Number(b?.addedAt) || 0
+    return ta - tb || String(a?.id ?? '').localeCompare(String(b?.id ?? ''))
+  })
+  for (const source of byAddedAt) {
+    const id = source?.id
+    if (typeof id !== 'string' || id === '' || seen.has(id)) continue
     seen.add(id)
     order.push(id)
   }
@@ -255,7 +336,10 @@ export function normalizeState(value) {
     for (const entry of document.installed) {
       const record = normalizeInstall(entry)
       if (record === null) continue
-      const key = `${record.location}\u0000${record.name}`
+      // Duplicate records are per root: the same (location, name) may legitimately
+      // exist in several project roots. Legacy records (no rootPath) still collapse
+      // onto the old (location, name) key.
+      const key = installKeyOf(record)
       if (installKeys.has(key)) installed[installKeys.get(key)] = record
       else {
         installKeys.set(key, installed.length)
@@ -539,17 +623,27 @@ export function createState(options = {}) {
   }
 
   /**
-   * Insert or replace the install record for `(location, name)`.
+   * Insert or replace the install record for `(location, name, rootPath)`.
+   *
+   * Records for the same `(location, name)` under a different root are kept, so two
+   * projects can install the same skill independently. A legacy record without
+   * `rootPath` is migrated away when the new record carries a root.
    * @param {object} record
    */
   async function recordInstall(record) {
     const entry = normalizeInstall(record)
     if (entry === null) throw skillError('E_BAD_REQUEST', 'Invalid install record')
     if (entry.installedAt === 0) entry.installedAt = currentSeconds()
+    const entryRoot = rootPathKey(entry.rootPath)
     await write((state) => {
-      state.installed = state.installed.filter(
-        (item) => !(item.location === entry.location && item.name === entry.name),
-      )
+      state.installed = state.installed.filter((item) => {
+        if (item.location !== entry.location || item.name !== entry.name) return true
+        const itemRoot = rootPathKey(item.rootPath)
+        // A legacy write only replaces other legacy records; a rooted write replaces
+        // the record for its own root and migrates the unique legacy record.
+        if (entryRoot === '') return itemRoot !== ''
+        return itemRoot !== entryRoot && itemRoot !== ''
+      })
       state.installed.push(entry)
     })
     return clone(entry)
@@ -557,17 +651,46 @@ export function createState(options = {}) {
 
   /**
    * Remove an install record.
-   * @param {{ name: string, location: string } | string} input
+   *
+   * With a `rootPath` only that root's record is removed (a legacy record without a
+   * root is adopted when it is the single candidate). Without one the old behavior is
+   * kept: every record for `(location, name)` is removed.
+   * @param {{ name: string, location: string, rootPath?: string } | string} input
    * @param {string} [location]
+   * @param {string} [rootPath]
    */
-  async function removeInstall(input, location) {
-    const name = typeof input === 'string' ? input : asString(input?.name)
-    const where = typeof input === 'string' ? asString(location) : asString(input?.location)
+  async function removeInstall(input, location, rootPath) {
+    const byString = typeof input === 'string'
+    const name = byString ? input : asString(input?.name)
+    const where = byString ? asString(location) : asString(input?.location)
+    const requestedRoot = byString ? rootPath : (input?.rootPath ?? rootPath)
+    const wantRoot = rootPathKey(requestedRoot)
     let removed = false
     await write((state) => {
       const before = state.installed.length
-      state.installed = state.installed.filter((item) => !(item.name === name && item.location === where))
-      removed = state.installed.length !== before
+      if (wantRoot === '') {
+        state.installed = state.installed.filter((item) => !(item.name === name && item.location === where))
+        removed = state.installed.length !== before
+        return
+      }
+      let matched = false
+      state.installed = state.installed.filter((item) => {
+        if (item.name !== name || item.location !== where) return true
+        if (rootPathKey(item.rootPath) !== wantRoot) return true
+        matched = true
+        return false
+      })
+      if (!matched) {
+        // The record may predate root tracking: adopt the unique legacy record.
+        const legacy = state.installed.filter((item) => (
+          item.name === name && item.location === where && rootPathKey(item.rootPath) === ''
+        ))
+        if (legacy.length === 1) {
+          state.installed = state.installed.filter((item) => item !== legacy[0])
+          matched = true
+        }
+      }
+      removed = matched || state.installed.length !== before
     })
     return { removed }
   }
@@ -576,6 +699,20 @@ export function createState(options = {}) {
   async function listInstalled() {
     const state = await read()
     return state.installed
+  }
+
+  /**
+   * Compatibility lookup for callers that only know `(location, name)`.
+   * Passing `rootPath` scopes the lookup to one project root (round-1 fix P1-1);
+   * omitting it keeps the pre-fix first-match behavior.
+   * @param {string} location
+   * @param {string} name
+   * @param {string} [rootPath]
+   * @returns {Promise<object | undefined>}
+   */
+  async function findRecord(location, name, rootPath) {
+    const state = await read()
+    return findInstallRecord(state.installed, location, name, rootPath)
   }
 
   /** @returns {Promise<object[]>} */
@@ -633,6 +770,7 @@ export function createState(options = {}) {
     recordInstall,
     removeInstall,
     listInstalled,
+    findRecord,
     listSources,
     getSourceOrder,
     setSourceOrder,

@@ -14,7 +14,7 @@
  * Only `node:` builtins and relative modules are imported.
  */
 import { Buffer } from 'node:buffer'
-import { realpath } from 'node:fs/promises'
+import { readFile, realpath } from 'node:fs/promises'
 import { basename, dirname, join, resolve } from 'node:path'
 
 import { ApiError, fail, methodNotAllowed, queryOf, readBody, rejected, sendJson } from './lib/http.mjs'
@@ -129,6 +129,38 @@ function mergeConfig(raw) {
   }
 }
 
+/**
+ * Contract §4.2: keep the persisted order for known ids, then append every source that is
+ * not listed in creation (`addedAt`) order. Unknown/duplicate/non-string ids are dropped.
+ *
+ * @param {unknown} value persisted `sourceOrder`
+ * @param {object[]} sources live source list (each with `id` and `addedAt`)
+ * @returns {string[]}
+ */
+export function normalizeSourceOrder(value, sources) {
+  const list = Array.isArray(sources)
+    ? sources.filter((source) => isObject(source) && typeof source.id === 'string' && source.id !== '')
+    : []
+  const byId = new Map(list.map((source) => [source.id, source]))
+  const order = []
+  const seen = new Set()
+  if (Array.isArray(value)) {
+    for (const id of value) {
+      if (typeof id !== 'string' || id === '' || !byId.has(id) || seen.has(id)) continue
+      seen.add(id)
+      order.push(id)
+    }
+  }
+  const missing = list.filter((source) => !seen.has(source.id))
+  missing.sort((left, right) => {
+    const leftAt = Number.isFinite(left.addedAt) ? left.addedAt : 0
+    const rightAt = Number.isFinite(right.addedAt) ? right.addedAt : 0
+    return leftAt - rightAt || (left.id < right.id ? -1 : left.id > right.id ? 1 : 0)
+  })
+  for (const source of missing) order.push(source.id)
+  return order
+}
+
 function emptyUpdateState() {
   return { checking: false, checkedAt: 0, errors: [], updates: [] }
 }
@@ -190,52 +222,56 @@ async function rootsFor(ctx, cwd) {
   return roots
 }
 
-const ALLOWED_ERROR_STATUSES = new Set([400, 403, 404, 409, 502, 500])
+const ALLOWED_ERROR_STATUSES = new Set([400, 403, 404, 409, 500, 502])
+
+/**
+ * Contract §4.4 error-code → HTTP status table. The code mapping wins over any upstream
+ * status: a source answering HTTP 404 must surface as `502 E_SOURCE_HTTP`, not `404`.
+ */
+const STATUS_BY_CODE = Object.freeze({
+  E_BAD_REQUEST: 400,
+  E_NAME_INVALID: 400,
+  E_NAME_MISMATCH: 400,
+  E_FRONTMATTER: 400,
+  E_TOO_LARGE: 400,
+  // Per the v1.3 table this is the one `E_SOURCE_*` code that is a client input error.
+  E_SOURCE_URL_INVALID: 400,
+  E_SKILL_UNKNOWN: 400,
+  E_VERSION_UNKNOWN: 400,
+  E_VERSION_YANKED: 400,
+  E_NO_COMPATIBLE: 400,
+  E_UNAUTHORIZED: 403,
+  E_PATH_OUTSIDE_ROOT: 403,
+  E_READONLY_LOCATION: 403,
+  E_NOT_FOUND: 404,
+  E_NAME_TAKEN: 409,
+  E_CONFLICT_MTIME: 409,
+  E_CANCELED: 409,
+  E_STALE_PAGE: 409,
+  E_VERSION_MUTATED: 409,
+  E_SOURCE_UNREACHABLE: 502,
+  E_SOURCE_SCHEMA: 502,
+  E_SOURCE_HTTP: 502,
+  E_SOURCE_TOO_LARGE: 502,
+  E_INDEX_INVALID: 502,
+  E_INDEX_VERSION: 502,
+  E_CHECKSUM: 502,
+  E_NOT_ENOUGH_SPACE: 500,
+  E_INTERNAL: 500,
+})
 
 function statusFor(error) {
-  // Never pass an upstream/foreign status through: the contract only exposes the
-  // six statuses below, everything else falls back to the code mapping (500).
+  const code = typeof error?.code === 'string' ? error.code : ''
+  if (Object.prototype.hasOwnProperty.call(STATUS_BY_CODE, code)) return STATUS_BY_CODE[code]
+  // Any other source-fetch code is a bad gateway, never the upstream's own status.
+  if (code.startsWith('E_SOURCE_')) return 502
+  // Only an unknown code may fall back to an upstream status, and only inside the
+  // contract's whitelist; everything else is an internal error.
   if (typeof error?.status === 'number' && Number.isFinite(error.status)) {
     const explicit = Math.trunc(error.status)
     if (ALLOWED_ERROR_STATUSES.has(explicit)) return explicit
   }
-  switch (typeof error?.code === 'string' ? error.code : '') {
-    case 'E_BAD_REQUEST':
-    case 'E_NAME_INVALID':
-    case 'E_NAME_MISMATCH':
-    case 'E_FRONTMATTER':
-    case 'E_TOO_LARGE':
-    case 'E_SOURCE_URL_INVALID':
-    case 'E_SKILL_UNKNOWN':
-    case 'E_VERSION_UNKNOWN':
-    case 'E_VERSION_YANKED':
-    case 'E_NO_COMPATIBLE':
-      return 400
-    case 'E_NOT_FOUND':
-      return 404
-    case 'E_NAME_TAKEN':
-    case 'E_CONFLICT_MTIME':
-    case 'E_CANCELED':
-    case 'E_STALE_PAGE':
-    case 'E_VERSION_MUTATED':
-      return 409
-    case 'E_UNAUTHORIZED':
-    case 'E_PATH_OUTSIDE_ROOT':
-    case 'E_READONLY_LOCATION':
-      return 403
-    case 'E_SOURCE_UNREACHABLE':
-    case 'E_SOURCE_SCHEMA':
-    case 'E_SOURCE_HTTP':
-    case 'E_SOURCE_TOO_LARGE':
-    case 'E_INDEX_INVALID':
-    case 'E_INDEX_VERSION':
-    case 'E_CHECKSUM':
-      return 502
-    case 'E_NOT_ENOUGH_SPACE':
-    case 'E_INTERNAL':
-    default:
-      return 500
-  }
+  return 500
 }
 
 function respondError(res, error) {
@@ -352,9 +388,15 @@ function marketSkillView(entry, context) {
         return recordSourceId === '' || recordSourceId === context.source?.id
       })
     : undefined
-  const update = Array.isArray(context.updates?.updates)
+  // P2-7: an update only applies to a skill installed from the same source. Without an
+  // install record for this source there is no update to offer, and a same-name row from
+  // another source must never leak across.
+  const updateSourceId = typeof context.source?.id === 'string' ? context.source.id : ''
+  const update = (installed !== undefined && Array.isArray(context.updates?.updates))
     ? context.updates.updates.find((row) => (
-      row?.name === entry?.name && (installed === undefined || row?.location === installed.location)
+      row?.name === entry?.name
+      && row?.sourceId === updateSourceId
+      && row?.location === installed.location
     ))
     : undefined
 
@@ -413,9 +455,13 @@ function marketListView(entry, context) {
         return recordSourceId === '' || recordSourceId === context.sourceId
       })
     : undefined
-  const update = Array.isArray(context.updates?.updates)
+  // P2-7: `updateAvailable` requires the same name *and* the same source id *and* an
+  // install record. A same-name skill from another source never produces an update.
+  const update = (installed !== undefined && Array.isArray(context.updates?.updates))
     ? context.updates.updates.find((row) => (
-      row?.name === entry?.name && (installed === undefined || row?.location === installed.location)
+      row?.name === entry?.name
+      && row?.sourceId === context.sourceId
+      && row?.location === installed.location
     ))
     : undefined
   const installedVersion = installed !== undefined && typeof installed.version === 'string' && installed.version !== ''
@@ -742,21 +788,29 @@ export function apply(ctx, config) {
   })
   const sourceTracker = createSourceTracker()
 
-  // Contract §4.2: `state.mjs` owns persistence and reconciliation (missing ids append in
-  // creation order). The fallback only covers an older store without the source-order API.
-  const readSourceOrder = async () => {
+  // Contract §4.2: ids missing from the persisted order append in creation (`addedAt`)
+  // order. `state.getSourceOrder()` fills them in array order, so read the persisted
+  // document when the store exposes it and reconcile here.
+  const persistedSourceOrder = async () => {
+    if (typeof state?.file === 'string' && state.file !== '') {
+      try {
+        const document = JSON.parse(await readFile(state.file, 'utf8'))
+        if (isObject(document) && Array.isArray(document.sourceOrder)) return document.sourceOrder
+      } catch {
+        /* fall through to the store accessor */
+      }
+    }
     if (typeof state.getSourceOrder === 'function') {
       try {
         const order = await state.getSourceOrder()
-        if (Array.isArray(order)) return order.filter((id) => typeof id === 'string')
+        if (Array.isArray(order)) return order
       } catch {
         /* fall through to the source list order */
       }
     }
-    return (await readSources(state))
-      .map((source) => source?.id)
-      .filter((id) => typeof id === 'string' && id !== '')
+    return []
   }
+  const readSourceOrder = async () => normalizeSourceOrder(await persistedSourceOrder(), await readSources(state))
   const writeSourceOrder = async (order) => {
     const setOrder = requireStoreMethod(state, 'setSourceOrder')
     await setOrder(order)
@@ -1384,10 +1438,21 @@ export function apply(ctx, config) {
       const sources = (await readSources(state)).filter((source) => source?.enabled !== false)
       // Contract §4.3: re-pull every enabled index, recompute updates, refresh the scan.
       const checked = await checkUpdatesOf(updateChecker, { force, refreshIndexes: true })
-      // The update checker refreshes its own cache; the market fetcher keeps a separate one,
-      // so drop it to make the next GET /market read upstream again.
-      for (const source of sources) {
-        if (typeof source?.url === 'string' && source.url !== '') {
+      // P2-5: only a source whose check succeeded may have its market cache dropped. On
+      // failure the last good index is retained (the checker marks it stale), so `/market`
+      // can still render cached cards instead of losing them.
+      const errors = Array.isArray(checked.errors) ? checked.errors : []
+      const failedSources = new Set()
+      let globalFailure = false
+      for (const entry of errors) {
+        const id = typeof entry?.sourceId === 'string' ? entry.sourceId : ''
+        if (id === '') globalFailure = true
+        else failedSources.add(id)
+      }
+      if (!globalFailure) {
+        for (const source of sources) {
+          if (typeof source?.url !== 'string' || source.url === '') continue
+          if (failedSources.has(source.id)) continue
           try {
             indexFetcher.invalidate(source.url)
           } catch {
@@ -1395,20 +1460,20 @@ export function apply(ctx, config) {
           }
         }
       }
-      if (checked.refreshNeeded === true) {
-        invalidateScanCache()
-        try {
-          await scanAll(ctx, await resolveCwd(ctx, cwd), { force: true })
-        } catch {
-          /* the next GET /installed retries the scan */
-        }
+      // P2-4: `/check-updates` always refreshes the installed scan, even with zero enabled
+      // sources (contract §4.3), so a stale `GET /installed` cache cannot survive the check.
+      invalidateScanCache()
+      try {
+        await scanAll(ctx, await resolveCwd(ctx, cwd), { force: true })
+      } catch {
+        /* the next GET /installed retries the scan */
       }
       return {
         sources: Number.isFinite(checked.sources) ? checked.sources : sources.length,
         updates: Array.isArray(checked.updates)
           ? checked.updates.length
           : (Number.isFinite(checked.updates) ? checked.updates : 0),
-        errors: Array.isArray(checked.errors) ? checked.errors : [],
+        errors,
       }
     }
     checkUpdatesInflight = run().finally(() => {

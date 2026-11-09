@@ -33,7 +33,7 @@ import { dirname, join, relative, resolve } from 'node:path'
 
 import { compareVersions, parseVersion, satisfiesRange } from './compat.mjs'
 import { parseSkillFile, validateFrontmatter } from './frontmatter.mjs'
-import { abbreviateHome, resolveDshHome, skillError } from './state.mjs'
+import { findInstallRecord, resolveDshHome, skillError } from './state.mjs'
 import {
   assertSkillName,
   assertSkillPath,
@@ -623,7 +623,9 @@ export function createInstaller(options = {}) {
   function buildRecord({ info, root, name, version, sourceId, sourceName, sourceUrl, commit, files }) {
     return {
       location: info.id,
-      rootPath: abbreviateHome(root),
+      // Absolute install root: records are keyed by (location, name, rootPath), so the
+      // same skill installed in two projects stays distinguishable (round-1 fix P1-1).
+      rootPath: root,
       name,
       version,
       sourceId: String(sourceId ?? ''),
@@ -659,7 +661,8 @@ export function createInstaller(options = {}) {
     const flatTarget = `${target}.md`
 
     const records = typeof store.listInstalled === 'function' ? await store.listInstalled() : []
-    const recordBefore = records.find((record) => record.location === info.id && record.name === name) ?? null
+    // Match this project's record, not a same-name install in another root.
+    const recordBefore = findInstallRecord(records, info.id, name, root) ?? null
     if (mode === 'update' && recordBefore === null) {
       throw skillError('E_NOT_FOUND', 'Install record not found')
     }
@@ -873,7 +876,7 @@ export function createInstaller(options = {}) {
         name,
         location: info.id,
         path: target,
-        rootPath: abbreviateHome(root),
+        rootPath: root,
         version: resolvedVersion.version,
         record,
       }
@@ -904,7 +907,8 @@ export function createInstaller(options = {}) {
       const name = assertSkillName(args.name)
       const { info, root } = await resolveWritableRoot(args.location)
       const records = await store.listInstalled()
-      const record = records.find((item) => item.location === info.id && item.name === name)
+      // Scope to this root so uninstalling in project A cannot remove project B's record.
+      const record = findInstallRecord(records, info.id, name, root)
       if (record === undefined) throw skillError('E_NOT_FOUND', 'Install record not found')
 
       const target = join(root, name)
@@ -959,7 +963,7 @@ export function createInstaller(options = {}) {
         }
       }
 
-      await store.removeInstall({ name, location: info.id })
+      await store.removeInstall({ name, location: info.id, rootPath: root })
       if (args.preserveBackup === true) await pruneBackups(name)
       return { removed: true }
     } catch (error) {

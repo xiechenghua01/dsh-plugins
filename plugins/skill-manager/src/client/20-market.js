@@ -148,11 +148,6 @@
         }
     }
 
-    function smMarketRetry() {
-        smMarketCancelSearchTimer()
-        smMarketReload({ refresh: true })
-    }
-
     function smMarketCancelSearchTimer() {
         if (smMarketSearchTimer !== null) {
             clearTimeout(smMarketSearchTimer)
@@ -752,15 +747,18 @@
         const cursor = typeof block.cursor === 'string' && block.cursor !== '' ? block.cursor : null
         const appending = smMarketAppending[sourceId] === true
         const refreshing = smMarketRefreshing[sourceId] === true
+        /* 有缓存卡片时保留列表，只在顶部显示错误细条；无缓存才整块错误态。 */
         let body = null
-        if (errorText !== '') {
+        if (skills.length > 0) {
+            body = h(Fragment, null,
+                errorText !== '' ? smMarketBlockError(block) : null,
+                h('div', { className: 'sm-card-grid' }, skills.map(function (item) {
+                    return renderMarketCard(item)
+                })))
+        } else if (errorText !== '') {
             body = smMarketBlockError(block)
-        } else if (skills.length === 0) {
-            body = smMarketBlockEmpty(block)
         } else {
-            body = h('div', { className: 'sm-card-grid' }, skills.map(function (item) {
-                return renderMarketCard(item)
-            }))
+            body = smMarketBlockEmpty(block)
         }
         return h('section', {
             key: sourceId,
@@ -909,7 +907,7 @@
                     key: 'retry',
                     type: 'button',
                     className: 'sm-btn sm-btn-primary sm-btn-sm',
-                    onClick: smMarketRetry,
+                    onClick: function () { smMarketReload() },
                 }, t('action.retry')),
                 h('button', {
                     key: 'sources',
@@ -936,7 +934,9 @@
         h('button', {
             type: 'button',
             className: 'sm-btn sm-btn-ghost sm-btn-sm',
-            onClick: smMarketRetry,
+            onClick: function () {
+                if (typeof checkUpdates === 'function') void checkUpdates()
+            },
         }, t('action.retry')),
         h('button', {
             type: 'button',
@@ -977,6 +977,7 @@
 
     function smMarketToolbar(sources, loading) {
         const hasSources = sources.length > 0
+        const checking = appState.checking === true
         return h('div', {
             key: 'toolbar',
             className: 'sm-toolbar sm-market-toolbar',
@@ -1015,15 +1016,18 @@
         h('div', { className: 'sm-toolbar-icons' },
             h('button', {
                 type: 'button',
-                className: 'sm-icon-btn',
-                'aria-label': t('action.refresh'),
-                'data-tip': t('action.refresh'),
-                disabled: !hasSources || loading === true,
-                onClick: smMarketRetry,
+                className: 'sm-tool-btn',
+                'aria-label': t('action.checkUpdates'),
+                'data-tip': checking ? t('status.checking') : t('action.checkUpdates'),
+                disabled: !hasSources || loading === true || checking,
+                'aria-busy': checking ? 'true' : undefined,
+                onClick: function () {
+                    if (typeof checkUpdates === 'function') void checkUpdates()
+                },
             }, icon('refresh', 16)),
             h('button', {
                 type: 'button',
-                className: 'sm-icon-btn',
+                className: 'sm-tool-btn',
                 'aria-label': t('action.manageSources'),
                 'data-tip': t('action.manageSources'),
                 onClick: smMarketManageSources,

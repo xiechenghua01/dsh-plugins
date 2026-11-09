@@ -368,6 +368,14 @@
   color: var(--dsw-alias-label-primary);
 }
 
+/* Transitional alias: market toolbar markup still renders .sm-icon-btn until
+ * R3 switches it to .sm-tool-btn; both must be 30×30 here. */
+.sm-toolbar-icons .sm-icon-btn {
+  width: 30px;
+  height: 30px;
+  padding: 6px;
+}
+
 /* Plain icon button (row ⋯, refresh, dialog close). */
 .sm-icon-btn {
   width: 28px;
@@ -444,7 +452,7 @@
   border-radius: var(--dsw-radius-lg);
   border: none;
   background: transparent;
-  color: var(--dsw-alias-label-secondary);
+  color: var(--dsw-alias-label-tertiary);
   font-size: var(--sm-fs);
   font-family: inherit;
   display: inline-flex;
@@ -454,10 +462,10 @@
   cursor: pointer;
 }
 
-/* Hover and selected share one background; text colour carries state. */
+/* Hover only changes the background; selection is what raises the text
+ * colour to primary (native parity §2.1). */
 .sm-tab:hover {
   background: var(--dsw-alias-interactive-bg-hover);
-  color: var(--dsw-alias-label-primary);
 }
 
 .sm-tab.active,
@@ -3450,7 +3458,6 @@ textarea.sm-input.sm-edit-body {
 
 /* Keyboard focus mirrors hover: background + text colour, no ring.
  * :focus-visible raises specificity above the component defaults. */
-.sm-tab:focus-visible,
 .sm-subtab:focus-visible,
 .sm-card-item:focus-visible,
 .sm-chip:focus-visible,
@@ -3463,6 +3470,19 @@ textarea.sm-input.sm-edit-body {
 .sm-file-row:focus-visible {
   background: var(--dsw-alias-interactive-bg-hover);
   color: var(--dsw-alias-label-primary);
+}
+
+/* Primary tabs: keyboard focus mirrors hover (background only) so an
+ * unselected focused tab never looks selected; the active tab keeps its
+ * label-primary colour. The :not() chain outranks the generic button
+ * focus rule that raises every button's text colour. */
+.sm-tab:focus-visible {
+  outline: none;
+  background: var(--dsw-alias-interactive-bg-hover);
+}
+
+.sm-tab:not(.active):not(.sm-active):not(.sm-tab-active):not([aria-selected="true"]):focus-visible {
+  color: var(--dsw-alias-label-tertiary);
 }
 
 /* ------------------------------------------------------------------ *

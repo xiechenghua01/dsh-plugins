@@ -39,12 +39,13 @@ window.__ModuleLoader__.load({
      * Placeholders use {name} and are interpolated by t().                *
      * ------------------------------------------------------------------ */
 
-        const zh = {
+            const zh = {
       'action.addSource': '添加源',
       'action.back.market': '返回市场',
       'action.back.skills': '返回技能列表',
       'action.backup': '保留一份备份',
       'action.cancel': '取消',
+      'action.checkUpdates': '检查更新',
       'action.clear': '清除',
       'action.close': '关闭',
       'action.copyPath': '复制路径',
@@ -99,7 +100,9 @@ window.__ModuleLoader__.load({
       'detail.source.market': '来自市场：{source}',
       'detail.status.active': '生效中',
       'detail.status.builtin': '系统内置',
+      'detail.status.disabled': '已停用',
       'detail.status.issue': '未生效',
+      'detail.status.readonly': '只读',
       'detail.updated': '最近修改 {time}',
       'detail.version': '版本',
       'detail.whenToUse': '什么时候用',
@@ -227,10 +230,12 @@ window.__ModuleLoader__.load({
       'panel.title': '技能',
       'search.clear': '清除搜索',
       'search.market.placeholder': '搜索市场技能',
+      'search.skills.placeholder': '搜索技能名称或描述',
       'sort.label': '排序',
       'sort.modified': '最近修改',
       'sort.name': '按名称',
       'sort.recommended': '推荐',
+      'sort.source': '按来源',
       'sort.updated': '最近更新',
       'source.add.title': '添加技能索引源',
       'source.confirmDelete.body': '已安装的技能不会被删除，但之后无法再检查更新。',
@@ -325,12 +330,13 @@ window.__ModuleLoader__.load({
       'update.versionChange': '{current} → {next}',
     }
 
-        const en = {
+            const en = {
       'action.addSource': 'Add source',
       'action.back.market': 'Back to market',
       'action.back.skills': 'Back to skills',
       'action.backup': 'Keep a backup',
       'action.cancel': 'Cancel',
+      'action.checkUpdates': 'Check for updates',
       'action.clear': 'Clear',
       'action.close': 'Close',
       'action.copyPath': 'Copy path',
@@ -385,7 +391,9 @@ window.__ModuleLoader__.load({
       'detail.source.market': 'From market: {source}',
       'detail.status.active': 'Active',
       'detail.status.builtin': 'Built-in',
+      'detail.status.disabled': 'Disabled',
       'detail.status.issue': 'Not active',
+      'detail.status.readonly': 'Read-only',
       'detail.updated': 'Modified {time}',
       'detail.version': 'Version',
       'detail.whenToUse': 'When to use',
@@ -513,10 +521,12 @@ window.__ModuleLoader__.load({
       'panel.title': 'Skills',
       'search.clear': 'Clear search',
       'search.market.placeholder': 'Search market',
+      'search.skills.placeholder': 'Search skills',
       'sort.label': 'Sort',
       'sort.modified': 'Recently modified',
       'sort.name': 'Name',
       'sort.recommended': 'Recommended',
+      'sort.source': 'By source',
       'sort.updated': 'Recently updated',
       'source.add.title': 'Add skill index source',
       'source.confirmDelete.body': 'Installed skills will not be deleted, but they cannot be checked for updates afterward.',
@@ -1639,10 +1649,89 @@ window.__ModuleLoader__.load({
             }))
     }
 
+    /* Skills-page toolbar (contract 7.4): search · sort · new / import / check. */
+    function renderSkillsToolbar() {
+        const search = String(appState.search === undefined || appState.search === null ? '' : appState.search)
+        const sort = String(appState.sort === undefined || appState.sort === null ? '' : appState.sort)
+        const checking = appState.checking === true
+        return h('div', { className: 'sm-toolbar sm-skills-toolbar' },
+            h('div', { className: 'sm-search' },
+                icon('search', 15),
+                h('input', {
+                    className: 'sm-search-input',
+                    type: 'search',
+                    value: search,
+                    placeholder: t('search.skills.placeholder'),
+                    'aria-label': t('search.skills.placeholder'),
+                    spellCheck: false,
+                    onChange: function (event) {
+                        const value = event !== null && event !== undefined && event.target !== null && event.target !== undefined
+                            ? String(event.target.value || '')
+                            : ''
+                        setState({ search: value })
+                    },
+                }),
+                search !== ''
+                    ? h('button', {
+                        type: 'button',
+                        className: 'sm-search-clear',
+                        'aria-label': t('search.clear'),
+                        'data-tip': t('search.clear'),
+                        onClick: function () { setState({ search: '' }) },
+                    }, icon('x', 14))
+                    : null),
+            h('select', {
+                className: 'sm-select',
+                value: sort === 'modified' || sort === 'source' ? sort : 'name',
+                'aria-label': t('sort.label'),
+                onChange: function (event) {
+                    const value = event !== null && event !== undefined && event.target !== null && event.target !== undefined
+                        ? String(event.target.value || 'name')
+                        : 'name'
+                    setState({ sort: value })
+                },
+            },
+            h('option', { value: 'name' }, t('sort.name')),
+            h('option', { value: 'modified' }, t('sort.modified')),
+            h('option', { value: 'source' }, t('sort.source'))),
+            h('div', { className: 'sm-toolbar-icons' },
+                h('button', {
+                    type: 'button',
+                    className: 'sm-tool-btn',
+                    'aria-label': t('action.newSkill'),
+                    'data-tip': t('action.newSkill'),
+                    onClick: function () {
+                        if (typeof openModal === 'function') openModal('new-skill', {})
+                    },
+                }, icon('plus', 16)),
+                h('button', {
+                    type: 'button',
+                    className: 'sm-tool-btn',
+                    'aria-label': t('action.import'),
+                    'data-tip': t('action.import'),
+                    onClick: function () {
+                        if (typeof openModal === 'function') openModal('import-skill', {})
+                    },
+                }, icon('import', 16)),
+                h('button', {
+                    type: 'button',
+                    className: 'sm-tool-btn',
+                    'aria-label': t('action.checkUpdates'),
+                    'data-tip': checking ? t('status.checking') : t('action.checkUpdates'),
+                    disabled: checking,
+                    'aria-busy': checking ? 'true' : undefined,
+                    onClick: function () {
+                        if (typeof checkUpdates === 'function') void checkUpdates()
+                    },
+                }, icon('refresh', 16))))
+    }
+
     function renderPageHeader() {
         return h('div', { className: 'sm-header sm-page-head' },
-            h('h1', { className: 'sm-title sm-page-title' }, t('panel.title')),
-            h('p', { className: 'sm-desc sm-page-desc' }, t('panel.desc')))
+            h('div', { className: 'sm-page-head-text' },
+                h('h1', { className: 'sm-title sm-page-title' }, t('panel.title')),
+                h('p', { className: 'sm-desc sm-page-desc' }, t('panel.desc'))),
+            appState.tab === 'skills' ? renderSkillsToolbar() : null)
     }
 
     function renderActiveTab() {
@@ -1837,13 +1926,22 @@ window.__ModuleLoader__.load({
         return fallback
     }
 
+    /**
+     * Contract §3.1: the skills-page sort value is `modified`; `recent` is the
+     * v1 name and is still mapped when an old value is read back.
+     */
+    function skillsSortKey() {
+        return appState.sort === 'recent' ? 'modified' : appState.sort
+    }
+
     function skillsSort(items) {
         const copy = items.slice()
-        if (appState.sort === 'recent') {
+        const sort = skillsSortKey()
+        if (sort === 'modified') {
             copy.sort(function (left, right) {
                 return (Number(right.mtime) || 0) - (Number(left.mtime) || 0)
             })
-        } else if (appState.sort === 'source') {
+        } else if (sort === 'source') {
             const order = skillsSourceOrder()
             const rank = function (skill) {
                 const id = typeof skill.sourceId === 'string' ? skill.sourceId : ''
@@ -2331,6 +2429,9 @@ window.__ModuleLoader__.load({
             'data-skill-id': skill.id,
             onClick: function () { skillsOpenDetail(skill) },
             onKeyDown: function (event) {
+                /* Child buttons (⋯ / update) handle their own keys; do not let
+                 * Enter / Space bubble up into the card and open the detail. */
+                if (event.target !== event.currentTarget) return
                 if (event.key === 'Enter' || event.key === ' ') {
                     event.preventDefault()
                     skillsOpenDetail(skill)
@@ -2634,11 +2735,6 @@ window.__ModuleLoader__.load({
         } catch (err) {
             void err
         }
-    }
-
-    function smMarketRetry() {
-        smMarketCancelSearchTimer()
-        smMarketReload({ refresh: true })
     }
 
     function smMarketCancelSearchTimer() {
@@ -3240,15 +3336,18 @@ window.__ModuleLoader__.load({
         const cursor = typeof block.cursor === 'string' && block.cursor !== '' ? block.cursor : null
         const appending = smMarketAppending[sourceId] === true
         const refreshing = smMarketRefreshing[sourceId] === true
+        /* 有缓存卡片时保留列表，只在顶部显示错误细条；无缓存才整块错误态。 */
         let body = null
-        if (errorText !== '') {
+        if (skills.length > 0) {
+            body = h(Fragment, null,
+                errorText !== '' ? smMarketBlockError(block) : null,
+                h('div', { className: 'sm-card-grid' }, skills.map(function (item) {
+                    return renderMarketCard(item)
+                })))
+        } else if (errorText !== '') {
             body = smMarketBlockError(block)
-        } else if (skills.length === 0) {
-            body = smMarketBlockEmpty(block)
         } else {
-            body = h('div', { className: 'sm-card-grid' }, skills.map(function (item) {
-                return renderMarketCard(item)
-            }))
+            body = smMarketBlockEmpty(block)
         }
         return h('section', {
             key: sourceId,
@@ -3397,7 +3496,7 @@ window.__ModuleLoader__.load({
                     key: 'retry',
                     type: 'button',
                     className: 'sm-btn sm-btn-primary sm-btn-sm',
-                    onClick: smMarketRetry,
+                    onClick: function () { smMarketReload() },
                 }, t('action.retry')),
                 h('button', {
                     key: 'sources',
@@ -3424,7 +3523,9 @@ window.__ModuleLoader__.load({
         h('button', {
             type: 'button',
             className: 'sm-btn sm-btn-ghost sm-btn-sm',
-            onClick: smMarketRetry,
+            onClick: function () {
+                if (typeof checkUpdates === 'function') void checkUpdates()
+            },
         }, t('action.retry')),
         h('button', {
             type: 'button',
@@ -3465,6 +3566,7 @@ window.__ModuleLoader__.load({
 
     function smMarketToolbar(sources, loading) {
         const hasSources = sources.length > 0
+        const checking = appState.checking === true
         return h('div', {
             key: 'toolbar',
             className: 'sm-toolbar sm-market-toolbar',
@@ -3503,15 +3605,18 @@ window.__ModuleLoader__.load({
         h('div', { className: 'sm-toolbar-icons' },
             h('button', {
                 type: 'button',
-                className: 'sm-icon-btn',
-                'aria-label': t('action.refresh'),
-                'data-tip': t('action.refresh'),
-                disabled: !hasSources || loading === true,
-                onClick: smMarketRetry,
+                className: 'sm-tool-btn',
+                'aria-label': t('action.checkUpdates'),
+                'data-tip': checking ? t('status.checking') : t('action.checkUpdates'),
+                disabled: !hasSources || loading === true || checking,
+                'aria-busy': checking ? 'true' : undefined,
+                onClick: function () {
+                    if (typeof checkUpdates === 'function') void checkUpdates()
+                },
             }, icon('refresh', 16)),
             h('button', {
                 type: 'button',
-                className: 'sm-icon-btn',
+                className: 'sm-tool-btn',
                 'aria-label': t('action.manageSources'),
                 'data-tip': t('action.manageSources'),
                 onClick: smMarketManageSources,
@@ -4924,11 +5029,20 @@ window.__ModuleLoader__.load({
         setState({ detail: Object.assign({}, detail, { reload: smNumber(detail.reload, 0) + 1 }) })
     }
 
+    /** `t()` returns the key itself when the dictionary lacks it. */
+    function smLocaleKeyOr(primaryKey, fallbackKey) {
+        if (typeof t === 'function' && t(primaryKey) !== primaryKey) return primaryKey
+        return fallbackKey
+    }
+
     function smStatusLabelKey(skill) {
         if (smIsBuiltin(skill)) return 'detail.status.builtin'
-        if (smIsDisabled(skill)) return 'detail.status.disabled'
+        /* `detail.status.disabled` / `detail.status.readonly` are not in the
+         * dictionary yet (owned by another fragment); fall back to the badge
+         * labels so the detail header never shows a raw key. */
+        if (smIsDisabled(skill)) return smLocaleKeyOr('detail.status.disabled', 'badge.disabled')
         if (smIsBroken(skill)) return 'detail.status.issue'
-        if (smIsReadonly(skill)) return 'detail.status.readonly'
+        if (smIsReadonly(skill)) return smLocaleKeyOr('detail.status.readonly', 'badge.readonly')
         return 'detail.status.active'
     }
 
@@ -5519,6 +5633,30 @@ window.__ModuleLoader__.load({
     let smModalSeq = 0
     let smScrollLockCount = 0
 
+    /** Element to restore focus to when the modal closes. */
+    function smActiveElement() {
+        if (typeof document === 'undefined' || document === null) return null
+        const active = document.activeElement
+        if (active === null || active === undefined || active === document.body) return null
+        return active
+    }
+
+    function smRestoreFocus(node) {
+        if (node === null || node === undefined || typeof node.focus !== 'function') return
+        if (typeof document === 'undefined' || document === null) return
+        if (typeof document.contains === 'function' && document.contains(node) !== true) return
+        const run = function () {
+            try {
+                node.focus({ preventScroll: true })
+            } catch (failure) {
+                try { node.focus() } catch (ignored) { void ignored }
+            }
+        }
+        /* Wait one frame so the trigger exists after the modal unmounts. */
+        if (typeof requestAnimationFrame === 'function') requestAnimationFrame(run)
+        else setTimeout(run, 0)
+    }
+
     const smDiagnostics = {
         open: false,
         loading: false,
@@ -5566,7 +5704,7 @@ window.__ModuleLoader__.load({
         const source = payload !== null && typeof payload === 'object' ? payload : {}
         const name = smNormalizeModalKind(kind, source)
         smModalSeq += 1
-        smModalStack.push({ id: smModalSeq, kind: name, payload: source })
+        smModalStack.push({ id: smModalSeq, kind: name, payload: source, returnFocus: smActiveElement() })
         smLockScroll()
         smHideTooltip()
         smSyncModalState()
@@ -5574,9 +5712,12 @@ window.__ModuleLoader__.load({
     }
 
     function smRemoveModalById(id) {
+        let removed = null
+        let wasTop = false
         for (let index = smModalStack.length - 1; index >= 0; index -= 1) {
             if (smModalStack[index].id !== id) continue
-            smModalStack.splice(index, 1)
+            wasTop = index === smModalStack.length - 1
+            removed = smModalStack.splice(index, 1)[0]
             smModalGuards.delete(id)
             smUnlockScroll()
             break
@@ -5584,6 +5725,7 @@ window.__ModuleLoader__.load({
         smHideTooltip()
         smSyncModalState()
         if (typeof rerender === 'function') rerender()
+        if (wasTop && removed !== null) smRestoreFocus(removed.returnFocus)
     }
 
     /** 强制关闭最上层；提交成功后的路径使用它。 */
@@ -5632,8 +5774,50 @@ window.__ModuleLoader__.load({
         }
     }
 
+    function smFocusableIn(node) {
+        if (node === null || node === undefined || typeof node.querySelectorAll !== 'function') return []
+        const selector = 'button, [href], input, select, textarea, [tabindex]:not([tabindex="-1"])'
+        return Array.prototype.slice.call(node.querySelectorAll(selector)).filter(function (item) {
+            if (item.disabled === true) return false
+            if (item.getAttribute('aria-hidden') === 'true') return false
+            return true
+        })
+    }
+
+    /** 管理源弹窗的 Tab 循环：首尾互跳，焦点不逃出对话框。 */
+    function smHandleSourceDialogTab(event) {
+        if (event.key !== 'Tab') return
+        if (appState.sourceDialogOpen !== true) return
+        /* 上层模态打开时，由 SmDialogFrame 自己的焦点锁定接管。 */
+        if (smModalStack.length > 0) return
+        if (typeof document === 'undefined' || document === null || typeof document.querySelector !== 'function') return
+        const node = document.querySelector('.sm-source-dialog')
+        if (node === null) return
+        const focusable = smFocusableIn(node)
+        if (focusable.length === 0) {
+            if (typeof event.preventDefault === 'function') event.preventDefault()
+            if (typeof node.focus === 'function') {
+                try { node.focus({ preventScroll: true }) } catch (failure) { void failure }
+            }
+            return
+        }
+        const first = focusable[0]
+        const last = focusable[focusable.length - 1]
+        const index = focusable.indexOf(document.activeElement)
+        if (event.shiftKey) {
+            if (index <= 0) {
+                if (typeof event.preventDefault === 'function') event.preventDefault()
+                last.focus()
+            }
+        } else if (index === -1 || index === focusable.length - 1) {
+            if (typeof event.preventDefault === 'function') event.preventDefault()
+            first.focus()
+        }
+    }
+
     if (typeof document !== 'undefined' && document !== null && typeof document.addEventListener === 'function') {
         document.addEventListener('keydown', smHandleEscape, true)
+        document.addEventListener('keydown', smHandleSourceDialogTab, true)
     }
 
     /** 注册 Esc / 遮罩关闭守卫；返回 true 表示组件自己处理了这次关闭。 */
@@ -5955,7 +6139,6 @@ window.__ModuleLoader__.load({
                 'aria-label': t('action.close'),
                 'data-tip': t('action.close'),
                 onClick: close,
-                style: { display: 'inline-flex', alignItems: 'center', justifyContent: 'center', width: '28px', height: '28px', padding: 0, border: 'none', borderRadius: '8px', background: 'transparent', color: 'var(--dsw-alias-label-secondary)', cursor: 'pointer', flexShrink: 0 },
             }, icon('x', 16))),
         h('div', {
             className: 'sm-dialog-body',
@@ -7473,7 +7656,6 @@ window.__ModuleLoader__.load({
                     className: 'sm-icon-btn',
                     'aria-label': t('action.close'),
                     onClick: smCloseDiagnostics,
-                    style: { display: 'inline-flex', alignItems: 'center', justifyContent: 'center', width: '28px', height: '28px', padding: 0, border: 'none', borderRadius: '8px', background: 'transparent', color: 'var(--dsw-alias-label-secondary)', cursor: 'pointer' },
                 }, icon('x', 16)))),
         h('div', { className: 'sm-drawer-body', style: { flex: '1 1 auto', minHeight: 0, overflowY: 'auto', padding: '16px 20px 20px', display: 'flex', flexDirection: 'column', gap: '12px' } }, body)))
     }
@@ -7853,6 +8035,14 @@ window.__ModuleLoader__.load({
   color: var(--dsw-alias-label-primary);
 }
 
+/* Transitional alias: market toolbar markup still renders .sm-icon-btn until
+ * R3 switches it to .sm-tool-btn; both must be 30×30 here. */
+.sm-toolbar-icons .sm-icon-btn {
+  width: 30px;
+  height: 30px;
+  padding: 6px;
+}
+
 /* Plain icon button (row ⋯, refresh, dialog close). */
 .sm-icon-btn {
   width: 28px;
@@ -7929,7 +8119,7 @@ window.__ModuleLoader__.load({
   border-radius: var(--dsw-radius-lg);
   border: none;
   background: transparent;
-  color: var(--dsw-alias-label-secondary);
+  color: var(--dsw-alias-label-tertiary);
   font-size: var(--sm-fs);
   font-family: inherit;
   display: inline-flex;
@@ -7939,10 +8129,10 @@ window.__ModuleLoader__.load({
   cursor: pointer;
 }
 
-/* Hover and selected share one background; text colour carries state. */
+/* Hover only changes the background; selection is what raises the text
+ * colour to primary (native parity §2.1). */
 .sm-tab:hover {
   background: var(--dsw-alias-interactive-bg-hover);
-  color: var(--dsw-alias-label-primary);
 }
 
 .sm-tab.active,
@@ -10935,7 +11125,6 @@ textarea.sm-input.sm-edit-body {
 
 /* Keyboard focus mirrors hover: background + text colour, no ring.
  * :focus-visible raises specificity above the component defaults. */
-.sm-tab:focus-visible,
 .sm-subtab:focus-visible,
 .sm-card-item:focus-visible,
 .sm-chip:focus-visible,
@@ -10948,6 +11137,19 @@ textarea.sm-input.sm-edit-body {
 .sm-file-row:focus-visible {
   background: var(--dsw-alias-interactive-bg-hover);
   color: var(--dsw-alias-label-primary);
+}
+
+/* Primary tabs: keyboard focus mirrors hover (background only) so an
+ * unselected focused tab never looks selected; the active tab keeps its
+ * label-primary colour. The :not() chain outranks the generic button
+ * focus rule that raises every button's text colour. */
+.sm-tab:focus-visible {
+  outline: none;
+  background: var(--dsw-alias-interactive-bg-hover);
+}
+
+.sm-tab:not(.active):not(.sm-active):not(.sm-tab-active):not([aria-selected="true"]):focus-visible {
+  color: var(--dsw-alias-label-tertiary);
 }
 
 /* ------------------------------------------------------------------ *

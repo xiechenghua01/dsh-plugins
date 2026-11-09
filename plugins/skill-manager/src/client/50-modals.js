@@ -58,6 +58,30 @@
     let smModalSeq = 0
     let smScrollLockCount = 0
 
+    /** Element to restore focus to when the modal closes. */
+    function smActiveElement() {
+        if (typeof document === 'undefined' || document === null) return null
+        const active = document.activeElement
+        if (active === null || active === undefined || active === document.body) return null
+        return active
+    }
+
+    function smRestoreFocus(node) {
+        if (node === null || node === undefined || typeof node.focus !== 'function') return
+        if (typeof document === 'undefined' || document === null) return
+        if (typeof document.contains === 'function' && document.contains(node) !== true) return
+        const run = function () {
+            try {
+                node.focus({ preventScroll: true })
+            } catch (failure) {
+                try { node.focus() } catch (ignored) { void ignored }
+            }
+        }
+        /* Wait one frame so the trigger exists after the modal unmounts. */
+        if (typeof requestAnimationFrame === 'function') requestAnimationFrame(run)
+        else setTimeout(run, 0)
+    }
+
     const smDiagnostics = {
         open: false,
         loading: false,
@@ -105,7 +129,7 @@
         const source = payload !== null && typeof payload === 'object' ? payload : {}
         const name = smNormalizeModalKind(kind, source)
         smModalSeq += 1
-        smModalStack.push({ id: smModalSeq, kind: name, payload: source })
+        smModalStack.push({ id: smModalSeq, kind: name, payload: source, returnFocus: smActiveElement() })
         smLockScroll()
         smHideTooltip()
         smSyncModalState()
@@ -113,9 +137,12 @@
     }
 
     function smRemoveModalById(id) {
+        let removed = null
+        let wasTop = false
         for (let index = smModalStack.length - 1; index >= 0; index -= 1) {
             if (smModalStack[index].id !== id) continue
-            smModalStack.splice(index, 1)
+            wasTop = index === smModalStack.length - 1
+            removed = smModalStack.splice(index, 1)[0]
             smModalGuards.delete(id)
             smUnlockScroll()
             break
@@ -123,6 +150,7 @@
         smHideTooltip()
         smSyncModalState()
         if (typeof rerender === 'function') rerender()
+        if (wasTop && removed !== null) smRestoreFocus(removed.returnFocus)
     }
 
     /** 强制关闭最上层；提交成功后的路径使用它。 */
@@ -171,8 +199,50 @@
         }
     }
 
+    function smFocusableIn(node) {
+        if (node === null || node === undefined || typeof node.querySelectorAll !== 'function') return []
+        const selector = 'button, [href], input, select, textarea, [tabindex]:not([tabindex="-1"])'
+        return Array.prototype.slice.call(node.querySelectorAll(selector)).filter(function (item) {
+            if (item.disabled === true) return false
+            if (item.getAttribute('aria-hidden') === 'true') return false
+            return true
+        })
+    }
+
+    /** 管理源弹窗的 Tab 循环：首尾互跳，焦点不逃出对话框。 */
+    function smHandleSourceDialogTab(event) {
+        if (event.key !== 'Tab') return
+        if (appState.sourceDialogOpen !== true) return
+        /* 上层模态打开时，由 SmDialogFrame 自己的焦点锁定接管。 */
+        if (smModalStack.length > 0) return
+        if (typeof document === 'undefined' || document === null || typeof document.querySelector !== 'function') return
+        const node = document.querySelector('.sm-source-dialog')
+        if (node === null) return
+        const focusable = smFocusableIn(node)
+        if (focusable.length === 0) {
+            if (typeof event.preventDefault === 'function') event.preventDefault()
+            if (typeof node.focus === 'function') {
+                try { node.focus({ preventScroll: true }) } catch (failure) { void failure }
+            }
+            return
+        }
+        const first = focusable[0]
+        const last = focusable[focusable.length - 1]
+        const index = focusable.indexOf(document.activeElement)
+        if (event.shiftKey) {
+            if (index <= 0) {
+                if (typeof event.preventDefault === 'function') event.preventDefault()
+                last.focus()
+            }
+        } else if (index === -1 || index === focusable.length - 1) {
+            if (typeof event.preventDefault === 'function') event.preventDefault()
+            first.focus()
+        }
+    }
+
     if (typeof document !== 'undefined' && document !== null && typeof document.addEventListener === 'function') {
         document.addEventListener('keydown', smHandleEscape, true)
+        document.addEventListener('keydown', smHandleSourceDialogTab, true)
     }
 
     /** 注册 Esc / 遮罩关闭守卫；返回 true 表示组件自己处理了这次关闭。 */
@@ -494,7 +564,6 @@
                 'aria-label': t('action.close'),
                 'data-tip': t('action.close'),
                 onClick: close,
-                style: { display: 'inline-flex', alignItems: 'center', justifyContent: 'center', width: '28px', height: '28px', padding: 0, border: 'none', borderRadius: '8px', background: 'transparent', color: 'var(--dsw-alias-label-secondary)', cursor: 'pointer', flexShrink: 0 },
             }, icon('x', 16))),
         h('div', {
             className: 'sm-dialog-body',
@@ -2012,7 +2081,6 @@
                     className: 'sm-icon-btn',
                     'aria-label': t('action.close'),
                     onClick: smCloseDiagnostics,
-                    style: { display: 'inline-flex', alignItems: 'center', justifyContent: 'center', width: '28px', height: '28px', padding: 0, border: 'none', borderRadius: '8px', background: 'transparent', color: 'var(--dsw-alias-label-secondary)', cursor: 'pointer' },
                 }, icon('x', 16)))),
         h('div', { className: 'sm-drawer-body', style: { flex: '1 1 auto', minHeight: 0, overflowY: 'auto', padding: '16px 20px 20px', display: 'flex', flexDirection: 'column', gap: '12px' } }, body)))
     }

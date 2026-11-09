@@ -18,12 +18,14 @@
  * is attached on every call from the caller-supplied install records.
  */
 import { createHash } from 'node:crypto'
-import { lstat, readdir, readFile, realpath, stat } from 'node:fs/promises'
+import { constants as fsConstants } from 'node:fs'
+import { access, lstat, readdir, readFile, realpath, stat } from 'node:fs/promises'
 import { homedir } from 'node:os'
 import { basename, dirname, extname, isAbsolute, join, relative, resolve, sep } from 'node:path'
 
 import { ApiError } from './http.mjs'
 import { parseSkillFile, validateFrontmatter } from './frontmatter.mjs'
+import { findInstallRecord } from './state.mjs'
 
 const CACHE_MS = 1000
 const MAX_SKILL_BYTES = 1024 * 1024
@@ -182,6 +184,22 @@ function isPackagePath(path) {
   return path.includes(`${sep}node_modules${sep}`) || path.includes('.asar')
 }
 
+/**
+ * Contract §3.1: a custom root is only "mine" when the user can actually write to it.
+ * A package-mounted or permission-restricted directory is presented as read-only system.
+ * @param {string} path
+ * @returns {Promise<boolean>}
+ */
+async function isWritableDir(path) {
+  if (typeof path !== 'string' || path === '') return false
+  try {
+    await access(path, fsConstants.W_OK)
+    return true
+  } catch {
+    return false
+  }
+}
+
 function isLocalSkillEntry(entry) {
   if (entry === null || typeof entry !== 'object') return false
   return LOCAL_SOURCES.has(entry.source) || entry.provider === 'filesystem'
@@ -316,7 +334,7 @@ function inferCustomRoots(presetInfo) {
 // Root discovery and file scanning
 // ---------------------------------------------------------------------------
 
-function buildRootSpecs(projectRoot, inferred) {
+async function buildRootSpecs(projectRoot, inferred) {
   const specs = [
     {
       id: 'project-dsh',
@@ -340,14 +358,17 @@ function buildRootSpecs(projectRoot, inferred) {
     },
   ]
   let order = 2
-  for (const path of inferred.custom) {
+  // Contract §3.1: a custom root is "mine" only when it is actually writable; a read-only
+  // directory (e.g. package-mounted) falls into "system" and must report `writable: false`.
+  const customWritable = await Promise.all(inferred.custom.map((path) => isWritableDir(path)))
+  for (let index = 0; index < inferred.custom.length; index += 1) {
     specs.push({
       id: 'custom',
       label: '自定义目录',
-      path,
+      path: inferred.custom[index],
       rank: 300,
       layer: 'preset',
-      writable: true,
+      writable: customWritable[index],
       sourceType: 'filesystem',
       order: order++,
     })
@@ -828,6 +849,11 @@ async function globalSkills(globalInfo, specs, scannedPaths) {
       && (resolvedPath === null || isPathInside(candidate.path, resolvedPath) || resolve(candidate.path) === resolvedPath)
     )) ?? specs.find((candidate) => candidate.id === location)
     const inferredRoot = inferRootFromSkillPath(sourcePath)
+    let fallbackWritable = WRITABLE_LOCATION_IDS.has(location)
+    if (location === 'custom') {
+      // No direct root spec: probe the reported directory instead of assuming it is writable.
+      fallbackWritable = inferredRoot !== null && await isWritableDir(inferredRoot)
+    }
     const root = spec !== null && spec !== undefined
       ? spec
       : {
@@ -835,7 +861,7 @@ async function globalSkills(globalInfo, specs, scannedPaths) {
           path: inferredRoot ?? '',
           display: inferredRoot !== null ? abbreviate(inferredRoot) : '',
           rank: definition.rank,
-          writable: WRITABLE_LOCATION_IDS.has(location),
+          writable: fallbackWritable,
           order: definition.order,
         }
     skills.push({
@@ -1134,7 +1160,9 @@ function buildLocations(scans, skills, presetInfo, presetViews, globalInfo) {
         absPath: '',
         rank: definition.rank,
         layer: definition.layer,
-        writable: definition.writable,
+        writable: definition.id === 'custom'
+          ? entries.some((skill) => skill.writable === true)
+          : definition.writable,
         exists: entries.length > 0,
         readable: true,
         skillCount: entries.filter((skill) => skill.status !== 'disabled').length,
@@ -1152,7 +1180,10 @@ function buildLocations(scans, skills, presetInfo, presetViews, globalInfo) {
       absPath: first.path,
       rank: definition.rank,
       layer: definition.layer,
-      writable: definition.writable,
+      // A custom location can group several roots; it is writable when at least one is.
+      writable: definition.id === 'custom'
+        ? group.specs.some((spec) => spec.writable === true)
+        : definition.writable,
       exists: group.scans.some((scan) => scan.exists),
       readable: group.scans.every((scan) => !scan.exists || scan.readable),
       skillCount: entries.filter((skill) => skill.status !== 'disabled').length,
@@ -1176,12 +1207,15 @@ function attachMarket(skills, options) {
       }
     }
   }
+  // Contract §3.4 / P2-7: an update row only applies to the install record it belongs to.
+  // The map key therefore carries the source id as well as the location and name.
   const updates = new Map()
   if (Array.isArray(options?.updates?.updates)) {
     for (const update of options.updates.updates) {
-      if (update !== null && typeof update === 'object') {
-        updates.set(`${update.location}:${update.name}`, update)
-      }
+      if (update === null || typeof update !== 'object') continue
+      const sourceId = typeof update.sourceId === 'string' ? update.sourceId : ''
+      if (sourceId === '') continue
+      updates.set(`${sourceId}\u0000${update.location}\u0000${update.name}`, update)
     }
   }
 
@@ -1190,10 +1224,10 @@ function attachMarket(skills, options) {
     skill.sourceId = null
     skill.sourceName = null
     if (installed.length === 0) continue
-    const record = installed.find((entry) => (
-      entry !== null && typeof entry === 'object'
-      && entry.name === skill.name && entry.location === skill.location
-    ))
+    // Contract §3.3 / R1 P1-1: match the record of *this* root, so two projects that
+    // installed the same skill name do not borrow each other's source or version.
+    const absRoot = typeof skill._root?.path === 'string' ? skill._root.path : ''
+    const record = findInstallRecord(installed, skill.location, skill.name, absRoot)
     if (record === undefined) continue
     const sourceId = typeof record.sourceId === 'string' && record.sourceId !== '' ? record.sourceId : ''
     const listed = sourceId === '' ? '' : sourceNames.get(sourceId)
@@ -1204,7 +1238,11 @@ function attachMarket(skills, options) {
           : (typeof record.sourceName === 'string' ? record.sourceName : ''))
     if (sourceId !== '') skill.sourceId = sourceId
     if (sourceName !== '') skill.sourceName = sourceName
-    const update = updates.get(`${skill.location}:${skill.name}`)
+    // Only a record installed from this source can have an update; a legacy record without
+    // `sourceId` gets no update at all rather than matching any same-name row.
+    const update = sourceId === ''
+      ? undefined
+      : updates.get(`${sourceId}\u0000${skill.location}\u0000${skill.name}`)
     skill.market = {
       sourceId,
       sourceName,
@@ -1229,7 +1267,45 @@ function brokenReasonOf(skill) {
   return '指向的位置不存在'
 }
 
-function publicSkill(skill) {
+/** Counts `(location, name)` pairs so duplicate ids can be disambiguated deterministically. */
+function duplicateCounts(skills) {
+  const counts = new Map()
+  for (const skill of skills) {
+    if (skill === null || typeof skill !== 'object') continue
+    const key = `${skill.location ?? ''}\u0000${skill.name ?? ''}`
+    counts.set(key, (counts.get(key) ?? 0) + 1)
+  }
+  return counts
+}
+
+function isDuplicateSkill(skill, counts) {
+  if (counts === undefined || counts === null) return false
+  return (counts.get(`${skill?.location ?? ''}\u0000${skill?.name ?? ''}`) ?? 0) > 1
+}
+
+/** A stable root identity for the `#hash` suffix used by same-name multi-version ids. */
+function rootIdentityOf(skill) {
+  if (typeof skill?._root?.path === 'string' && skill._root.path !== '') return skill._root.path
+  if (typeof skill?.rootPath === 'string' && skill.rootPath !== '') return skill.rootPath
+  if (typeof skill?.path === 'string' && skill.path !== '') return skill.path
+  return typeof skill?.provider === 'string' ? skill.provider : ''
+}
+
+/** Contract §3.2: `id = '<location>:<name>'`; same-name duplicates append `#<rootPath hash>`. */
+function publicSkillId(skill, duplicate) {
+  const location = typeof skill?.location === 'string' ? skill.location : ''
+  const name = typeof skill?.name === 'string' ? skill.name : ''
+  const base = `${location}:${name}`
+  return duplicate === true ? `${base}#${hashId(rootIdentityOf(skill))}` : base
+}
+
+/**
+ * Contract §3.2 `SkillView` projection shared by the list and detail routes.
+ *
+ * @param {object} skill scanner skill (may still carry `_`-prefixed internals)
+ * @param {{ duplicate?: boolean, counts?: Map<string, number> }} [context]
+ */
+export function publicSkill(skill, context = {}) {
   const {
     _baseName,
     _layout,
@@ -1237,17 +1313,40 @@ function publicSkill(skill) {
     _order,
     _layer,
     _root,
+    shadowedBy,
     ...rest
   } = skill
+  const market = rest.market !== null && typeof rest.market === 'object' ? rest.market : null
+  // `shadowed` is not one of the contract's SkillStatus values: a skill shadowed in every
+  // scope is presented as `invalid`, while the shadowing detail stays in the diagnostics.
+  const status = rest.status === 'shadowed'
+    ? 'invalid'
+    : (typeof rest.status === 'string' ? rest.status : 'active')
+  const version = typeof rest.version === 'string' && rest.version !== ''
+    ? rest.version
+    : (typeof market?.version === 'string' && market.version !== '' ? market.version : null)
+  const updateAvailable = typeof rest.updateAvailable === 'string' && rest.updateAvailable !== ''
+    ? rest.updateAvailable
+    : (typeof market?.updateAvailable === 'string' && market.updateAvailable !== '' ? market.updateAvailable : null)
   return {
     ...rest,
+    id: publicSkillId(skill, context.duplicate === true || isDuplicateSkill(skill, context.counts)),
+    status,
     category: typeof rest.category === 'string'
       ? rest.category
       : categoryOf(rest.location, rest.writable === true),
     sourceId: typeof rest.sourceId === 'string' && rest.sourceId !== '' ? rest.sourceId : null,
     sourceName: typeof rest.sourceName === 'string' && rest.sourceName !== '' ? rest.sourceName : null,
-    brokenReason: brokenReasonOf(skill),
+    version,
+    updateAvailable,
+    localModified: rest.localModified === true || market?.localModified === true,
+    brokenReason: status === 'broken' ? brokenReasonOf({ ...rest, status }) : null,
   }
+}
+
+function publicSkillList(skills) {
+  const counts = duplicateCounts(skills)
+  return skills.map((skill) => publicSkill(skill, { counts }))
 }
 
 /**
@@ -1329,7 +1428,7 @@ async function computeScan(ctx, cwd) {
     globalSnapshot(ctx, cwd),
   ])
   const inferred = inferCustomRoots(presetInfo)
-  const specs = buildRootSpecs(projectRoot, inferred)
+  const specs = await buildRootSpecs(projectRoot, inferred)
   const scans = await Promise.all(specs.map((spec) => scanRoot(spec)))
 
   const skills = []
@@ -1370,13 +1469,11 @@ async function computeScan(ctx, cwd) {
 }
 
 /**
- * Scan every location and return the installed view.
- * @param {object} ctx owning Cordis context (optional `skills` / `agentPresets`)
- * @param {string} cwd working directory (absolute, or relative to the default)
- * @param {{ force?: boolean, installed?: object[], sources?: object[], updates?: object }} [options]
- * @returns {Promise<{ locations: object[], skills: object[], issues: object[], presets: object[] }>}
+ * Run (or reuse) the cached scan and attach per-call market metadata to cloned skills.
+ * The raw cached document never carries install records.
+ * @returns {Promise<{ raw: object, skills: object[] }>}
  */
-export async function scanAll(ctx, cwd, options = {}) {
+async function loadScan(ctx, cwd, options = {}) {
   const rootCwd = await resolveCwd(ctx, cwd)
   const key = `${rootCwd}\0${dshHome()}\0${agentsHome()}`
   const now = Date.now()
@@ -1390,9 +1487,21 @@ export async function scanAll(ctx, cwd, options = {}) {
 
   const skills = raw.skills.map((skill) => ({ ...skill }))
   attachMarket(skills, options)
+  return { raw, skills }
+}
+
+/**
+ * Scan every location and return the installed view.
+ * @param {object} ctx owning Cordis context (optional `skills` / `agentPresets`)
+ * @param {string} cwd working directory (absolute, or relative to the default)
+ * @param {{ force?: boolean, installed?: object[], sources?: object[], updates?: object }} [options]
+ * @returns {Promise<{ locations: object[], skills: object[], issues: object[], presets: object[] }>}
+ */
+export async function scanAll(ctx, cwd, options = {}) {
+  const { raw, skills } = await loadScan(ctx, cwd, options)
   return {
     locations: raw.locations.map((location) => ({ ...location, presets: [...location.presets] })),
-    skills: skills.map(publicSkill),
+    skills: publicSkillList(skills),
     issues: raw.issues.map((issue) => ({ ...issue })),
     presets: raw.presets.map((preset) => ({ ...preset })),
   }
@@ -1486,21 +1595,21 @@ export async function readSkillDetail(ctx, filePath, cwd, options = {}) {
     realAbsolute = null
   }
 
-  const find = (scan) => {
-    const direct = scan.skills.find((skill) => skill.path === absolute)
+  const find = (skills) => {
+    const direct = skills.find((skill) => skill.path === absolute)
     if (direct !== undefined) return direct
     if (realAbsolute !== null) {
-      const real = scan.skills.find((skill) => skill.path === realAbsolute)
+      const real = skills.find((skill) => skill.path === realAbsolute)
       if (real !== undefined) return real
     }
-    return scan.skills.find((skill) => skill.path !== '' && samePath(skill.path, absolute))
+    return skills.find((skill) => skill.path !== '' && samePath(skill.path, absolute))
   }
 
-  let scan = await scanAll(ctx, cwd, options)
-  let skill = find(scan)
+  let loaded = await loadScan(ctx, cwd, options)
+  let skill = find(loaded.skills)
   if (skill === undefined) {
-    scan = await scanAll(ctx, cwd, { ...options, force: true })
-    skill = find(scan)
+    loaded = await loadScan(ctx, cwd, { ...options, force: true })
+    skill = find(loaded.skills)
   }
   if (skill === undefined) {
     throw new ApiError(
@@ -1525,8 +1634,10 @@ export async function readSkillDetail(ctx, filePath, cwd, options = {}) {
       404,
     )
   }
+  // Contract P2-1: the detail route returns the same `SkillView` projection as the list,
+  // including the duplicate-safe id, top-level `localModified` and the status enum mapping.
   return {
-    skill,
+    skill: publicSkill(skill, { counts: duplicateCounts(loaded.skills) }),
     content,
     files: await listResources(skill.path),
   }

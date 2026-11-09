@@ -352,11 +352,20 @@
         setState({ detail: Object.assign({}, detail, { reload: smNumber(detail.reload, 0) + 1 }) })
     }
 
+    /** `t()` returns the key itself when the dictionary lacks it. */
+    function smLocaleKeyOr(primaryKey, fallbackKey) {
+        if (typeof t === 'function' && t(primaryKey) !== primaryKey) return primaryKey
+        return fallbackKey
+    }
+
     function smStatusLabelKey(skill) {
         if (smIsBuiltin(skill)) return 'detail.status.builtin'
-        if (smIsDisabled(skill)) return 'detail.status.disabled'
+        /* `detail.status.disabled` / `detail.status.readonly` are not in the
+         * dictionary yet (owned by another fragment); fall back to the badge
+         * labels so the detail header never shows a raw key. */
+        if (smIsDisabled(skill)) return smLocaleKeyOr('detail.status.disabled', 'badge.disabled')
         if (smIsBroken(skill)) return 'detail.status.issue'
-        if (smIsReadonly(skill)) return 'detail.status.readonly'
+        if (smIsReadonly(skill)) return smLocaleKeyOr('detail.status.readonly', 'badge.readonly')
         return 'detail.status.active'
     }
 

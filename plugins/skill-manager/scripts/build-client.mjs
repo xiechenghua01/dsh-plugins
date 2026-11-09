@@ -46,7 +46,10 @@ async function build() {
   const parts = [HEADER]
   for (const name of names) {
     const body = await readFile(join(SRC, name), 'utf8')
-    if (body.includes('import ') || body.includes('export ')) {
+    // Match real module syntax only: `import x`, `import {`, `import(`, `export x`,
+    // `export {`, `export default`. Object keys such as `import: [...]` are legal.
+    const moduleSyntax = /^\s*(?:import\s+[\w{*'"]|import\s*\(|export\s+[\w{*'"]|export\s*\{|export\s+default)/m
+    if (moduleSyntax.test(body)) {
       throw new Error(`${name}: fragments must not use import/export; they share the factory scope`)
     }
     parts.push(`// ===== ${name} =====\n`)

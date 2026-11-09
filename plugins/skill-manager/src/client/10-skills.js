@@ -107,13 +107,22 @@
         return fallback
     }
 
+    /**
+     * Contract §3.1: the skills-page sort value is `modified`; `recent` is the
+     * v1 name and is still mapped when an old value is read back.
+     */
+    function skillsSortKey() {
+        return appState.sort === 'recent' ? 'modified' : appState.sort
+    }
+
     function skillsSort(items) {
         const copy = items.slice()
-        if (appState.sort === 'recent') {
+        const sort = skillsSortKey()
+        if (sort === 'modified') {
             copy.sort(function (left, right) {
                 return (Number(right.mtime) || 0) - (Number(left.mtime) || 0)
             })
-        } else if (appState.sort === 'source') {
+        } else if (sort === 'source') {
             const order = skillsSourceOrder()
             const rank = function (skill) {
                 const id = typeof skill.sourceId === 'string' ? skill.sourceId : ''
@@ -601,6 +610,9 @@
             'data-skill-id': skill.id,
             onClick: function () { skillsOpenDetail(skill) },
             onKeyDown: function (event) {
+                /* Child buttons (⋯ / update) handle their own keys; do not let
+                 * Enter / Space bubble up into the card and open the detail. */
+                if (event.target !== event.currentTarget) return
                 if (event.key === 'Enter' || event.key === ' ') {
                     event.preventDefault()
                     skillsOpenDetail(skill)
