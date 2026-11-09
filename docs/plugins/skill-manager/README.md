@@ -2,7 +2,23 @@
 
 本目录（`docs/plugins/skill-manager/`）是「DSH Skills 管理模块（技能市场 + 已安装管理）」的调研与产品文档。给不同角色的阅读顺序如下。
 
-## 给 Agent（设计 / 实现 / 评审）
+## v2（当前版本）
+
+> 结构变更：三个 Tab → 两个 Tab（技能 / 市场）；删除 8 个位置筛选与「来源」一级页；rank / layer / provider / commit / 预设可见性撤出界面，只在诊断里以人话解释。理由见 IA 决策单。
+
+| 顺序 | 文件 | 版本 | 用途 |
+| --- | --- | --- | --- |
+| **0** | **[product/v2-ia-decisions.md](product/v2-ia-decisions.md)** | v2.0 | **IA 决策单**：四个箱子、两 Tab、隐藏清单、验收口径；三份交付物的结构唯一来源 |
+| **1** | **[product/skills-manager-prd-v2.md](product/skills-manager-prd-v2.md)** | v2.0 | **PRD**：范围、分组规则、诊断文案对照、文案禁用词、37 条验收项 |
+| **2** | **[design/interaction-spec-v3.md](design/interaction-spec-v3.md)** | v3.0 | **交互稿**：32 屏清单、状态与行为、311 个文案 key、键盘规范 |
+| **3** | **[prototypes/skills-manager-v3.html](prototypes/skills-manager-v3.html)** | v3.0 | **可点击原型**：16 个画面，含列表/详情/诊断/市场/管理源/弹窗 |
+| 4 | [design/implementation-contract.md](design/implementation-contract.md) | v1.3 | 平台约束（槽位、路由、token、locale）；按 v3.0 实现前需同步两 Tab 与状态模型 |
+
+## v1 归档（已不作为当前输入）
+
+原 v1.x 文档保留用于对照，阅读顺序如下。
+
+### 给 Agent（设计 / 实现 / 评审）
 
 | 顺序 | 文件 | 用途 |
 | --- | --- | --- |
@@ -35,10 +51,11 @@
 ## 当前状态
 
 - 调研：完成（含未验证项清单，见各文档末节）。
-- 产品文档：v1.2 完成（市场 + 已安装管理 + 来源页，含设计交付要求；默认落点、自动检查更新 + 手动更新策略已确认）。
+- 产品文档：**v2.0 完成**——两 Tab、四分组（我的 / 共享 / 项目 / 系统内置）、技术信息撤出 UI、诊断改人话；37 条验收项待评审。
+- 交互稿：**v3.0 完成**——32 屏清单、311 个文案 key、相对 v2.3 删除 17 项 / 降级 6 项 / 新增 12 项。
+- 原型：**v3.0 完成**——单文件可点击 HTML，16 个画面。
 - 技能市场索引：规范 v1.0 草案 + JSON Schema + 示例 + 实现方案完成，待评审冻结。
-- 交互稿 / UI 稿：旧版 v0 仅作参考；本周期由 PRD v1.2 驱动重新出稿。
-- 实现：未开始。
+- 实现：**已发布 0.1.2（v1 三 Tab 结构）**；按 v3.0 改造前需要同步 `implementation-contract.md`（两 Tab、删除 filter/sort location、市场源抽屉、10 类模态）。
 
 ## 验证与发布提醒
 
