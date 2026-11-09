@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>DSH · 技能管理 v3.2</title>
+<title>DSH · 技能管理 v3.3</title>
 <style>
   /* ============ 1. DSH tokens（原型内近似值，命名与用途与 DSH 一致） ============ */
   :root {
@@ -22,6 +22,7 @@
     --dsw-alias-border-l3: #ffffff29;
     --dsw-alias-border-inverted: #ffffff1f;
     --dsw-alias-interactive-bg-hover: #ffffff14;
+    --dsw-alias-interactive-bg-hover-danger: color-mix(in srgb, var(--dsw-alias-state-error-primary) 14%, transparent);
     --dsw-specific-sidebar-nav-item-active: #43454a;
     --dsw-alias-button-primary-fill: #f9fafb;
     --dsw-alias-label-primary-foreground: #0f1115;
@@ -32,6 +33,7 @@
     --dsw-alias-brand-primary: #7aaaff;
     --dsw-alias-settings-card-fill: #1d1d1f;
     --dsw-alias-settings-card-stroke: #ffffff1f;
+    --dsw-radius-sm: 8px;
     --dsw-radius-lg: 12px;
     --dsw-radius-xl: 16px;
     --dsw-radius-panel: 20px;
@@ -52,9 +54,16 @@
   button, input, select, textarea { font-family: inherit; font-size: inherit; color: inherit; background: none; border: none; outline: none; }
   button { cursor: pointer; }
   button:disabled { cursor: not-allowed; opacity: 0.45; }
+  /* v3.3：焦点与 hover 一致，用背景 + 文字表达，不新增彩色 outline */
   button:focus-visible, input:focus-visible, select:focus-visible, textarea:focus-visible, [tabindex]:focus-visible {
-    outline: var(--dsw-focus-ring-width) solid var(--dsw-focus-ring-color);
-    outline-offset: 1px;
+    outline: none;
+  }
+  button:focus-visible, [tabindex]:focus-visible {
+    background: var(--dsw-alias-interactive-bg-hover);
+    color: var(--dsw-alias-label-primary);
+  }
+  input:focus-visible, select:focus-visible, textarea:focus-visible {
+    border-color: var(--dsw-alias-border-l3);
   }
   ::-webkit-scrollbar { width: 6px; height: 6px; }
   ::-webkit-scrollbar-track { background: transparent; }
@@ -152,22 +161,22 @@
   .btn-danger-ghost { background: transparent; color: var(--dsw-alias-state-error-primary); border: 1px solid color-mix(in srgb, var(--dsw-alias-state-error-primary) 32%, transparent); }
   .btn-danger-ghost:hover:not(:disabled) { background: color-mix(in srgb, var(--dsw-alias-state-error-primary) 12%, transparent); }
   .sm-icon-btn {
-    width: 32px; height: 32px; padding: 0; border-radius: 12px;
-    background: var(--dsw-alias-bg-layer-1); border: 1px solid var(--dsw-alias-border-l2);
-    color: var(--dsw-alias-label-secondary); display: inline-flex; align-items: center; justify-content: center;
+    width: 32px; height: 32px; padding: 6px; border-radius: var(--dsw-radius-sm);
+    background: transparent; border: 0;
+    color: var(--dsw-alias-label-tertiary); display: inline-flex; align-items: center; justify-content: center;
   }
-  .sm-icon-btn:hover { background: var(--dsw-alias-interactive-bg-hover); color: var(--dsw-alias-label-primary); }
-  .sm-icon-btn.plain { background: transparent; border-color: transparent; }
-  .sm-icon-btn.plain:hover { background: var(--dsw-alias-interactive-bg-hover); }
-  /* v3.2 工具栏图标按钮：30×30、图标 16、间距 6 */
+  .sm-icon-btn:hover { background: var(--dsw-alias-bg-layer-1); color: var(--dsw-alias-label-primary); }
+  .sm-icon-btn.plain { background: transparent; border: 0; }
+  .sm-icon-btn.plain:hover { background: var(--dsw-alias-bg-layer-1); color: var(--dsw-alias-label-primary); }
+  /* v3.3 工具栏图标按钮：30×30 热区，视觉反馈按 DSH .iconButton */
   .sm-toolbar-icons { display: inline-flex; align-items: center; gap: 6px; }
   .sm-tool-btn {
-    width: 30px; height: 30px; padding: 0; border-radius: 10px;
-    background: var(--dsw-alias-bg-layer-1); border: 1px solid var(--dsw-alias-border-l2);
-    color: var(--dsw-alias-label-secondary); display: inline-flex; align-items: center; justify-content: center;
+    width: 30px; height: 30px; padding: 6px; border-radius: var(--dsw-radius-sm);
+    background: transparent; border: 0;
+    color: var(--dsw-alias-label-tertiary); display: inline-flex; align-items: center; justify-content: center;
     flex-shrink: 0;
   }
-  .sm-tool-btn:hover:not(:disabled) { background: var(--dsw-alias-interactive-bg-hover); color: var(--dsw-alias-label-primary); }
+  .sm-tool-btn:hover:not(:disabled) { background: var(--dsw-alias-bg-layer-1); color: var(--dsw-alias-label-primary); }
   .sm-spin { animation: sm-spin 800ms linear infinite; }
   @keyframes sm-spin { to { transform: rotate(360deg); } }
   .sm-select {
@@ -177,33 +186,39 @@
   }
   .sm-tabs-row { display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap; margin-bottom: 12px; }
   .sm-segmented { height: 34px; background: var(--dsw-alias-bg-layer-3); border-radius: 14px; padding: 2px; display: inline-flex; align-items: center; gap: 2px; }
-  .sm-seg-tab { height: 30px; padding: 0 14px; border-radius: 12px; font-size: var(--sm-fs); color: var(--dsw-alias-label-secondary); display: inline-flex; align-items: center; gap: 6px; }
-  .sm-seg-tab[aria-selected="true"] { background: var(--dsw-alias-bg-layer-1); color: var(--dsw-alias-label-primary); font-weight: 500; }
+  .sm-seg-tab { height: 30px; padding: 0 14px; border-radius: 12px; font-size: var(--sm-fs); color: var(--dsw-alias-label-secondary); display: inline-flex; align-items: center; gap: 6px; background: transparent; border: 0; }
+  .sm-seg-tab:hover { background: var(--dsw-alias-interactive-bg-hover); }
+  .sm-seg-tab[aria-selected="true"] { background: var(--dsw-alias-interactive-bg-hover); color: var(--dsw-alias-label-primary); font-weight: 500; }
 
-  /* 二级 Tab（仅技能 Tab） */
+  /* 二级 Tab（v3.3：DSH .filterTab 规格） */
   .sm-subtabs-row { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; margin-bottom: 16px; }
-  .sm-subtabs { height: 34px; background: var(--dsw-alias-bg-layer-2); border-radius: 14px; padding: 2px; display: inline-flex; align-items: center; gap: 2px; }
-  .sm-subtab { height: 30px; padding: 0 12px; border-radius: 12px; font-size: calc(var(--sm-fs) - 1px); color: var(--dsw-alias-label-secondary); display: inline-flex; align-items: center; gap: 6px; }
-  .sm-subtab:hover { color: var(--dsw-alias-label-primary); }
-  .sm-subtab[aria-selected="true"] { background: var(--dsw-alias-bg-layer-1); color: var(--dsw-alias-label-primary); font-weight: 500; }
+  .sm-subtabs { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 12px; }
+  .sm-subtab {
+    height: 28px; padding: 0 10px; border-radius: 14px;
+    font-size: calc(var(--sm-fs) - 0px); line-height: 22px;
+    color: var(--dsw-alias-label-tertiary); background: transparent; border: 0;
+    display: inline-flex; align-items: center; gap: 6px; cursor: pointer;
+  }
+  .sm-subtab:hover { background: var(--dsw-alias-interactive-bg-hover); }
+  .sm-subtab[aria-selected="true"] { background: var(--dsw-alias-interactive-bg-hover); color: var(--dsw-alias-label-primary); }
   .sm-count-badge {
     min-width: 18px; height: 18px; padding: 0 6px; border-radius: 999px;
-    background: var(--dsw-alias-bg-layer-3); color: var(--dsw-alias-label-secondary);
+    background: transparent; color: var(--dsw-alias-label-caption);
     font-size: calc(var(--sm-fs) - 4px); font-variant-numeric: tabular-nums;
     display: inline-flex; align-items: center; justify-content: center;
   }
-  .sm-subtab[aria-selected="true"] .sm-count-badge { background: var(--dsw-specific-sidebar-nav-item-active); color: var(--dsw-alias-label-primary); }
+  .sm-subtab[aria-selected="true"] .sm-count-badge { background: transparent; color: var(--dsw-alias-label-tertiary); }
 
   /* 状态图标（替代横幅） */
   .sm-status-icons { display: flex; align-items: center; gap: 2px; margin-left: auto; }
   .sm-status-btn {
-    width: 32px; height: 32px; padding: 0; border-radius: 10px;
+    width: 32px; height: 32px; padding: 6px; border-radius: var(--dsw-radius-sm);
     display: inline-flex; align-items: center; justify-content: center;
-    color: var(--dsw-alias-label-secondary);
+    color: var(--dsw-alias-label-tertiary); background: transparent; border: 0;
   }
-  .sm-status-btn:hover { background: var(--dsw-alias-interactive-bg-hover); }
   .sm-status-btn.warn { color: var(--dsw-alias-state-warn-primary); }
   .sm-status-btn.update { color: var(--dsw-alias-state-business-primary); }
+  .sm-status-btn:hover { background: var(--dsw-alias-bg-layer-1); color: var(--dsw-alias-label-primary); }
 
   /* ============ 6. 卡片网格 ============ */
   .sm-dot { position: absolute; left: 5px; bottom: 5px; width: 8px; height: 8px; border-radius: 999px; border: 1.5px solid var(--dsw-alias-bg-base); }
@@ -240,10 +255,10 @@
     border: .5px solid var(--dsw-alias-settings-card-stroke);
     border-radius: var(--dsw-radius-xl);
     background: var(--dsw-alias-settings-card-fill);
-    cursor: pointer; transition: background 120ms, border-color 120ms;
+    cursor: pointer; transition: background 120ms;
     min-width: 0;
   }
-  .sm-card-item:hover { background: color-mix(in srgb, var(--dsw-alias-settings-card-fill) 72%, var(--dsw-alias-bg-layer-3)); border-color: var(--dsw-alias-border-l3); }
+  .sm-card-item:hover { background: var(--dsw-alias-interactive-bg-hover); }
   .sm-card-item.is-highlight { outline: 1.5px solid var(--dsw-alias-brand-primary); outline-offset: -1px; }
   .sm-card-item.is-disabled { opacity: .6; }
   .sm-card-icon {
@@ -266,7 +281,7 @@
     display: inline-flex; flex-direction: row; align-items: center; justify-content: flex-end; gap: 6px;
   }
   .sm-card-more {
-    width: 26px; height: 26px; border-radius: 8px;
+    width: 26px; height: 26px;
     opacity: 0; pointer-events: none; transition: opacity 120ms ease;
   }
   .sm-card-item:hover .sm-card-more,
@@ -394,7 +409,7 @@
   .sm-source-top .sm-dot { position: static; border: none; flex-shrink: 0; }
   .sm-source-name { font-size: var(--sm-fs); font-weight: 500; flex: 1; min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
   .sm-source-actions { display: flex; align-items: center; gap: 4px; flex-shrink: 0; }
-  .sm-source-actions .sm-icon-btn { width: 28px; height: 28px; border-radius: 9px; }
+  .sm-source-actions .sm-icon-btn { width: 28px; height: 28px; }
   .sm-source-url { font-size: calc(var(--sm-fs) - 3px); color: var(--dsw-alias-label-caption); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
   .sm-source-meta { font-size: calc(var(--sm-fs) - 3px); color: var(--dsw-alias-label-caption); }
   .sm-source-error { font-size: calc(var(--sm-fs) - 3px); color: var(--dsw-alias-state-error-primary); line-height: 1.5; }
@@ -474,7 +489,8 @@
     height: 32px; padding: 0 10px; border-radius: 8px; display: flex; align-items: center; gap: 8px;
     font-size: calc(var(--sm-fs) - 1px); color: var(--dsw-alias-label-primary); text-align: left; width: 100%;
   }
-  .sm-menu-item:hover { background: var(--dsw-alias-interactive-bg-hover); }
+  .sm-menu-item:hover, .sm-menu-item:focus-visible { background: var(--dsw-alias-interactive-bg-hover); }
+  .sm-menu-item.danger:hover, .sm-menu-item.danger:focus-visible { background: var(--dsw-alias-interactive-bg-hover-danger); }
   .sm-menu-item .sm-menu-icon { display: inline-flex; color: var(--dsw-alias-label-secondary); width: 16px; }
   .sm-menu-item.danger { color: var(--dsw-alias-state-error-primary); }
   .sm-menu-item.danger .sm-menu-icon { color: var(--dsw-alias-state-error-primary); }
@@ -491,9 +507,9 @@
   /* The element is #tooltip; the old #sm-tooltip selector left the tooltip
       * unstyled, so it rendered off-flow and was invisible. */
   #tooltip {
-    position: fixed; z-index: 2000; font-size: calc(var(--sm-fs) - 4px); color: var(--dsw-alias-label-secondary);
-    background: var(--dsw-alias-bg-layer-2); border: 1px solid var(--dsw-alias-border-l2);
-    box-shadow: none; border-radius: 7px; padding: 6px 10px; max-width: 290px; line-height: 1.35;
+    position: fixed; z-index: 2000; font-size: calc(var(--sm-fs) - 4px); color: var(--dsw-alias-bg-layer-3);
+    background: var(--dsw-alias-label-primary); border: 0;
+    box-shadow: none; border-radius: var(--dsw-radius-sm); padding: 6px 10px; max-width: 290px; line-height: 1.35;
     pointer-events: none; opacity: 0; transition: opacity 110ms;
   }
   #tooltip.visible { opacity: 1; }
@@ -514,7 +530,7 @@
 <header class="pb" aria-label="原型画面切换">
   <div class="pb-left">
     <span class="pb-brand">DSH · 技能管理</span>
-    <span class="pb-ver">v3.2</span>
+    <span class="pb-ver">v3.3</span>
     <span class="pb-label">画面</span>
     <select id="screen-select" class="proto-select" onchange="applyScreen(this.value)" aria-label="切换原型画面"></select>
     <button class="proto-btn" onclick="stepScreen(-1)" title="上一画面">←</button>
@@ -527,7 +543,7 @@
       <option value="16">16px</option>
       <option value="12">12px</option>
     </select>
-    <span class="pb-date">v3.2 · 2026-11-09</span>
+    <span class="pb-date">v3.3 · 2026-11-09</span>
   </div>
 </header>
 
@@ -957,7 +973,7 @@ function codeBlock(text) {
 }
 
 function renderFooter() {
-  return '<footer class="sm-footer">v3.2 · 2026-11-09</footer>';
+  return '<footer class="sm-footer">v3.3 · 2026-11-09</footer>';
 }
 
 function visibleSkills() {
@@ -1244,7 +1260,7 @@ function renderMarketPage() {
         <span class="sm-source-block-title">${escapeHtml(src.name)}</span>
         <span class="sm-source-block-count">${list.length} 个技能</span>
         <span class="sm-source-block-actions">
-          <button class="sm-icon-btn plain" style="width:28px;height:28px;border-radius:9px;" aria-label="源操作" data-tip="刷新 / 删除 / 管理源" onclick="event.stopPropagation();openSourceMenu(event,'${src.id}')">${icon('more', 16)}</button>
+          <button class="sm-icon-btn plain" style="width:28px;height:28px;" aria-label="源操作" data-tip="刷新 / 删除 / 管理源" onclick="event.stopPropagation();openSourceMenu(event,'${src.id}')">${icon('more', 16)}</button>
         </span>
       </div>
       <div class="sm-grid">${list.map(renderMarketCard).join('')}</div>
@@ -1409,7 +1425,7 @@ function renderInstalledDetail(skill) {
           <div class="sm-kv"><span class="sm-kv-label">作者</span><span class="sm-kv-value">${escapeHtml(skill.author || '—')}</span></div>
           <div class="sm-kv"><span class="sm-kv-label">来源</span><span class="sm-kv-value">${escapeHtml(skill.source)}</span></div>
           <div class="sm-kv"><span class="sm-kv-label">最近修改</span><span class="sm-kv-value">${escapeHtml(skill.modified)}</span></div>
-          <div class="sm-kv"><span class="sm-kv-label">文件位置</span><span class="sm-kv-value"><span class="mono">${escapeHtml(skill.path)}</span><button class="sm-icon-btn plain" style="width:24px;height:24px;border-radius:7px;" aria-label="复制路径" data-tip="复制路径" onclick="copySkillPath('${skill.id}')">${icon('copy', 13)}</button></span></div>
+          <div class="sm-kv"><span class="sm-kv-label">文件位置</span><span class="sm-kv-value"><span class="mono">${escapeHtml(skill.path)}</span><button class="sm-icon-btn plain" style="width:24px;height:24px;" aria-label="复制路径" data-tip="复制路径" onclick="copySkillPath('${skill.id}')">${icon('copy', 13)}</button></span></div>
         </div>
         ${actionCard}
       </div>
