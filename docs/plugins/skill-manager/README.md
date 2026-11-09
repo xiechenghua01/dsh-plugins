@@ -4,15 +4,16 @@
 
 ## v2（当前版本）
 
-> 结构变更：三个 Tab → 两个 Tab（技能 / 市场）；删除 8 个位置筛选与「来源」一级页；rank / layer / provider / commit / 预设可见性撤出界面，只在诊断里以人话解释。理由见 IA 决策单。
+> 结构变更：三个 Tab → 两个 Tab（技能 / 市场）；删除 8 个位置筛选与「来源」一级页；rank / layer / provider / commit / 预设可见性撤出界面，只在诊断里以人话解释。首轮评审后再改为二级 Tab、两列卡片与按源分组。理由见决策单。
 
 | 顺序 | 文件 | 版本 | 用途 |
 | --- | --- | --- | --- |
-| **0** | **[product/v2-ia-decisions.md](product/v2-ia-decisions.md)** | v2.0 | **IA 决策单**：四个箱子、两 Tab、隐藏清单、验收口径；三份交付物的结构唯一来源 |
-| **1** | **[product/skills-manager-prd-v2.md](product/skills-manager-prd-v2.md)** | v2.0 | **PRD**：范围、分组规则、诊断文案对照、文案禁用词、37 条验收项 |
-| **2** | **[design/interaction-spec-v3.md](design/interaction-spec-v3.md)** | v3.0 | **交互稿**：32 屏清单、状态与行为、311 个文案 key、键盘规范 |
-| **3** | **[prototypes/skills-manager-v3.html](prototypes/skills-manager-v3.html)** | v3.0 | **可点击原型**：16 个画面，含列表/详情/诊断/市场/管理源/弹窗 |
-| 4 | [design/implementation-contract.md](design/implementation-contract.md) | v1.3 | 平台约束（槽位、路由、token、locale）；按 v3.0 实现前需同步两 Tab 与状态模型 |
+| **0** | **[product/v2-ia-decisions.md](product/v2-ia-decisions.md)** | v2.0 | **IA 基线**：四个箱子、两 Tab、隐藏清单、验收口径 |
+| **0.1** | **[product/v2-1-review-decisions.md](product/v2-1-review-decisions.md)** | v2.1 | **首轮评审变更**：二级 Tab、两列卡片、市场按源分组与源排序、状态图标、弹窗尺寸；冲突时以本文件为准 |
+| **1** | **[product/skills-manager-prd-v2.md](product/skills-manager-prd-v2.md)** | v2.1 | **PRD**：范围、分类规则、诊断文案对照、禁用词、42 条验收项 |
+| **2** | **[design/interaction-spec-v3.md](design/interaction-spec-v3.md)** | v3.1 | **交互稿**：35 屏清单、状态与行为、文案 key、键盘规范 |
+| **3** | **[prototypes/skills-manager-v3.html](prototypes/skills-manager-v3.html)** | v3.1 | **可点击原型**：20 个画面，含二级 Tab、两列卡片、源排序与弹窗 |
+| 4 | [design/implementation-contract.md](design/implementation-contract.md) | v1.3 | 平台约束；按 v3.1 实现前需同步两 Tab、卡片列表与源排序 |
 
 ## v1 归档（已不作为当前输入）
 
@@ -51,9 +52,9 @@
 ## 当前状态
 
 - 调研：完成（含未验证项清单，见各文档末节）。
-- 产品文档：**v2.0 完成**——两 Tab、四分组（我的 / 共享 / 项目 / 系统内置）、技术信息撤出 UI、诊断改人话；37 条验收项待评审。
-- 交互稿：**v3.0 完成**——32 屏清单、311 个文案 key、相对 v2.3 删除 17 项 / 降级 6 项 / 新增 12 项。
-- 原型：**v3.0 完成**——单文件可点击 HTML，16 个画面。
+- 产品文档：**v2.1 完成**——首轮评审后改为二级 Tab、两列卡片、市场按源分组、状态图标、DSH 对齐弹窗；42 条验收项待评审。
+- 交互稿：**v3.1 完成**——35 屏清单，含源排序与两个 488px 弹窗画面。
+- 原型：**v3.1 完成**——单文件可点击 HTML，20 个画面，源顺序持久化。
 - 技能市场索引：规范 v1.0 草案 + JSON Schema + 示例 + 实现方案完成，待评审冻结。
 - 实现：**已发布 0.1.2（v1 三 Tab 结构）**；按 v3.0 改造前需要同步 `implementation-contract.md`（两 Tab、删除 filter/sort location、市场源抽屉、10 类模态）。
 
