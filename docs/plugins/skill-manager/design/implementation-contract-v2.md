@@ -81,7 +81,7 @@ plugins/skill-manager/
 ```ts
 type SkillCategory = 'mine' | 'shared' | 'project' | 'system'
 type SkillStatus = 'active' | 'disabled' | 'broken' | 'invalid'
-type SkillSort = 'name' | 'recent' | 'source'
+type SkillSort = 'name' | 'modified' | 'source'   // 与交互稿一致；recent 是 v1 旧名
 type SkillLocationId =
   | 'project-dsh' | 'project-agents' | 'custom'
   | 'preset' | 'user-dsh' | 'user-agents' | 'bundled'
@@ -115,7 +115,7 @@ interface SkillView {
   status: SkillStatus
   writable: boolean
   updateAvailable: string | null
-  brokenReason: string | null   // 仅 status='broken' 时给用户语言原因
+  brokenReason: string | null   // 仅 status='broken' 时给用户语言原因；当前扫描器不产出 broken 视图（断链只进诊断），字段预留给后续
 }
 ```
 
