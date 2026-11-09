@@ -1,7 +1,7 @@
-# Skills 管理模块 PRD v2.2
+# Skills 管理模块 PRD v2.3
 
-> 版本：v2.2　　日期：2026-11-09　　状态：待评审
-> 上一版：v2.1
+> 版本：v2.3　　日期：2026-11-09　　状态：待评审
+> 上一版：v2.2
 > 更早版本：v2.0、v1.x（skills-manager-prd.md，保留归档）
 > 结构输入：v2-ia-decisions.md（v2.0 基线）＋ v2-1-review-decisions.md（v2.1 变更）＋ v2-2-review-decisions.md（v2.2 变更）
 
@@ -12,7 +12,7 @@
 | 结构来源 | `docs/plugins/skill-manager/product/v2-ia-decisions.md`（v2.0 基线）、`docs/plugins/skill-manager/product/v2-1-review-decisions.md`（v2.1 变更）与 `docs/plugins/skill-manager/product/v2-2-review-decisions.md`（v2.2 变更）；冲突时以 v2.2 决策单为准 |
 | 平台约束 | `docs/plugins/skill-manager/design/implementation-contract.md` |
 | 行为事实 | `docs/plugins/skill-manager/research/skill-subsystem.md` |
-| 不负责 | 像素、颜色、字号、状态机细节、组件交互实现（分别见交互稿 v3.2 与 UI 原型 v3.2） |
+| 不负责 | 像素、颜色、字号、状态机细节、组件交互实现（分别见交互稿 v3.3 与 UI 原型 v3.2） |
 
 ---
 
@@ -41,7 +41,7 @@
 - 480 / 488 / 720 三档弹窗的视觉表达（管理源使用 720px 档）；
 - 暗色为主、亮色对照的关键画面。
 
-几何、配色、字号、间距、图标规格**不在本文**，以 `docs/plugins/skill-manager/design/interaction-spec-v3.md`（v3.2）与 `prototypes/skills-manager-v3.html`（v3.2）为准；弹窗宽度按 §11 的三档规格执行。
+几何、配色、字号、间距、图标规格**不在本文**，以 `docs/plugins/skill-manager/design/interaction-spec-v3.md`（v3.3）与 `prototypes/skills-manager-v3.html`（v3.2）为准；弹窗宽度按 §11 的三档规格执行。
 
 ### 0.3 所有人共同遵守
 
@@ -307,6 +307,31 @@ v2.0 的顶部警示条与更新细条删除，改为一级 Tab 栏右侧、与�
 | 列表滚动位置 | 本次会话，进入详情再返回时恢复 |
 | 技能详情返回位置 | 返回列表时回到原来的分类与卡片位置 |
 
+### 5.7 与 Harness 原生体验一致
+
+本插件是 DSH 面板体系中的一员，交互反馈应与 DSH 原生插件（如「自动化任务」「插件」）保持一致，而不是自成一套。
+
+**产品要求**
+
+- 所有可交互控件的 hover、focus、选中反馈与系统一致；用户从原生页面切到本插件时，不需要重新适应一套悬停色、描边或动效。
+- 一致性优先于局部美观：不为单个控件单独定义与系统不同的 hover 背景、描边、阴影或位移。
+- 键盘焦点必须可见；焦点视觉与 hover 同源，不额外引入彩色 outline。
+
+**对照的控件类别与原则**
+
+| 控件类别 | 原则 |
+| --- | --- |
+| Tab（一级 / 二级） | hover 与选中态共用同一背景 token，靠文字色从次级提升到主文字表达状态；无边框、无阴影、无位移。 |
+| 图标按钮 | hover 只提亮背景与图标，不改变按钮尺寸与位置；工具栏、源行、状态图标使用同一套反馈。 |
+| 卡片（技能 / 市场） | hover 只改变背景；不描边、不位移、不缩放；选中态才使用描边与模块背景。 |
+| 提示语（Tooltip） | 反色样式：深色主题下浅底深字；无边框、无阴影；保留 300ms 延迟。 |
+
+**视觉细节的归属**
+
+- 视觉反馈细节（具体 token、尺寸、圆角、背景值、tooltip 反色值）以 `design/native-parity.md` 为准。
+- 本文只约定「必须与原生一致」的产品要求与对照类别；交互稿 v3.3 §6.4 将其落成页面规格。
+- 与结构决策冲突时，结构以决策单为准；视觉反馈细节以 `native-parity.md` 为准。
+
 ---
 
 ## 6. 信息架构
@@ -442,7 +467,7 @@ v2.0 的顶部警示条与更新细条删除，改为一级 Tab 栏右侧、与�
 - 主按钮在有更新或可安装时始终可见。
 - 卡片整体可点击进入详情；右侧按钮与 `⋯` 阻止冒泡。
 - 卡片高度统一；描述最多 2 行，超出省略。
-- 卡片视觉对齐 DSH Discover 卡片，具体样式见交互稿 v3.2 / 原型 v3.2。
+- 卡片视觉对齐 DSH Discover 卡片，具体样式见交互稿 v3.3 / 原型 v3.2。
 
 **卡片内容**
 
@@ -732,7 +757,7 @@ v2.0 的顶部警示条与更新细条删除，改为一级 Tab 栏右侧、与�
 
 ## 11. 弹窗规格
 
-> 本节只约定宽度与使用场景；圆角、边框、内部间距、按钮区高度等视觉规格见 `v2-2-review-decisions.md` §5、`v2-1-review-decisions.md` §6 与交互稿 v3.2，不在本文重复。
+> 本节只约定宽度与使用场景；圆角、边框、内部间距、按钮区高度等视觉规格见 `v2-2-review-decisions.md` §5、`v2-1-review-decisions.md` §6 与交互稿 v3.3，不在本文重复。
 
 | 弹窗 | 宽度 | 使用场景 |
 | --- | --- | --- |
@@ -995,6 +1020,12 @@ v2.0 的顶部警示条与更新细条删除，改为一级 Tab 栏右侧、与�
 - [ ] **C4** 卡片右侧是水平排列的 `⋯` 与主按钮；未悬停时看不到 `⋯`，悬停后出现且不引起布局位移。
 - [ ] **C5** 管理源是居中弹窗，宽度不超过 720px 且在任何窗口下留 32px 边距；只支持拖动排序，没有上下箭头。
 
+### 15.9 v2.3 新增验收（对应 `design/native-parity.md`）
+
+- [ ] **D1** Tab hover 反馈与 DSH 原生一致：hover 与选中态背景相同，靠文字色区分；无边框、无阴影、无位移。
+- [ ] **D2** 卡片 hover 只改变背景，不描边、不位移、不缩放；键盘焦点视觉与 hover 一致。
+- [ ] **D3** Tooltip 为反色样式（深色主题下浅底深字），无边框、无阴影；仍保留 300ms 延迟。
+
 ---
 
 ## 16. 版本与变更记录
@@ -1055,6 +1086,7 @@ v2.0 的顶部警示条与更新细条删除，改为一级 Tab 栏右侧、与�
 | v2.0 | 2026-11-09 | 归档 | 按 `v2-ia-decisions.md` 重构：两 Tab、四箱子、零筛选、详情双栏、诊断人话化、技术信息退出界面 |
 | v2.1 | 2026-11-09 | 归档 | 按 `v2-1-review-decisions.md`：二级 Tab、两列卡片、市场按源分区块与源排序、状态改 Tab 栏图标、弹窗收敛为 480 / 488 / 720 |
 | **v2.2** | **2026-11-09** | **待评审** | 按 `v2-2-review-decisions.md`：Tab 内按来源分组、工具栏图标化并合并检查更新与刷新、卡片操作改水平、管理源改 720px 弹窗 + 拖动排序 |
+| **v2.3** | **2026-11-09** | **待评审** | 按 `design/native-parity.md`：新增 §5.7「与 Harness 原生体验一致」，约定 Tab、图标按钮、卡片、提示语的 hover / focus / 选中反馈与 DSH 原生一致；新增 3 条验收 |
 
 ---
 
@@ -1106,5 +1138,5 @@ v2.0 的顶部警示条与更新细条删除，改为一级 Tab 栏右侧、与�
 - 平台约束：`docs/plugins/skill-manager/design/implementation-contract.md`
 - 技能子系统事实：`docs/plugins/skill-manager/research/skill-subsystem.md`
 - 市场索引规范：`docs/plugins/skill-manager/product/skill-market-index-spec.md`
-- 交互稿 v3.2：`docs/plugins/skill-manager/design/interaction-spec-v3.md`（待产出）
+- 交互稿 v3.3：`docs/plugins/skill-manager/design/interaction-spec-v3.md`（待产出）
 - UI 原型 v3.2：`docs/plugins/skill-manager/prototypes/skills-manager-v3.html`（待产出）
