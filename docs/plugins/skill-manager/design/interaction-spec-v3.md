@@ -1,6 +1,6 @@
-# Skills 管理模块 · 交互稿 v3.2
-> 版本：v3.2　　日期：2026-11-09　　状态：待评审
-> 上一版：v3.1（变更见 §1.2 与 §9）
+# Skills 管理模块 · 交互稿 v3.3
+> 版本：v3.3　　日期：2026-11-09　　状态：待评审
+> 上一版：v3.2（变更见 §1.3 与 §9）
 > 结构输入：`product/v2-ia-decisions.md`（v2.0 基线）+ `product/v2-1-review-decisions.md`（v2.1 增量）+ `product/v2-2-review-decisions.md`（v2.2 增量，冲突时以 v2.2 为准）
 
 ---
@@ -11,7 +11,7 @@
 - **复用范围**：v2.3 的视觉统一规范（图标容器、24 SVG、状态点、升级徽章）、页内双栏详情（`2fr 1fr`）、弹窗分层、tooltip / toast 规范继续有效；与 v2.2 决策单冲突处一律以决策单为准（折叠分组、560px 自定弹窗宽度、管理源抽屉、源上下移按钮等已作废）。
 - **不覆盖**：像素级 CSS、组件实现、Host 数据契约。关键尺寸、间距与字号阶梯只给到可供原型实现的数值；颜色只用 `--dsw-*` token 表述。
 - **冲突裁决**：本文件 < `v2-2-review-decisions.md` < `v2-1-review-decisions.md` < `v2-ia-decisions.md`；视觉细节 < `implementation-contract.md`（平台约束）。两者冲突时先找 Lead，不自行改结构。
-- **版本号**：页面不显示版本号；PRD 2.2 / 交互稿 3.2 / 原型 3.2 各自标注。
+- **版本号**：页面不显示版本号；PRD 2.3 / 交互稿 3.3 / 原型 3.2 各自标注。
 
 ---
 
@@ -44,9 +44,21 @@
 | 7 | tooltip 选择器 | 原型 `#sm-tooltip` 与元素 `id="tooltip"` 不匹配 | 统一为 `#tooltip`；本稿补充 tooltip 挂载与 300ms 行为，避免实现再次分叉 | §4.2、§6.1 |
 | 8 | 画面数更正 | 标题写 33 屏，实列 35 屏 | 按实际条目更正为 **34 屏**：删除与 DL-02 重复的 DL-07（工具栏 `⋯` 导入），原 DL-08 顺延为 DL-07 | §2、§9 |
 
-### 1.3 v3.0 相对 v2.3（归档）
+### 1.3 v3.3 相对 v3.2
 
-#### 1.3.1 总览
+> 依据：`design/native-parity.md`（DSH 原生控件实测规格）。本表只列本轮变更，未提及条目沿用 v3.2。
+
+| # | 类别 | v3.2 | v3.3 | 落点 |
+| --- | --- | --- | --- | --- |
+| 1 | 原生一致性 | 各控件的 hover / 选中 / 焦点反馈分散定义，Tab 选中态与 hover 背景不一致 | 统一对齐 DSH 原生控件：Tab、图标按钮、卡片、菜单项、焦点、tooltip；hover 与选中态共用 `--dsw-alias-interactive-bg-hover`，靠文字色区分 | §6.4、§7.12 |
+| 2 | Tab 规格 | 30px 高、12px 圆角、`padding: 0 12px`；选中用 `bg-layer-1` | 28px 高、14px 圆角、`padding: 0 10px`；hover 与选中同为 `interactive-bg-hover`，文字 tertiary→primary | §4.1、§6.3 |
+| 3 | 图标按钮 / 卡片 / 菜单 / tooltip | 图标按钮 hover 色自定；卡片 hover 只写背景；tooltip 用 `bg-layer-2` + 边框 | 图标按钮 hover `bg-layer-1` + `label-primary`；卡片 hover 不描边不位移；菜单项含 danger 变体；tooltip 反色 | §6.4 |
+| 4 | 画面清单 | SL-01 / ML-01 / MS-01 的组件描述沿用旧值 | 同步关键数值与交互描述，不重写画面结构 | §2.1、§2.4、§2.6 |
+| 5 | 验收 | 无原生一致性专项 | 追加截图对比、computed style、无位移、tooltip 反色 4 条 | §7.12 |
+
+### 1.4 v3.0 相对 v2.3（归档）
+
+#### 1.4.1 总览
 
 | 类别 | 项数 | 一句话 |
 | --- | --- | --- |
@@ -55,7 +67,7 @@
 | 新增 | 12 | 两 Tab、四分组、整行折叠、统一诊断话术、管理源抽屉、全部更新等 |
 | 保留 | 6 | v2.3 的视觉与详情骨架继续使用 |
 
-#### 1.3.2 删除（17 项）
+#### 1.4.2 删除（17 项）
 
 | # | 删除项 | v2.3 中的位置 | 原因 |
 | --- | --- | --- | --- |
@@ -77,7 +89,7 @@
 | D16 | 详情「复制调用命令」按钮 | 详情头部操作区 | IA 的操作集合只保留停用 / 删除 / 卸载 / 更新 |
 | D17 | 「已停用」独立折叠组 | 已安装列表底部 | 已停用技能留在原分组内，行内降低对比度 + 徽章 |
 
-#### 1.3.3 降级（6 项）
+#### 1.4.3 降级（6 项）
 
 | # | 能力 | v2.3 | v3.0 | 原因 |
 | --- | --- | --- | --- | --- |
@@ -88,7 +100,7 @@
 | G5 | 导入入口 | 工具栏入口 | `⋯` 菜单项（新建仍是主按钮） | 新建比导入高频，工具栏只留一个主操作 |
 | G6 | 已安装状态 | 详情左栏大横幅卡 | 详情右栏一行式状态区（位置 / 版本 / 修改标记） | 减少重复卡片，提高信息密度 |
 
-#### 1.3.4 新增（12 项）
+#### 1.4.4 新增（12 项）
 
 | # | 新增项 | 说明 |
 | --- | --- | --- |
@@ -105,7 +117,7 @@
 | N11 | 键盘规范 | 分组头 Enter/Space、`/` 聚焦搜索、Escape 分层关闭、行内 roving tabindex |
 | N12 | 空态双出口 | 「去市场看看」+「新建技能」；搜索空态给「清除搜索」 |
 
-#### 1.3.5 保留（6 项）
+#### 1.4.5 保留（6 项）
 
 | # | 保留项 | 复用方式 |
 | --- | --- | --- |
@@ -131,7 +143,7 @@
 
 | 编号 | 画面 | 入口 | 关键元素 | 状态 |
 | --- | --- | --- | --- | --- |
-| SL-01 | 技能列表 · 默认 | 侧栏「技能」；Tab「技能」 | 标题「技能」+ 描述；一级两 Tab（容器 34px）；**二级 Tab** 与一级同一套视觉：我的技能 / 共享技能 / 项目技能 / 系统内置，各带计数徽章，默认「我的技能」，一屏只渲染当前分类；工具栏：搜索 33px、排序、**三个 30×30 图标按钮**（新建技能 / 导入技能 / 检查更新；图标 16px、按钮间距 6px、各自 hover 300ms 出 tooltip）；Tab 栏右侧状态图标（见 §2.8）；**按来源分组的卡片列表**：组头（28px，源名 / 本地创建 + 技能数）+ 组内两列卡片网格 `repeat(2, minmax(0,1fr))` / `gap: 12px`；卡片约 96px、48×48 图标、名称 + 状态徽章、≤2 行描述、右侧**水平** `⋯` + 唯一主按钮（`⋯` 默认隐藏，hover / focus-within 淡入） | 正常；加载见 SL-05；分类空见 SL-04；失败见 SL-06；部分位置不可读时顶部 `banner.partial`，其余列表正常 |
+| SL-01 | 技能列表 · 默认 | 侧栏「技能」；Tab「技能」 | 标题「技能」+ 描述；一级两 Tab（容器 34px，Tab 28px 高）；**二级 Tab** 与一级同一套视觉：我的技能 / 共享技能 / 项目技能 / 系统内置，各带计数徽章，默认「我的技能」，一屏只渲染当前分类；Tab 为 28px 高 / 14px 圆角 / `padding: 0 10px`，hover 与选中同为 `--dsw-alias-interactive-bg-hover`，文字 `label-tertiary`→`label-primary`；工具栏：搜索 33px、排序、**三个 30×30 图标按钮**（新建技能 / 导入技能 / 检查更新；图标 16px、按钮间距 6px、各自 hover 300ms 出 tooltip；hover 背景 `bg-layer-1` + 图标 `label-primary`）；Tab 栏右侧状态图标（见 §2.8）；**按来源分组的卡片列表**：组头（28px，源名 / 本地创建 + 技能数）+ 组内两列卡片网格 `repeat(2, minmax(0,1fr))` / `gap: 12px`；卡片约 96px、48×48 图标、名称 + 状态徽章、≤2 行描述、右侧**水平** `⋯` + 唯一主按钮（`⋯` 默认隐藏，hover / focus-within 淡入）；卡片 hover 只改背景 `interactive-bg-hover`，不描边、不位移 | 正常；加载见 SL-05；分类空见 SL-04；失败见 SL-06；部分位置不可读时顶部 `banner.partial`，其余列表正常 |
 | SL-02 | 技能列表 · 分类切换 | 点击二级 Tab；`←` / `→` | 切换后整屏只显示该分类卡片，并按来源重新分组；**不存在分类级分组头、折叠 chevron 与副标题**（来源组头不属于分类分组，保留）；计数来自列表总数、与筛选无关；选择写入本地记忆，默认「我的技能」；无项目上下文时「项目技能」Tab 不渲染；系统内置只读、不按来源分组，卡片无写操作 | 正常；记忆恢复 |
 | SL-03 | 技能列表 · 搜索 | 搜索框输入；`/` 聚焦 | 150ms 防抖；**跨分类**匹配名称、描述、whenToUse；命中后自动切到第一个有结果的分类并保持搜索词；结果在该分类内**按来源分组展示，分组随之过滤，命中为空的分组连同组头一起不渲染**；清除按钮；当前分类无命中但其他分类有命中时自动跳转，不显示空态 | 正常；全部无结果时停留在当前分类，显示 `empty.search` +「清除搜索」 |
 | SL-04 | 技能列表 · 空分类 | 当前分类无技能 | 整屏空态，不显示其他分类内容；四类空态都带出口：我的技能「还没有自己的技能，从市场装一个或新建一个」+「去市场看看」「新建技能」；共享技能「这里放所有 Agent 共用的技能」+「去市场看看」「新建技能」；项目技能「当前项目还没有技能」+「去市场看看」「新建技能」；系统内置「Harness 自带的技能都正常」+「去市场看看」（内置不可新建，只给一个出口） | 空态（按分类四种文案） |
@@ -161,7 +173,7 @@
 
 | 编号 | 画面 | 入口 | 关键元素 | 状态 |
 | --- | --- | --- | --- | --- |
-| ML-01 | 市场列表 · 正常 | Tab「市场」 | 工具栏：搜索、排序（推荐 / 最近更新 / 名称）、`检查更新` **30×30 图标按钮**（tooltip `action.checkUpdates`，与技能 Tab 同一动作）、`管理源` **30×30 图标按钮**（tooltip `action.manageSources`）；分类 chips（保留，最多 12 个）；**按源分区块**：区块标题 = 源名 + `{count} 个技能` + `⋯`（刷新 / 删除；源排序在管理源弹窗内拖动完成，区块菜单不再提供上移 / 下移）；区块内两列卡片网格 `gap: 12px`：卡片约 96px、48×48 图标、名称 / 版本 / 标签、≤2 行描述、右侧**水平** `⋯` + 唯一按钮（安装 / 更新 / 已安装，已安装点击进入详情；`⋯` 默认隐藏、hover 淡入）；区块顺序 = 管理源中的源顺序 | 正常；有更新时卡片升级徽章；分页追加加载不抖动 |
+| ML-01 | 市场列表 · 正常 | Tab「市场」 | 工具栏：搜索、排序（推荐 / 最近更新 / 名称）、`检查更新` **30×30 图标按钮**（tooltip `action.checkUpdates`，与技能 Tab 同一动作）、`管理源` **30×30 图标按钮**（tooltip `action.manageSources`）；图标按钮 hover 背景 `bg-layer-1` + 图标 `label-primary`，tooltip 反色；分类 chips（保留，最多 12 个）；**按源分区块**：区块标题 = 源名 + `{count} 个技能` + `⋯`（刷新 / 删除；源排序在管理源弹窗内拖动完成，区块菜单不再提供上移 / 下移）；区块内两列卡片网格 `gap: 12px`：卡片约 96px、48×48 图标、名称 / 版本 / 标签、≤2 行描述、右侧**水平** `⋯` + 唯一按钮（安装 / 更新 / 已安装，已安装点击进入详情；`⋯` 默认隐藏、hover 淡入）；卡片 hover 只改背景 `interactive-bg-hover`，不描边、不位移；区块顺序 = 管理源中的源顺序 | 正常；有更新时卡片升级徽章；分页追加加载不抖动 |
 | ML-02 | 市场列表 · 无源 | 首次进入市场、删光所有源 | 整页空态：标题「还没有添加技能索引源」+ 说明 + 主按钮「添加源」；工具栏搜索、排序与分类 chips 禁用，「管理源」图标保持可用；不渲染任何源区块 | 空态 |
 | ML-03 | 市场列表 · 有源无结果 | 源内无技能、搜索 / 分类无命中 | 源为空：该源区块显示「这个源暂时没有技能」+「管理源」；搜索无结果：「没有匹配「{query}」的技能」+「清除搜索」；分类无结果回退「全部」；无命中的源区块连同区块头一起隐藏 | 空态（多种变体） |
 | ML-04 | 市场列表 · 加载 | 首次进入、刷新索引 | 状态文字「正在读取市场…」+ 每源两列共 6 张卡片骨架；已有列表在刷新时保留内容并显示区块内 loading | 加载 |
@@ -182,7 +194,7 @@
 
 | 编号 | 画面 | 入口 | 关键元素 | 状态 |
 | --- | --- | --- | --- | --- |
-| MS-01 | 管理源 · 列表 | 市场工具栏「管理源」；无源空态 | 居中弹窗 `min(720px, 100vw - 32px)`；标题「管理源」+ 计数徽章（源数量）+ 关闭；说明 `source.priorityHint`「排序即优先级：排在前面的源，其技能在市场中排在前面。」；源列表每行：**行首拖动手柄 16×16**（`grab` / `grabbing`）、状态点、名称、技能数、启用开关、刷新、删除；行高约 56px，行间 1px `--dsw-alias-border-l2`；底部「添加索引源…」+ 说明；列表区滚动，标题与底部不滚 | 正常；无源空态；加载骨架；读取失败 |
+| MS-01 | 管理源 · 列表 | 市场工具栏「管理源」；无源空态 | 居中弹窗 `min(720px, 100vw - 32px)`；标题「管理源」+ 计数徽章（源数量）+ 关闭；说明 `source.priorityHint`「排序即优先级：排在前面的源，其技能在市场中排在前面。」；源列表每行：**行首拖动手柄 16×16**（`grab` / `grabbing`）、状态点、名称、技能数、启用开关、刷新、删除；行高约 56px，行间 1px `--dsw-alias-border-l2`；行 hover 只改背景 `interactive-bg-hover`，不描边、不位移；行内刷新等图标按钮 hover 背景 `bg-layer-1` + 图标 `label-primary`，删除按钮 hover 用 `interactive-bg-hover-danger`；tooltip 反色；底部「添加索引源…」+ 说明；列表区滚动，标题与底部不滚 | 正常；无源空态；加载骨架；读取失败 |
 | MS-02 | 管理源 · 添加 | 弹窗内「添加索引源…」 | 弹窗内切换到添加视图（宽度不变，表单区限宽 488px）：名称（选填）、索引地址、`校验`；校验中 loading；成功显示索引标题 / 技能数 / 示例；第三方来源提示；底部「取消 / 保存」；保存后回到列表视图，新源默认排最后并短暂高亮 | 正常 / 校验中 / 校验失败 |
 | MS-03 | 管理源 · 删除确认 | 源行「删除」 | 在管理源弹窗之上叠加 `min(480px, 100vw - 32px)` 确认框；标题「删除这个源？」；说明已安装技能不受影响、之后无法检查更新；按钮「取消 / 删除源」；`dialogStack` 保证 `Esc` 只关确认框 | 确认态；提交中 |
 | MS-04 | 管理源 · 刷新失败 | 源行「刷新」失败 | 弹窗内源行下方展开错误条「刷新失败，仍在显示上次成功读取的内容」+「重试」；状态点 warning；保留上次成功缓存并标「已过期」；弹窗不关闭，其余源仍可操作 | 错误 / 部分失败 |
@@ -212,7 +224,7 @@
 
 - 顺序固定：警示在左、更新在右；两者同时存在时并排显示，间距 4px。
 - 数量随检查 / 更新 / 修复结果实时变化；降到 0 时图标立即移除，不做收起动画。
-- 图标可键盘聚焦，焦点环 2px `--dsw-focus-ring-color`；`aria-label` 直接使用 `status.issue.tip` / `status.update.tip` 的完整提示语，计数变化用 `aria-live="polite"`。
+- 图标可键盘聚焦，焦点视觉与 hover 一致：背景 `--dsw-alias-interactive-bg-hover` + 图标 `--dsw-alias-label-primary`，不新增 outline；`aria-label` 直接使用 `status.issue.tip` / `status.update.tip` 的完整提示语，计数变化用 `aria-live="polite"`。
 - 删除 v3.0 的顶部未生效警示条与更新细条；详情内更新按钮、卡片内升级徽章与更新按钮保留。
 
 ---
@@ -284,10 +296,10 @@
 
 **结构与几何**
 
-- 二级 Tab 与一级 Tab 同一套视觉：容器 34px 高、`--dsw-alias-bg-layer-3`、14px 圆角、padding 2px；Tab 30px 高、12px 圆角、padding 0 12px，间距 2px。
+- 二级 Tab 与一级 Tab 同一套视觉：容器 34px 高、`--dsw-alias-bg-layer-3`、14px 圆角、padding 2px；Tab 28px 高、14px 圆角、`padding: 0 10px`，间距 2px。
 - 标签文案用 `loc.*`；右侧计数徽章 `tab.count`，`calc(var(--sm-fs) - 2px)`、`--dsw-alias-label-tertiary`，选中态用 `--dsw-alias-label-primary`。
 - 二级 Tab 行与一级 Tab 行左对齐，位于一级 Tab 下方 12px；不再有**分类级**分组头、chevron 与副标题；分类内的来源组头见 §4.10。
-- hover：`--dsw-alias-interactive-bg-hover`；选中：`--dsw-alias-bg-layer-1` + 文字 `--dsw-alias-label-primary`。
+- hover 与选中态共用背景 `--dsw-alias-interactive-bg-hover`；靠文字色区分：未选中（含 hover）为 `--dsw-alias-label-tertiary`，仅选中态为 `--dsw-alias-label-primary`；无边框、无阴影、无 transition。
 
 **鼠标**
 
@@ -300,7 +312,7 @@
 
 - 二级 Tab 容器 `role="tablist"`、`aria-label` 用 `tab.skills.label`；每个 Tab `role="tab"` / `aria-selected` / `tabindex`（roving）。
 - `←` / `→` 在二级 Tab 间移动并自动激活（automatic activation）；`Home` / `End` 到首 / 末 Tab；`Enter` / `Space` 激活。
-- 焦点环 2px `--dsw-focus-ring-color`，偏移 2px；焦点不因内容重绘丢失。
+- 焦点视觉与 hover 一致：背景 `--dsw-alias-interactive-bg-hover` + 文字 `--dsw-alias-label-primary`，不新增 outline；焦点不因内容重绘丢失。
 - 屏幕阅读器读作「我的技能，6 个技能，已选中」；计数变化用 `aria-live="polite"`。
 - 切换只改本地视图，不触发网络请求；不弹 toast。
 
@@ -318,7 +330,7 @@
 - 右侧**水平一行、右对齐**：`⋯`（32×32）在左，唯一主按钮（更新 / 安装 / 已安装）在右，间距 6px；无主按钮时只显示 `⋯`，仍占右侧同一位置。
 - `⋯` 默认 `opacity: 0`，但**保留占位**（不切 `display: none`、不折叠宽度）；卡片 `:hover` 与 `:focus-within` 时 120ms 淡入；`⋯` 自身 `:focus-visible` 时即使卡片未 hover 也显示。
 - 淡入只改 `opacity`，不改尺寸、`padding`、`margin` 或定位，保证出现前后卡片布局零位移。
-- 整张卡片是详情入口；hover 卡片 `--dsw-alias-interactive-bg-hover`；键盘聚焦同样有背景 + 焦点环。
+- 整张卡片是详情入口；hover 卡片只改背景 `--dsw-alias-interactive-bg-hover`，不描边、不位移、不缩放；键盘聚焦视觉与 hover 一致，不新增 outline。
 - 卡片内主按钮与 `⋯` 必须 `stopPropagation`，不进入详情；`⋯` 打开菜单的锚点固定在按钮位置。
 - 点击已停用、未生效、只读卡片同样进入详情；状态在详情里解释，不拦截。
 - 卡片聚焦后 `Enter` / `Space` 进入详情；`←` / `→` 在同一行两卡间移动，`↑` / `↓` 在上下行间移动（roving tabindex），`Home` / `End` 到首 / 末卡；跨来源组时按视觉顺序继续移动。
@@ -1000,8 +1012,8 @@
 | --- | --- |
 | 页面内容 | 左右 48px、底部 48px、顶部 28px；背景 `--dsw-alias-bg-base` |
 | 标题 / 描述 | `calc(var(--sm-fs) + 2px)` / 1.4 / 500；描述 `calc(var(--sm-fs) - 1px)`、`--dsw-alias-label-secondary` |
-| Tab 容器 / Tab | 34px / 30px 高；14px / 12px 圆角；容器 `--dsw-alias-bg-layer-3`；一级与二级 Tab 共用 |
-| 二级 Tab | 位于一级 Tab 下方 12px；Tab 30px 高、12px 圆角、`padding: 0 12px`；计数徽章 `calc(var(--sm-fs) - 2px)` |
+| Tab 容器 / Tab | 34px / 28px 高；14px / 14px 圆角；容器 `--dsw-alias-bg-layer-3`；一级与二级 Tab 共用；Tab `padding: 0 10px`，hover 与选中同背景 `interactive-bg-hover` |
+| 二级 Tab | 位于一级 Tab 下方 12px；Tab 28px 高、14px 圆角、`padding: 0 10px`；计数徽章 `calc(var(--sm-fs) - 2px)` |
 | 工具栏 | 搜索 33px；图标按钮 **30×30**、图标 16px、按钮间距 6px；搜索与排序之间 8px；无文字按钮，`+ 新建技能` 已删除 |
 | 来源组头 | 高 28px；名称 `var(--sm-fs)` / 500；计数 `calc(var(--sm-fs) - 2px)`、`--dsw-alias-label-tertiary`；组头与网格 8px、组间 20px |
 | 卡片网格 | `grid-template-columns: repeat(2, minmax(0, 1fr))`；`gap: 12px`；内容区 ≤ 720px 退化单列 |
@@ -1016,10 +1028,29 @@
 | 诊断抽屉 | 宽 420px、全高；`--dsw-alias-bg-layer-2`；左侧 1px `--dsw-alias-border-l2` |
 | 管理源弹窗 | **居中弹窗**，宽 `min(720px, 100vw - 32px)`，最大高 `min(720px, 100vh - 96px)`；`--dsw-alias-bg-layer-1`；圆角 `var(--dsw-radius-panel)`、边框 `.5px`、无阴影；源行约 56px，行首手柄 16×16；列表内部滚动；拖动插入线 2px `--dsw-alias-state-business-primary` |
 | 弹窗 | 表单 `min(488px, 100%)` / 确认 `min(480px, 100vw - 32px)` / 大内容 `min(720px, 100%)`；管理源 `min(720px, 100vw - 32px)`；圆角 `var(--dsw-radius-panel)`（表单、大内容、管理源）/ `var(--dsw-radius-xl)`（确认）；边框 `.5px solid var(--dsw-alias-border-inverted)`；表单内部 `gap: 38px`、确认正文 `gap: 12px`；无阴影；遮罩透明 |
-| Toast / Tooltip | 12px 圆角；tooltip `calc(var(--sm-fs) - 4px)`、padding 6px 10px、max-width 290px |
-| 焦点环 | 2px `--dsw-focus-ring-color`，偏移 2px |
+| Toast / Tooltip | Toast 12px 圆角；tooltip 反色（背景 `--dsw-alias-label-primary`、文字 `--dsw-alias-bg-layer-3`）、圆角 `var(--dsw-radius-sm)`、`calc(var(--sm-fs) - 4px)`、padding 6px 10px、max-width 290px、无边框无阴影 |
+| 焦点 | 与 hover 一致：背景 `--dsw-alias-interactive-bg-hover` + 文字 `--dsw-alias-label-primary`；不新增 outline |
 
-### 6.4 颜色与禁用项
+### 6.4 DSH 原生一致性
+
+> 依据：`design/native-parity.md`（DSH 原生控件实测规格）。本节约束所有页面共用的基础控件；与 §4.1、§4.2、§6.3 中同类控件的数值或反馈描述冲突时，以本节为准。视觉反馈细节以 `design/native-parity.md` 为准。
+
+**原则：hover 与选中态共用同一背景 token，靠文字色区分。**
+
+| 控件 | 规格 |
+| --- | --- |
+| Tab（一级 / 二级 Tab 内部按钮） | 高 28px；圆角 14px（pill）；`padding: 0 10px`；默认文字 `--dsw-alias-label-tertiary`；hover 与选中背景同为 `--dsw-alias-interactive-bg-hover`，选中文字 `--dsw-alias-label-primary`；无边框、无阴影、无 transition。一级 Tab 的 34px pill 容器只作分组背景，不改变按钮自身规格。 |
+| 图标按钮 | 保持 30×30 热区与 16px 图标；`padding: 6px`、圆角 `var(--dsw-radius-sm)`；默认图标 `--dsw-alias-label-tertiary`；hover 背景 `--dsw-alias-bg-layer-1`、图标 `--dsw-alias-label-primary`；不改变尺寸与位置。 |
+| 卡片（可点击） | hover 只改背景 `--dsw-alias-interactive-bg-hover`；不描边、不位移、不缩放；选中态用 `--dsw-alias-bg-module-platform` + 描边，不用阴影。 |
+| 菜单项 | hover 与 `:focus-visible` 背景均为 `--dsw-alias-interactive-bg-hover`；危险项 hover 用 `--dsw-alias-interactive-bg-hover-danger`，文字保持 `--dsw-alias-state-error-primary`。 |
+| 焦点 | 与 hover 同一视觉：背景 `--dsw-alias-interactive-bg-hover` + 文字 `--dsw-alias-label-primary`；保留键盘可见焦点，不新增彩色 outline。 |
+| Tooltip | 反色：背景 `--dsw-alias-label-primary`、文字 `--dsw-alias-bg-layer-3`、圆角 `var(--dsw-radius-sm)`；无边框、无阴影；保留 300ms 延迟。深色主题下为浅底深字。 |
+
+- 所有反馈只改变背景与文字色，不改变尺寸、内边距、边框或位置，避免 hover 时布局抖动。
+- 计数徽章不是原生模式；若保留，降低对比，不与选中态争夺注意力。
+- 弹窗与抽屉仍按 §4.9 的圆角、`.5px` 边框与无阴影规格执行。
+
+### 6.5 颜色与禁用项
 
 - 所有颜色只用 `--dsw-*` token；状态色用 `--dsw-alias-state-success-primary` / `--dsw-alias-state-warn-primary` / `--dsw-alias-state-error-primary` / `--dsw-alias-state-business-primary`（更新图标）。
 - 升级徽章允许基于 token 的 `color-mix`；除此之外不写任何字面色值。
@@ -1027,7 +1058,7 @@
 - class 前缀统一 `sm-`；字号统一走 `--sm-fs` 与 §6.3 的阶梯表达式。
 - 页面骨架与 Plugins 页一致；不新造圆角 / 字号体系。
 
-### 6.5 locale 落地规则
+### 6.6 locale 落地规则
 
 - UI 字典在 `src/client/00-prelude.js` 的 `const zh` / `const en`；`locale/{zh,en}.json` 只保留插件管理器元数据。
 - 每个 key 必须在字典外被 `t('key')` 或字面量引用；未使用 key 在实现前删除。
@@ -1131,7 +1162,7 @@
 - [ ] 卡片支持 `←` / `→` / `↑` / `↓` / `Home` / `End` 移动；`Enter` / `Space` 进入详情；`Tab` 可到卡片主按钮与 `⋯`。
 - [ ] 卡片右侧按钮与 `⋯` 阻止冒泡，不触发详情；状态图标可聚焦并读出完整 tooltip。
 - [ ] 管理源弹窗内 `Alt+↑` / `Alt+↓` 移动源并读出位置；拖动中 `Esc` 取消且不写入顺序。
-- [ ] 焦点环 2px 可见；对话框焦点锁定；关闭后焦点恢复。
+- [ ] 键盘焦点可见且与 hover 一致（背景 + 文字提亮），不新增彩色 outline；对话框焦点锁定；关闭后焦点恢复。
 - [ ] 状态不只靠颜色：状态点 + 文案 / tooltip；对比度满足正文可读。
 - [ ] `prefers-reduced-motion` 下无位移与高度动画。
 
@@ -1164,6 +1195,13 @@
 - [ ] 卡片右侧是水平排列的 `⋯` 与主按钮；未悬停时看不到 `⋯`，悬停后出现且不引起布局位移。
 - [ ] 管理源是居中弹窗，宽度不超过 720px 且在任何窗口下留 32px 边距；只支持拖动排序，没有上下箭头。
 
+### 7.12 v3.3 原生一致性验收（4 条）
+
+- [ ] **截图对比**：同一屏幕下，本插件与 DSH「自动化任务」「插件」页的 Tab / 图标按钮 hover 截图并排看，反馈强度一致；Tab hover 与选中态背景相同，仅文字色不同。
+- [ ] **computed style**：hover 态背景为 `rgba(255,255,255,0.08)`（深色）或 `rgba(38,49,72,0.06)`（浅色）；图标按钮 hover 背景为 `bg-layer-1`、图标为 `label-primary`。
+- [ ] **无位移**：Tab、图标按钮、卡片、菜单项 hover / focus 时只变背景与文字色，不改变尺寸、内边距、边框或位置；卡片不描边、不位移、不缩放。
+- [ ] **tooltip 反色**：背景为 `label-primary`、文字为 `bg-layer-3`（深色主题浅底深字），无边框、无阴影；仍保留 300ms 延迟。
+
 ---
 
 ## 8. 待 Lead 拍板的歧义点
@@ -1178,6 +1216,7 @@
 
 | 版本 | 日期 | 变更 |
 | --- | --- | --- |
+| v3.3 | 2026-11-09 | 按 `design/native-parity.md` 补充「DSH 原生一致性」：Tab 28px / 圆角 14 / `padding: 0 10`、hover 与选中同背景；图标按钮、卡片、菜单项、焦点、tooltip 统一为原生反馈；同步 SL-01 / ML-01 / MS-01 关键描述；追加 4 条原生一致性验收 |
 | v3.2 | 2026-11-09 | 按 v2.2 评审决策单更新：技能页二级 Tab 内再按来源分组；工具栏改为搜索 + 排序 + 三个图标按钮并删除 `⋯` 菜单；「检查更新」合并「刷新列表」；管理源由抽屉改 720px 弹窗、排序由上移/下移改拖动 + `Alt+↑/↓`；卡片右侧操作改水平、`⋯` hover 120ms 淡入且不位移；补弹窗规格、组头/拖动文案与 v2.2 验收 |
 | v3.1 | 2026-11-09 | 按 v2.1 评审决策单更新：二级 Tab 替代折叠分组、技能与市场改两列卡片、市场按源分组并支持源排序（MS-05）、两条横幅改为状态图标、弹窗宽度收敛为 488 / 480 / 720，补文案与验收口径 |
 | v3.0 | 2026-11-09 | 按 v2 IA 决策重写：两 Tab、四分组、0 个位置 chips、诊断「一句人话 + 一个动作」、市场内管理源抽屉、市场详情四态、更新全流程、键盘分层与完整文案清单 |
