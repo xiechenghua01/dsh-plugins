@@ -14,8 +14,9 @@
 | **1** | **[product/skills-manager-prd-v2.md](product/skills-manager-prd-v2.md)** | v2.3 | **PRD**：范围、分类规则、诊断文案对照、禁用词、50 条验收项 |
 | **2** | **[design/interaction-spec-v3.md](design/interaction-spec-v3.md)** | v3.3 | **交互稿**：34 屏清单、状态与行为、DSH 原生一致性规格 |
 | **3** | **[prototypes/skills-manager-v3.html](prototypes/skills-manager-v3.html)** | v3.3 | **可点击原型**：21 个画面，交互反馈已对齐 DSH 原生控件 |
-| 4 | [design/implementation-contract.md](design/implementation-contract.md) | v1.3 | 平台约束；按 v3.3 实现前需同步两 Tab、卡片列表、来源分组、市场源弹窗与拖动排序 |
+| **4** | **[design/implementation-contract-v2.md](design/implementation-contract-v2.md)** | v2.0 | **实现唯一事实源**：数据模型、API、全局符号、视觉规格、硬约束 |
 | 5 | [design/native-parity.md](design/native-parity.md) | v1.0 | **DSH 原生控件规格**：从 asar 实测的 Tab、图标按钮、卡片、菜单、提示语样式 |
+| 6 | [design/implementation-contract.md](design/implementation-contract.md) | v1.3 | 已归档：按 v1 三 Tab 结构写的旧契约，仅作对照 |
 
 ## v1 归档（已不作为当前输入）
 
@@ -58,7 +59,7 @@
 - 交互稿：**v3.3 完成**——34 屏清单，含 DSH 原生一致性规格与拖动排序五态。
 - 原型：**v3.3 完成**——21 个画面，悬停、焦点与提示语经 CDP 实测与系统 token 一致。
 - 技能市场索引：规范 v1.0 草案 + JSON Schema + 示例 + 实现方案完成，待评审冻结。
-- 实现：**已发布 0.1.2（v1 三 Tab 结构）**；按 v3.2 改造前需要同步 `implementation-contract.md`（两 Tab、卡片列表、来源分组、市场源弹窗与拖动排序）。
+- 实现：**已发布 0.1.2（v1 三 Tab 结构）**；实现契约已升级到 v2.0，可开始按新契约改造（目标版本 0.2.0）。
 
 ## 验证与发布提醒
 

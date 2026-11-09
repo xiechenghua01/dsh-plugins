@@ -1,4 +1,7 @@
-# skill-manager 实现契约（并行开发唯一事实源）
+# skill-manager 实现契约 v1.3（已归档）
+
+> ⚠️ **本文件已作废**，仅保留用于对照 v1 三 Tab 结构。
+> 当前实现唯一事实源：[implementation-contract-v2.md](implementation-contract-v2.md)（v2.0）。
 
 > 本文件由 Lead 维护，**所有实现 Agent 必须先读完本文件**，再读自己的任务范围。
 > 任何与本文件冲突的实现都算缺陷。需要变更契约时，由 Lead 统一修改并通知。
