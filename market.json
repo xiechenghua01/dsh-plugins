@@ -4,12 +4,12 @@
   "branch": "main",
   "author": "xiechenghua01",
   "title": {
-    "en": "DSH Plugins by xiechenghua01",
-    "zh": "xiechenghua01 的 DSH 插件"
+    "en": "Chengze DSH Plugins",
+    "zh": "Chengze DSH 插件"
   },
   "description": {
-    "en": "Plugin index source for DeepSeek Harness: panels, tools and integrations installed from this repository.",
-    "zh": "DeepSeek Harness 插件索引源：从本仓库安装的面板、工具与集成。"
+    "en": "A growing collection of plugins for DeepSeek Harness: skills management, MCP management, session statistics and more.",
+    "zh": "持续扩充的 DeepSeek Harness 插件集：技能管理、MCP 管理、会话统计等。"
   },
   "categories": {
     "observability": {
