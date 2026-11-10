@@ -260,8 +260,9 @@
                     justifyContent: 'center',
                     gap: '6px',
                     height: '32px',
-                    padding: '0 14px',
-                    borderRadius: '10px',
+                    /* DSH plugin-page buttons: 0 12 padding, 12px radius. */
+                    padding: '0 12px',
+                    borderRadius: '12px',
                     fontSize: 'calc(var(--sm-fs) - 1px)',
                     fontWeight: 500,
                     whiteSpace: 'nowrap',
