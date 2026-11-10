@@ -624,15 +624,6 @@
                 if (event !== null && event !== undefined && typeof event.stopPropagation === 'function') event.stopPropagation()
             },
         },
-        h('button', {
-            type: 'button',
-            className: 'sm-icon-btn sm-card-more',
-            'aria-label': t('action.more'),
-            'data-tip': t('action.more'),
-            onClick: function (event) {
-                smMarketOpenMenu('card', event, { item: item })
-            },
-        }, icon('more', 16)),
         smMarketCardPrimary(item)))
     }
 

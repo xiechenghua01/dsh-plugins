@@ -3271,15 +3271,6 @@ window.__ModuleLoader__.load({
                 if (event !== null && event !== undefined && typeof event.stopPropagation === 'function') event.stopPropagation()
             },
         },
-        h('button', {
-            type: 'button',
-            className: 'sm-icon-btn sm-card-more',
-            'aria-label': t('action.more'),
-            'data-tip': t('action.more'),
-            onClick: function (event) {
-                smMarketOpenMenu('card', event, { item: item })
-            },
-        }, icon('more', 16)),
         smMarketCardPrimary(item)))
     }
 
@@ -4672,7 +4663,7 @@ window.__ModuleLoader__.load({
                 alignItems: 'center',
                 justifyContent: 'center',
                 padding: '16px',
-                background: 'transparent',
+                background: 'var(--dsw-alias-bg-mask-1, rgba(0, 0, 0, 0.5))',
             },
             onMouseDown: function (event) {
                 if (event === null || event === undefined) return
@@ -7951,7 +7942,8 @@ window.__ModuleLoader__.load({
 
 .sm-page-title {
   margin: 0;
-  font-size: calc(var(--sm-fs) + 2px);
+  /* DSH plugin page title: 20px / 500 / 28px. */
+  font-size: calc(var(--sm-fs) + 6px);
   font-weight: 500;
   line-height: 1.4;
   letter-spacing: -0.01em;
@@ -8801,7 +8793,8 @@ textarea.sm-input.sm-edit-body {
 
 .sm-card-name {
   font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
-  font-size: var(--sm-fs);
+  /* DSH plugin card title: 16px. */
+  font-size: calc(var(--sm-fs) + 2px);
   font-weight: 500;
   line-height: 1.4;
   color: var(--dsw-alias-label-primary);

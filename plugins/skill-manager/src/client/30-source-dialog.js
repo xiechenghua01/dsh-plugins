@@ -979,7 +979,7 @@
                 alignItems: 'center',
                 justifyContent: 'center',
                 padding: '16px',
-                background: 'transparent',
+                background: 'var(--dsw-alias-bg-mask-1, rgba(0, 0, 0, 0.5))',
             },
             onMouseDown: function (event) {
                 if (event === null || event === undefined) return
