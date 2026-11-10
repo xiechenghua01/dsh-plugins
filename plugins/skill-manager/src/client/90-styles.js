@@ -2644,7 +2644,7 @@ textarea.sm-input.sm-edit-body {
   position: fixed;
   inset: 0;
   z-index: 1100;
-  background: transparent;
+  background: var(--dsw-alias-bg-mask-1, rgba(0, 0, 0, 0.5));
   backdrop-filter: none;
 }
 

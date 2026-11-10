@@ -6210,7 +6210,7 @@ window.__ModuleLoader__.load({
 
         return h('div', {
             className: 'sm-dialog-mask sm-modal-backdrop',
-            style: { position: 'fixed', inset: 0, zIndex: 1300 + layerIndex * 2, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '16px', background: 'transparent' },
+            style: { position: 'fixed', inset: 0, zIndex: 1300 + layerIndex * 2, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '16px', background: 'var(--dsw-alias-bg-mask-1, rgba(0, 0, 0, 0.5))' },
             onMouseDown: function (event) {
                 if (event.target !== event.currentTarget) return
                 if (props.isTop !== true) return
@@ -7749,7 +7749,7 @@ window.__ModuleLoader__.load({
 
         return h('div', {
             className: 'sm-drawer-mask sm-drawer-backdrop',
-            style: { position: 'fixed', inset: 0, zIndex: 1100, background: 'transparent' },
+            style: { position: 'fixed', inset: 0, zIndex: 1100, background: 'var(--dsw-alias-bg-mask-1, rgba(0, 0, 0, 0.5))' },
             onMouseDown: function (event) {
                 if (event.target !== event.currentTarget) return
                 if (smModalStack.length > 0) return
@@ -10430,7 +10430,7 @@ textarea.sm-input.sm-edit-body {
   position: fixed;
   inset: 0;
   z-index: 1100;
-  background: transparent;
+  background: var(--dsw-alias-bg-mask-1, rgba(0, 0, 0, 0.5));
   backdrop-filter: none;
 }
 
