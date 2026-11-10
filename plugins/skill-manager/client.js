@@ -7938,8 +7938,8 @@ window.__ModuleLoader__.load({
   flex: 1 1 auto;
   overflow: hidden;
   --sm-content-max: 960px;
-  /* Keep a little more breathing room above than the plugin page's 28px. */
-  padding: 40px clamp(20px, 4vw, 48px) 0;
+  /* Requested top breathing room. */
+  padding: 82px clamp(20px, 4vw, 48px) 0;
 }
 
 /* Header, tabs, list and detail share the same column, so their left
