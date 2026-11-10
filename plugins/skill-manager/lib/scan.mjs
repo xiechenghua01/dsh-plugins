@@ -25,6 +25,7 @@ import { basename, dirname, extname, isAbsolute, join, relative, resolve, sep } 
 
 import { ApiError } from './http.mjs'
 import { parseSkillFile, validateFrontmatter } from './frontmatter.mjs'
+import { localizedPair } from './market-index.mjs'
 import { findInstallRecord } from './state.mjs'
 
 const CACHE_MS = 1000
@@ -1206,8 +1207,44 @@ function installRootKey(value) {
   return typeof value === 'string' ? value : ''
 }
 
+function marketEntryKey(sourceId, name) {
+  return `${sourceId}\u0000${name}`
+}
+
+/**
+ * Build a `(sourceId, name) -> { en, zh }` lookup from the market indexes the caller
+ * already holds. An index without a localized description (legacy plain string) simply
+ * contributes no entry, so affected skills never receive the optional field.
+ *
+ * @param {unknown} options scan options, expecting `marketIndexes` or `indexes`
+ * @returns {Map<string, { en?: string, zh?: string }>}
+ */
+function buildDescriptionLookup(options) {
+  const lookup = new Map()
+  const inputs = Array.isArray(options?.marketIndexes)
+    ? options.marketIndexes
+    : (Array.isArray(options?.indexes) ? options.indexes : [])
+  for (const input of inputs) {
+    if (input === null || typeof input !== 'object') continue
+    const sourceId = typeof input.sourceId === 'string' ? input.sourceId : ''
+    if (sourceId === '') continue
+    const entries = Array.isArray(input.skills)
+      ? input.skills
+      : (Array.isArray(input.index?.skills) ? input.index.skills : null)
+    if (entries === null) continue
+    for (const entry of entries) {
+      if (entry === null || typeof entry !== 'object') continue
+      if (typeof entry.name !== 'string' || entry.name === '') continue
+      const pair = localizedPair(entry.description)
+      if (pair !== null) lookup.set(marketEntryKey(sourceId, entry.name), pair)
+    }
+  }
+  return lookup
+}
+
 function attachMarket(skills, options) {
   const installed = Array.isArray(options?.installed) ? options.installed : []
+  const descriptionByKey = buildDescriptionLookup(options)
   const sourceNames = new Map()
   if (Array.isArray(options?.sources)) {
     for (const source of options.sources) {
@@ -1249,6 +1286,15 @@ function attachMarket(skills, options) {
           : (typeof record.sourceName === 'string' ? record.sourceName : ''))
     if (sourceId !== '') skill.sourceId = sourceId
     if (sourceName !== '') skill.sourceName = sourceName
+    // Optional: the localized market description is attached only when the install record
+    // points at an index entry that actually carries a LocalizedText. Local/builtin skills
+    // (no record) and legacy string descriptions never get the field.
+    const localizedDescription = sourceId === ''
+      ? null
+      : descriptionByKey.get(marketEntryKey(sourceId, skill.name))
+    if (localizedDescription !== null && localizedDescription !== undefined) {
+      skill.descriptionByLocale = { ...localizedDescription }
+    }
     // Only a record installed from this source can have an update; a legacy record without
     // `sourceId` gets no update at all rather than matching any same-name row.
     const update = sourceId === ''

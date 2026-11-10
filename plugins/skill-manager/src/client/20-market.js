@@ -217,7 +217,7 @@
     }
 
     /* ------------------------------------------------------------------ *
-     * 卡片 / 区块菜单                                                     *
+     * 卡片菜单（源的操作统一在管理源弹窗中完成）                          *
      * ------------------------------------------------------------------ */
 
     function smMarketMenuKeydown(event) {
@@ -299,21 +299,7 @@
     function smMarketRenderMenu() {
         if (smMarketMenu === null || typeof smMarketMenu !== 'object') return null
         const items = []
-        if (smMarketMenu.kind === 'source') {
-            const sourceId = String(smMarketMenu.sourceId || '')
-            const name = String(smMarketMenu.name || '')
-            items.push(smMarketMenuItem('refresh', 'refresh', t('action.refresh'), function () {
-                smMarketRefreshSource(sourceId, name)
-            }))
-            items.push(smMarketMenuItem('delete', 'trash', t('action.deleteSource'), function () {
-                const source = smMarketSourceById(sourceId)
-                smMarketOpenModal('confirm-remove-source', source !== null
-                    ? { source: source, sourceId: sourceId, name: name }
-                    : { sourceId: sourceId, name: name })
-            }, { danger: true }))
-            items.push(h('div', { key: 'sep', className: 'sm-menu-sep' }))
-            items.push(smMarketMenuItem('manage', 'sliders', t('action.manageSources'), smMarketManageSources))
-        } else if (smMarketMenu.kind === 'card') {
+        if (smMarketMenu.kind === 'card') {
             const item = smMarketMenu.item
             if (item !== null && typeof item === 'object') {
                 items.push(smMarketMenuItem('detail', 'skill', t('action.viewDetail'), function () {
@@ -746,7 +732,6 @@
         const count = typeof block.total === 'number' ? block.total : skills.length
         const cursor = typeof block.cursor === 'string' && block.cursor !== '' ? block.cursor : null
         const appending = smMarketAppending[sourceId] === true
-        const refreshing = smMarketRefreshing[sourceId] === true
         /* 有缓存卡片时保留列表，只在顶部显示错误细条；无缓存才整块错误态。 */
         let body = null
         if (skills.length > 0) {
@@ -786,23 +771,7 @@
         h('span', {
             className: 'sm-source-block-count',
             style: { fontSize: 'calc(var(--sm-fs) - 2px)', color: 'var(--dsw-alias-label-caption)', whiteSpace: 'nowrap' },
-        }, t('source.skillCount', { count: count })),
-        h('div', {
-            className: 'sm-source-block-actions',
-            style: { marginLeft: 'auto', display: 'inline-flex', alignItems: 'center', gap: '2px', flexShrink: 0 },
-        },
-        h('button', {
-            type: 'button',
-            className: 'sm-icon-btn',
-            'aria-label': t('action.more'),
-            'data-tip': t('action.more'),
-            'aria-busy': refreshing ? 'true' : undefined,
-            disabled: refreshing,
-            style: { width: '28px', height: '28px' },
-            onClick: function (event) {
-                smMarketOpenMenu('source', event, { sourceId: sourceId, name: name })
-            },
-        }, icon('more', 16)))),
+        }, t('source.skillCount', { count: count }))),
         body,
         cursor !== null && errorText === ''
             ? h('div', {

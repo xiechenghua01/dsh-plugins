@@ -138,6 +138,25 @@ export function localizedValues(value) {
   return Object.values(value).filter((text) => typeof text === 'string' && text !== '')
 }
 
+/**
+ * The `en` / `zh` pair of a LocalizedText, for clients that pick a description by UI
+ * language. Only non-empty strings are kept, so a partial translation stays partial
+ * instead of carrying empty placeholders.
+ *
+ * Legacy single-language descriptions (plain strings) have no locale information and
+ * therefore return `null`; callers must omit the field rather than invent `{ en }`.
+ *
+ * @param {unknown} value LocalizedText
+ * @returns {{ en?: string, zh?: string } | null}
+ */
+export function localizedPair(value) {
+  if (!isObject(value)) return null
+  const pair = {}
+  if (typeof value.en === 'string' && value.en !== '') pair.en = value.en
+  if (typeof value.zh === 'string' && value.zh !== '') pair.zh = value.zh
+  return Object.keys(pair).length === 0 ? null : pair
+}
+
 function checkLocalized(value, path, required = false) {
   if (value === undefined) {
     if (required) fail(path, 'is required')

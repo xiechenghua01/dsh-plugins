@@ -659,6 +659,9 @@ window.__ModuleLoader__.load({
     }
 
     function setState(patch) {
+        /* 任何状态变化都可能替换掉当前 hover 的节点。tooltip 挂在 <body>
+         * 上，目标卸载后 mouseout 不会触发，所以这里必须先主动隐藏。 */
+        if (typeof smHideTooltip === 'function') smHideTooltip()
         if (patch !== null && typeof patch === 'object') Object.assign(appState, patch)
         rerender()
     }
@@ -1790,6 +1793,9 @@ window.__ModuleLoader__.load({
      * ------------------------------------------------------------------ */
 
     let tipNode = null
+    /* Last rendered shell signature (view + tab); used to hide the tooltip
+     * when list <-> detail switches even if a caller bypassed setState. */
+    let smRenderedShell = null
 
     function closestTipNode(event) {
         const target = event !== null && event !== undefined ? event.target : null
@@ -1821,6 +1827,18 @@ window.__ModuleLoader__.load({
         }
     }
 
+    /* 统一入口：任何点击（行、Tab、工具栏、状态图标、菜单项）都先收起
+     * 提示语，不用逐个 onClick 补。 */
+    function handlePageTipDown() {
+        tipNode = null
+        if (typeof smHideTooltip === 'function') smHideTooltip()
+    }
+
+    /** 主动清理：hover 目标已从文档卸载时收起提示语。 */
+    function smHideTipIfTargetGone() {
+        if (typeof smHideTooltipIfTargetGone === 'function') smHideTooltipIfTargetGone()
+    }
+
     function renderPage(props) {
         const source = props !== null && typeof props === 'object' ? props : {}
         if (typeof source.t === 'function') boundT = source.t
@@ -1831,7 +1849,16 @@ window.__ModuleLoader__.load({
         const rootListeners = {
             onMouseOver: handlePageTipOver,
             onMouseOut: handlePageTipOut,
+            onMouseDown: handlePageTipDown,
         }
+        /* list <-> detail / skills <-> market 切换时主动收起提示语。 */
+        const shell = (appState.view === 'detail' ? 'detail' : 'list') + ':' + String(appState.tab)
+        if (smRenderedShell !== null && smRenderedShell !== shell) {
+            tipNode = null
+            if (typeof smHideTooltip === 'function') smHideTooltip()
+        }
+        smRenderedShell = shell
+        smHideTipIfTargetGone()
         if (appState.view === 'detail' && typeof renderDetailPage === 'function') {
             return h('div', Object.assign({ className: 'sm-root sm-root-detail', style: rootStyle }, rootListeners),
                 h('div', { className: 'sm-page sm-page-detail' }, renderDetailPage()),
@@ -2423,7 +2450,10 @@ window.__ModuleLoader__.load({
         const broken = skill.status === 'broken' || skill.status === 'invalid'
         const readonly = skill.writable === false
         const updateVersion = skillUpdateVersion(skill)
-        const description = typeof skill.description === 'string' ? skill.description : ''
+        // Locale-aware description when the market index carries both languages.
+        const description = typeof smSkillDescription === 'function'
+            ? smSkillDescription(skill)
+            : (typeof skill.description === 'string' ? skill.description : '')
         const badges = []
         /* Upgrade badge sits first in the tag bar (interaction spec §4.2). */
         if (updateVersion !== '') {
@@ -2838,7 +2868,7 @@ window.__ModuleLoader__.load({
     }
 
     /* ------------------------------------------------------------------ *
-     * 卡片 / 区块菜单                                                     *
+     * 卡片菜单（源的操作统一在管理源弹窗中完成）                          *
      * ------------------------------------------------------------------ */
 
     function smMarketMenuKeydown(event) {
@@ -2920,21 +2950,7 @@ window.__ModuleLoader__.load({
     function smMarketRenderMenu() {
         if (smMarketMenu === null || typeof smMarketMenu !== 'object') return null
         const items = []
-        if (smMarketMenu.kind === 'source') {
-            const sourceId = String(smMarketMenu.sourceId || '')
-            const name = String(smMarketMenu.name || '')
-            items.push(smMarketMenuItem('refresh', 'refresh', t('action.refresh'), function () {
-                smMarketRefreshSource(sourceId, name)
-            }))
-            items.push(smMarketMenuItem('delete', 'trash', t('action.deleteSource'), function () {
-                const source = smMarketSourceById(sourceId)
-                smMarketOpenModal('confirm-remove-source', source !== null
-                    ? { source: source, sourceId: sourceId, name: name }
-                    : { sourceId: sourceId, name: name })
-            }, { danger: true }))
-            items.push(h('div', { key: 'sep', className: 'sm-menu-sep' }))
-            items.push(smMarketMenuItem('manage', 'sliders', t('action.manageSources'), smMarketManageSources))
-        } else if (smMarketMenu.kind === 'card') {
+        if (smMarketMenu.kind === 'card') {
             const item = smMarketMenu.item
             if (item !== null && typeof item === 'object') {
                 items.push(smMarketMenuItem('detail', 'skill', t('action.viewDetail'), function () {
@@ -3367,7 +3383,6 @@ window.__ModuleLoader__.load({
         const count = typeof block.total === 'number' ? block.total : skills.length
         const cursor = typeof block.cursor === 'string' && block.cursor !== '' ? block.cursor : null
         const appending = smMarketAppending[sourceId] === true
-        const refreshing = smMarketRefreshing[sourceId] === true
         /* 有缓存卡片时保留列表，只在顶部显示错误细条；无缓存才整块错误态。 */
         let body = null
         if (skills.length > 0) {
@@ -3407,23 +3422,7 @@ window.__ModuleLoader__.load({
         h('span', {
             className: 'sm-source-block-count',
             style: { fontSize: 'calc(var(--sm-fs) - 2px)', color: 'var(--dsw-alias-label-caption)', whiteSpace: 'nowrap' },
-        }, t('source.skillCount', { count: count })),
-        h('div', {
-            className: 'sm-source-block-actions',
-            style: { marginLeft: 'auto', display: 'inline-flex', alignItems: 'center', gap: '2px', flexShrink: 0 },
-        },
-        h('button', {
-            type: 'button',
-            className: 'sm-icon-btn',
-            'aria-label': t('action.more'),
-            'data-tip': t('action.more'),
-            'aria-busy': refreshing ? 'true' : undefined,
-            disabled: refreshing,
-            style: { width: '28px', height: '28px' },
-            onClick: function (event) {
-                smMarketOpenMenu('source', event, { sourceId: sourceId, name: name })
-            },
-        }, icon('more', 16)))),
+        }, t('source.skillCount', { count: count }))),
         body,
         cursor !== null && errorText === ''
             ? h('div', {
@@ -3699,10 +3698,10 @@ window.__ModuleLoader__.load({
     /* ------------------------------------------------------------------ *
      * C3 · 管理源弹窗                                                     *
      *                                                                    *
-     * 720px 居中弹窗；源列表支持拖动排序（HTML5 DnD + 4px 阈值）与        *
-     * Alt+↑/↓ 键盘替代。排序结果写入 appState.sourceOrder 并调用          *
-     * PUT /sources/order；dataTransfer key 与拖动钩子来自 00-prelude 的    *
-     * smDragSource。                                                      *
+     * 560px 居中弹窗；内容少时自然收缩。源列表支持拖动排序               *
+     * （HTML5 DnD + 4px 阈值）与 Alt+↑/↓ 键盘替代。排序结果写入          *
+     * appState.sourceOrder 并调用 PUT /sources/order；dataTransfer key    *
+     * 与拖动钩子来自 00-prelude 的 smDragSource。                         *
      * ------------------------------------------------------------------ */
 
     let smSourceDialogDrag = null
@@ -4670,8 +4669,8 @@ window.__ModuleLoader__.load({
             'aria-label': t('source.title'),
             tabIndex: -1,
             style: {
-                width: 'min(720px, 100vw - 32px)',
-                maxHeight: 'min(720px, 100vh - 96px)',
+                width: 'min(560px, 100vw - 32px)',
+                maxHeight: 'min(560px, 100vh - 96px)',
                 boxSizing: 'border-box',
                 display: 'flex',
                 flexDirection: 'column',
@@ -5133,6 +5132,23 @@ window.__ModuleLoader__.load({
         return smText(skill.updateAvailable)
     }
 
+    /**
+     * 界面语言下的技能描述：Host 在市场索引里提供 `descriptionByLocale`
+     * （`{ en, zh }`）时按 `appState.locale` 选择（zh* 用 zh，其它用 en）；
+     * 字段缺失或所选语言为空时回退 SKILL.md 的单语 `description`。
+     * 列表卡片（10-skills.js）与详情页共用这一个选择函数。
+     */
+    function smSkillDescription(skill) {
+        if (skill === null || typeof skill !== 'object') return ''
+        const byLocale = skill.descriptionByLocale
+        if (byLocale !== null && typeof byLocale === 'object') {
+            const locale = String(appState.locale === undefined || appState.locale === null ? '' : appState.locale).toLowerCase()
+            const localized = locale.indexOf('zh') === 0 ? smText(byLocale.zh) : smText(byLocale.en)
+            if (localized !== '') return localized
+        }
+        return smText(skill.description)
+    }
+
     /* ------------------------------------------------------------------ *
      * 详情页。                                                           *
      * ------------------------------------------------------------------ */
@@ -5207,7 +5223,7 @@ window.__ModuleLoader__.load({
         const detail = props.detail
         const skill = props.skill
         const name = smText(skill.name, smText(detail.name, smText(detail.id)))
-        const description = smText(skill.description)
+        const description = smSkillDescription(skill)
         const whenToUse = smText(skill.whenToUse)
         const path = smText(skill.path)
         const writable = !smIsReadonly(skill) && !smIsBuiltin(skill)
@@ -5384,13 +5400,16 @@ window.__ModuleLoader__.load({
                             h(SmMetaRow, { label: t('sort.modified') }, fmtTime(smNumber(skill.mtime, 0))),
                             h(SmMetaRow, { label: t('detail.location'), mono: path !== '' },
                                 path !== ''
-                                    ? h('span', { style: { display: 'inline-flex', alignItems: 'center', justifyContent: 'flex-end', gap: '6px', minWidth: 0 } },
-                                        h('span', { className: 'sm-mono', style: { minWidth: 0, wordBreak: 'break-all' } }, path),
-                                        h(SmButton, { tone: 'ghost', icon: 'copy', style: { height: '24px', flexShrink: 0 }, onClick: function () { smCopyText(path) } }, t('action.copyPath')))
-                                    : t('detail.location.builtin')))),
-                    h(SmCard, { className: 'sm-detail-actions-card' },
-                        h(SmCardTitle, null, t('action.more')),
-                        h('div', { style: { display: 'flex', flexDirection: 'column', gap: '8px' } }, actions))))
+                                    ? h('span', { className: 'sm-detail-path' },
+                                        h('span', { className: 'sm-mono sm-detail-path-text', title: path }, path),
+                                        h('button', {
+                                            type: 'button',
+                                            className: 'sm-icon-btn sm-detail-path-copy',
+                                            'aria-label': t('action.copyPath'),
+                                            'data-tip': t('action.copyPath'),
+                                            onClick: function () { smCopyText(path) },
+                                        }, icon('copy', 16)))
+                                    : t('detail.location.builtin'))))))
         )
     }
 
@@ -5506,7 +5525,7 @@ window.__ModuleLoader__.load({
                 h('div', { className: 'sm-detail-main' },
                     h(SmCard, null,
                         h(SmCardTitle, null, t('market.detailDesc')),
-                        h('div', { style: { color: 'var(--dsw-alias-label-primary)', fontSize: 'var(--sm-fs)', lineHeight: '1.55' } }, smText(market.description, '—'))),
+                        h('div', { style: { color: 'var(--dsw-alias-label-primary)', fontSize: 'var(--sm-fs)', lineHeight: '1.55' } }, smText(smSkillDescription(market), '—'))),
                     h(SmCard, null,
                         h(SmCardTitle, { extra: readme !== ''
                             ? h(SmButton, { tone: 'ghost', icon: 'file', onClick: function () { openModal('preview', { name: name, content: readme }) } }, t('detail.content'))
@@ -5611,6 +5630,7 @@ window.__ModuleLoader__.load({
      * 宽度档（契约 §5.3 / §7.7）：                                        *
      *   488  new-skill / import-skill / install / add-source             *
      *   480  update / uninstall / delete / confirm-remove-source         *
+     *   560  管理源列表（30-source-dialog 自绘，本文件预留同档）          *
      *   720  edit-content / preview                                      *
      * 无阴影、遮罩透明、Escape 分层、dialogStack 式的最上层优先。         *
      * ------------------------------------------------------------------ */
@@ -5997,10 +6017,29 @@ window.__ModuleLoader__.load({
         }
         smTooltipState.target = null
         smTooltipState.label = ''
-        if (smTooltipState.node !== null) {
+        if (smTooltipState.node !== null && smTooltipState.node !== undefined) {
+            /* 样式表里 `.sm-tooltip.visible` 会把 opacity 拉回 1，必须移除。 */
+            if (smTooltipState.node.classList !== null && smTooltipState.node.classList !== undefined &&
+                typeof smTooltipState.node.classList.remove === 'function') {
+                smTooltipState.node.classList.remove('visible')
+                smTooltipState.node.classList.remove('show')
+            }
             smTooltipState.node.style.opacity = '0'
             smTooltipState.node.style.visibility = 'hidden'
         }
+    }
+
+    /** 目标被卸载时 mouseout 不会触发：渲染提交后主动核对一次。 */
+    function smHideTooltipIfTargetGone() {
+        const target = smTooltipState.target
+        if (target === null || target === undefined) return
+        if (typeof document === 'undefined' || document === null) {
+            smHideTooltip()
+            return
+        }
+        const body = document.body
+        if (body !== null && body !== undefined && typeof body.contains === 'function' && body.contains(target)) return
+        smHideTooltip()
     }
 
     function smPlaceTooltip() {
@@ -6069,8 +6108,16 @@ window.__ModuleLoader__.load({
         return null
     }
 
+    /** 每次渲染提交后核对 hover 目标是否还在 DOM 中（卸载后 mouseout 不触发）。 */
+    function SmTooltipGuard() {
+        useEffect(function () {
+            smHideTooltipIfTargetGone()
+        })
+        return null
+    }
+
     function renderTooltipLayer() {
-        return h(SmTooltipLifecycle)
+        return h(Fragment, null, h(SmTooltipLifecycle), h(SmTooltipGuard))
     }
 
     /* ------------------------------------------------------------------ *
@@ -6079,7 +6126,9 @@ window.__ModuleLoader__.load({
 
     function SmDialogFrame(props) {
         const confirm = props.confirm === true
-        const width = props.width === 720 ? 720 : (props.width === 480 ? 480 : 488)
+        /* 四档：480 确认 / 488 表单 / 560 管理源列表 / 720 大内容。 */
+        const width = props.width === 720 ? 720
+            : (props.width === 560 ? 560 : (props.width === 480 ? 480 : 488))
         const layerIndex = typeof props.layerIndex === 'number' ? props.layerIndex : 0
         const boxRef = useRef(null)
         const close = function () {
@@ -6120,9 +6169,11 @@ window.__ModuleLoader__.load({
             }
         }
 
-        const widthStyle = width === 480
-            ? 'min(480px, calc(100vw - 32px))'
-            : (width === 720 ? 'min(720px, 100%)' : 'min(488px, 100%)')
+        /* 每档都不超过视口（两侧各留 16px），窄窗口下跟着 100vw - 32px 收缩。 */
+        const widthStyle = 'min(' + String(width) + 'px, calc(100vw - 32px))'
+        const maxHeightStyle = width === 720
+            ? 'min(720px, calc(100vh - 96px))'
+            : (width === 560 ? 'min(560px, calc(100vh - 96px))' : 'calc(100vh - 48px)')
 
         return h('div', {
             className: 'sm-dialog-mask sm-modal-backdrop',
@@ -6143,7 +6194,9 @@ window.__ModuleLoader__.load({
             onKeyDown: onKeyDown,
             style: {
                 width: widthStyle,
-                maxHeight: width === 720 ? 'min(720px, calc(100vh - 96px))' : 'calc(100vh - 48px)',
+                maxWidth: 'calc(100vw - 32px)',
+                maxHeight: maxHeightStyle,
+                boxSizing: 'border-box',
                 display: 'flex',
                 flexDirection: 'column',
                 overflow: 'hidden',
@@ -7403,6 +7456,7 @@ window.__ModuleLoader__.load({
     }
 
     function openDiagnosticsDrawer() {
+        smHideTooltip()
         if (!smDiagnostics.open) {
             smDiagnostics.open = true
             smLockScroll()
@@ -9650,7 +9704,6 @@ textarea.sm-input.sm-edit-body {
 }
 
 .sm-detail-meta,
-.sm-detail-actions-card,
 .sm-detail-content,
 .sm-detail-when,
 .sm-detail-desc,
@@ -9677,6 +9730,34 @@ textarea.sm-input.sm-edit-body {
   word-break: break-all;
   color: var(--dsw-alias-label-primary);
   font-size: calc(var(--sm-fs) - 1px);
+}
+
+/* Location row: one line within the right column, ellipsis when it does
+ * not fit; the full path is exposed through the native title tooltip. */
+.sm-detail-path {
+  display: inline-flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 4px;
+  min-width: 0;
+  max-width: 100%;
+}
+
+.sm-detail-path-text {
+  min-width: 0;
+  max-width: 100%;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* 24×24 copy icon button; hover inherits the native .sm-icon-btn spec
+ * (bg-layer-1 + label-primary). */
+.sm-detail-path-copy {
+  width: 24px;
+  height: 24px;
+  padding: 4px;
+  flex-shrink: 0;
 }
 
 /* Detail panel card (distinct from .sm-card-item). */
@@ -10075,8 +10156,9 @@ textarea.sm-input.sm-edit-body {
  * ------------------------------------------------------------------ */
 
 .sm-source-dialog {
-  width: min(720px, 100vw - 32px);
-  max-height: min(720px, 100vh - 96px);
+  /* DSH 实测三档 480 / 488 / 720；管理源是窄列表，取 560 居中，内容少时自然收缩。 */
+  width: min(560px, 100vw - 32px);
+  max-height: min(560px, 100vh - 96px);
   border-radius: var(--dsw-radius-panel);
   border: 0.5px solid var(--dsw-alias-border-inverted);
   box-shadow: none;

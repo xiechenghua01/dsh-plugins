@@ -1951,7 +1951,6 @@ textarea.sm-input.sm-edit-body {
 }
 
 .sm-detail-meta,
-.sm-detail-actions-card,
 .sm-detail-content,
 .sm-detail-when,
 .sm-detail-desc,
@@ -1978,6 +1977,34 @@ textarea.sm-input.sm-edit-body {
   word-break: break-all;
   color: var(--dsw-alias-label-primary);
   font-size: calc(var(--sm-fs) - 1px);
+}
+
+/* Location row: one line within the right column, ellipsis when it does
+ * not fit; the full path is exposed through the native title tooltip. */
+.sm-detail-path {
+  display: inline-flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 4px;
+  min-width: 0;
+  max-width: 100%;
+}
+
+.sm-detail-path-text {
+  min-width: 0;
+  max-width: 100%;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* 24×24 copy icon button; hover inherits the native .sm-icon-btn spec
+ * (bg-layer-1 + label-primary). */
+.sm-detail-path-copy {
+  width: 24px;
+  height: 24px;
+  padding: 4px;
+  flex-shrink: 0;
 }
 
 /* Detail panel card (distinct from .sm-card-item). */
@@ -2376,8 +2403,9 @@ textarea.sm-input.sm-edit-body {
  * ------------------------------------------------------------------ */
 
 .sm-source-dialog {
-  width: min(720px, 100vw - 32px);
-  max-height: min(720px, 100vh - 96px);
+  /* DSH 实测三档 480 / 488 / 720；管理源是窄列表，取 560 居中，内容少时自然收缩。 */
+  width: min(560px, 100vw - 32px);
+  max-height: min(560px, 100vh - 96px);
   border-radius: var(--dsw-radius-panel);
   border: 0.5px solid var(--dsw-alias-border-inverted);
   box-shadow: none;

@@ -28,7 +28,7 @@ import {
   resolveCwd,
   scanAll,
 } from './lib/scan.mjs'
-import { MarketIndexError, validateIndex } from './lib/market-index.mjs'
+import { MarketIndexError, localizedPair, validateIndex } from './lib/market-index.mjs'
 import { createIndexFetcher } from './lib/fetch-index.mjs'
 import { compareVersions, satisfiesRange } from './lib/compat.mjs'
 import { defaultVersionOf as defaultMarketVersion, searchBySource } from './lib/search.mjs'
@@ -325,6 +325,15 @@ function localized(value) {
   return ''
 }
 
+/**
+ * Optional `descriptionByLocale` spread for a market view. Legacy plain-string
+ * descriptions carry no locale information, so the field is omitted entirely.
+ */
+function descriptionByLocaleField(value) {
+  const pair = localizedPair(value)
+  return pair === null ? {} : { descriptionByLocale: pair }
+}
+
 function indexOfResult(result) {
   if (!isObject(result)) return result
   if (result.index !== undefined) return result.index
@@ -407,6 +416,7 @@ function marketSkillView(entry, context) {
     name: typeof entry?.name === 'string' ? entry.name : '',
     title: localized(entry?.title) || (typeof entry?.name === 'string' ? entry.name : ''),
     description: localized(entry?.description),
+    ...descriptionByLocaleField(entry?.description),
     version: typeof version?.version === 'string' ? version.version : '',
     tags,
     author: typeof entry?.author === 'string' ? entry.author : '',
@@ -476,6 +486,7 @@ function marketListView(entry, context) {
     name: typeof entry?.name === 'string' ? entry.name : '',
     version: typeof version?.version === 'string' ? version.version : '',
     description: localized(entry?.description),
+    ...descriptionByLocaleField(entry?.description),
     tags,
     installed: installed !== undefined,
     installedVersion,
@@ -783,6 +794,58 @@ export function apply(ctx, config) {
   const state = createState({ home: settings.home !== '' ? settings.home : undefined })
   const indexFetcher = createIndexFetcher()
   const fetchIndex = indexFetcher.fetchIndex
+
+  /**
+   * Installed views need each install record's market index entry to expose the optional
+   * `descriptionByLocale`. Indexes come from the same 10-minute cache `/market` uses, so
+   * the usual case is a memory hit. A slow source must not delay `/installed`: the read is
+   * raced against a short budget, while the underlying fetch keeps running and warms the
+   * cache for the next request. A source that failed is retried after a short back-off.
+   */
+  const DESCRIPTION_WAIT_MS = 2000
+  const DESCRIPTION_RETRY_MS = 60_000
+  const DESCRIPTION_TIMEOUT = Symbol('skill-manager:description-timeout')
+  const descriptionIndexFailures = new Map()
+
+  const readMarketIndexes = async (sources, refresh = false) => {
+    const list = Array.isArray(sources) ? sources : []
+    const now = Date.now()
+    const results = await Promise.all(list.map(async (source) => {
+      if (!isObject(source) || typeof source.id !== 'string' || source.id === '') return null
+      if (typeof source.url !== 'string' || source.url === '') return null
+      const failedAt = descriptionIndexFailures.get(source.id)
+      if (!refresh && failedAt !== undefined && now - failedAt < DESCRIPTION_RETRY_MS) return null
+
+      let timer
+      const timeout = new Promise((resolve) => {
+        timer = setTimeout(() => resolve(DESCRIPTION_TIMEOUT), DESCRIPTION_WAIT_MS)
+        if (typeof timer.unref === 'function') timer.unref()
+      })
+      const pending = fetchIndex(source.url, { refresh })
+      // Track a failure that happens *after* the short wait gave up, so a dead source
+      // backs off instead of costing every later `/installed` its full budget.
+      pending.then(
+        () => descriptionIndexFailures.delete(source.id),
+        () => descriptionIndexFailures.set(source.id, Date.now()),
+      )
+      try {
+        const result = await Promise.race([pending, timeout])
+        if (result === DESCRIPTION_TIMEOUT) return null
+        // `fetchIndex` keeps the last good index when a refresh fails; that is still the
+        // best description we have, so only the index shape decides.
+        const index = normalizeIndex(result, source.url)
+        if (!isObject(index) || !Array.isArray(index.skills)) return null
+        descriptionIndexFailures.delete(source.id)
+        return { sourceId: source.id, skills: index.skills }
+      } catch {
+        descriptionIndexFailures.set(source.id, Date.now())
+        return null
+      } finally {
+        clearTimeout(timer)
+      }
+    }))
+    return results.filter((entry) => entry !== null)
+  }
   // Automatic update checks must use the same compatibility rules as installs, otherwise
   // they would prompt for versions the installer refuses (and vice versa).
   const updateChecker = createUpdateChecker({
@@ -1007,17 +1070,19 @@ export function apply(ctx, config) {
   route('GET', `${API_PREFIX}/installed`, async (req) => {
     const query = queryOf(req)
     const cwd = await resolveCwd(ctx, query.cwd || settings.cwd)
-    const [installed, sources, updates, storedOrder] = await Promise.all([
+    const sources = await readSources(state)
+    const [installed, updates, storedOrder, marketIndexes] = await Promise.all([
       readInstalled(state),
-      readSources(state),
       Promise.resolve(updateStateOf(updateChecker)),
       readSourceOrder(),
+      readMarketIndexes(sources, truthyFlag(query.refresh)),
     ])
     const scan = await scanAll(ctx, cwd, {
       force: truthyFlag(query.refresh),
       installed,
       sources,
       updates,
+      marketIndexes,
     })
     const skills = scan.skills.map(skillView)
     return {
@@ -1044,10 +1109,12 @@ export function apply(ctx, config) {
     const cwd = await resolveCwd(ctx, query.cwd || settings.cwd)
     const path = requireString(query.path, 'path')
     const [installed, sources] = await Promise.all([readInstalled(state), readSources(state)])
+    const marketIndexes = await readMarketIndexes(sources)
     const detail = await readSkillDetail(ctx, path, cwd, {
       installed,
       sources,
       updates: updateStateOf(updateChecker),
+      marketIndexes,
     })
     // Contract §3.2: the detail route returns the same key set as `GET /installed`,
     // including the `author` / `whenToUse` `string | null` placeholders.

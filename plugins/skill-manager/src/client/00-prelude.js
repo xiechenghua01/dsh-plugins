@@ -646,6 +646,9 @@
     }
 
     function setState(patch) {
+        /* 任何状态变化都可能替换掉当前 hover 的节点。tooltip 挂在 <body>
+         * 上，目标卸载后 mouseout 不会触发，所以这里必须先主动隐藏。 */
+        if (typeof smHideTooltip === 'function') smHideTooltip()
         if (patch !== null && typeof patch === 'object') Object.assign(appState, patch)
         rerender()
     }
@@ -1777,6 +1780,9 @@
      * ------------------------------------------------------------------ */
 
     let tipNode = null
+    /* Last rendered shell signature (view + tab); used to hide the tooltip
+     * when list <-> detail switches even if a caller bypassed setState. */
+    let smRenderedShell = null
 
     function closestTipNode(event) {
         const target = event !== null && event !== undefined ? event.target : null
@@ -1808,6 +1814,18 @@
         }
     }
 
+    /* 统一入口：任何点击（行、Tab、工具栏、状态图标、菜单项）都先收起
+     * 提示语，不用逐个 onClick 补。 */
+    function handlePageTipDown() {
+        tipNode = null
+        if (typeof smHideTooltip === 'function') smHideTooltip()
+    }
+
+    /** 主动清理：hover 目标已从文档卸载时收起提示语。 */
+    function smHideTipIfTargetGone() {
+        if (typeof smHideTooltipIfTargetGone === 'function') smHideTooltipIfTargetGone()
+    }
+
     function renderPage(props) {
         const source = props !== null && typeof props === 'object' ? props : {}
         if (typeof source.t === 'function') boundT = source.t
@@ -1818,7 +1836,16 @@
         const rootListeners = {
             onMouseOver: handlePageTipOver,
             onMouseOut: handlePageTipOut,
+            onMouseDown: handlePageTipDown,
         }
+        /* list <-> detail / skills <-> market 切换时主动收起提示语。 */
+        const shell = (appState.view === 'detail' ? 'detail' : 'list') + ':' + String(appState.tab)
+        if (smRenderedShell !== null && smRenderedShell !== shell) {
+            tipNode = null
+            if (typeof smHideTooltip === 'function') smHideTooltip()
+        }
+        smRenderedShell = shell
+        smHideTipIfTargetGone()
         if (appState.view === 'detail' && typeof renderDetailPage === 'function') {
             return h('div', Object.assign({ className: 'sm-root sm-root-detail', style: rootStyle }, rootListeners),
                 h('div', { className: 'sm-page sm-page-detail' }, renderDetailPage()),

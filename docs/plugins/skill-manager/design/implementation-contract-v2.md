@@ -410,8 +410,10 @@ shield  database  git  image  script  puzzle  package  user  users  sliders
 
 ```css
 .sm-source-dialog {
-  width: min(720px, 100vw - 32px);
-  max-height: min(720px, 100vh - 96px);
+  /* DSH 实测是三档 480 / 488 / 720；管理源是窄列表 + 表单，取 560 居中，
+   * 内容少时靠 max-height 自然收缩，不用固定高度。 */
+  width: min(560px, 100vw - 32px);
+  max-height: min(560px, 100vh - 96px);
   border-radius: var(--dsw-radius-panel);
   border: .5px solid var(--dsw-alias-border-inverted);
   box-shadow: none;
@@ -436,6 +438,7 @@ shield  database  git  image  script  puzzle  package  user  users  sliders
 | 表单（新建/导入/添加源/安装） | `min(488px, 100%)` | `--dsw-radius-panel` |
 | 确认（更新/卸载/删除） | `min(480px, 100vw - 32px)` | `--dsw-radius-xl` |
 | 大内容（编辑/预览） | `min(720px, 100%)` | `--dsw-radius-panel` |
+| 管理源列表 | `min(560px, 100vw - 32px)` | `--dsw-radius-panel` |
 
 ### 7.8 原生交互反馈
 

@@ -424,6 +424,23 @@
         return smText(skill.updateAvailable)
     }
 
+    /**
+     * 界面语言下的技能描述：Host 在市场索引里提供 `descriptionByLocale`
+     * （`{ en, zh }`）时按 `appState.locale` 选择（zh* 用 zh，其它用 en）；
+     * 字段缺失或所选语言为空时回退 SKILL.md 的单语 `description`。
+     * 列表卡片（10-skills.js）与详情页共用这一个选择函数。
+     */
+    function smSkillDescription(skill) {
+        if (skill === null || typeof skill !== 'object') return ''
+        const byLocale = skill.descriptionByLocale
+        if (byLocale !== null && typeof byLocale === 'object') {
+            const locale = String(appState.locale === undefined || appState.locale === null ? '' : appState.locale).toLowerCase()
+            const localized = locale.indexOf('zh') === 0 ? smText(byLocale.zh) : smText(byLocale.en)
+            if (localized !== '') return localized
+        }
+        return smText(skill.description)
+    }
+
     /* ------------------------------------------------------------------ *
      * 详情页。                                                           *
      * ------------------------------------------------------------------ */
@@ -498,7 +515,7 @@
         const detail = props.detail
         const skill = props.skill
         const name = smText(skill.name, smText(detail.name, smText(detail.id)))
-        const description = smText(skill.description)
+        const description = smSkillDescription(skill)
         const whenToUse = smText(skill.whenToUse)
         const path = smText(skill.path)
         const writable = !smIsReadonly(skill) && !smIsBuiltin(skill)
@@ -675,13 +692,16 @@
                             h(SmMetaRow, { label: t('sort.modified') }, fmtTime(smNumber(skill.mtime, 0))),
                             h(SmMetaRow, { label: t('detail.location'), mono: path !== '' },
                                 path !== ''
-                                    ? h('span', { style: { display: 'inline-flex', alignItems: 'center', justifyContent: 'flex-end', gap: '6px', minWidth: 0 } },
-                                        h('span', { className: 'sm-mono', style: { minWidth: 0, wordBreak: 'break-all' } }, path),
-                                        h(SmButton, { tone: 'ghost', icon: 'copy', style: { height: '24px', flexShrink: 0 }, onClick: function () { smCopyText(path) } }, t('action.copyPath')))
-                                    : t('detail.location.builtin')))),
-                    h(SmCard, { className: 'sm-detail-actions-card' },
-                        h(SmCardTitle, null, t('action.more')),
-                        h('div', { style: { display: 'flex', flexDirection: 'column', gap: '8px' } }, actions))))
+                                    ? h('span', { className: 'sm-detail-path' },
+                                        h('span', { className: 'sm-mono sm-detail-path-text', title: path }, path),
+                                        h('button', {
+                                            type: 'button',
+                                            className: 'sm-icon-btn sm-detail-path-copy',
+                                            'aria-label': t('action.copyPath'),
+                                            'data-tip': t('action.copyPath'),
+                                            onClick: function () { smCopyText(path) },
+                                        }, icon('copy', 16)))
+                                    : t('detail.location.builtin'))))))
         )
     }
 
@@ -797,7 +817,7 @@
                 h('div', { className: 'sm-detail-main' },
                     h(SmCard, null,
                         h(SmCardTitle, null, t('market.detailDesc')),
-                        h('div', { style: { color: 'var(--dsw-alias-label-primary)', fontSize: 'var(--sm-fs)', lineHeight: '1.55' } }, smText(market.description, '—'))),
+                        h('div', { style: { color: 'var(--dsw-alias-label-primary)', fontSize: 'var(--sm-fs)', lineHeight: '1.55' } }, smText(smSkillDescription(market), '—'))),
                     h(SmCard, null,
                         h(SmCardTitle, { extra: readme !== ''
                             ? h(SmButton, { tone: 'ghost', icon: 'file', onClick: function () { openModal('preview', { name: name, content: readme }) } }, t('detail.content'))

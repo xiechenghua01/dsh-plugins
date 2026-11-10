@@ -4,6 +4,7 @@
      * 宽度档（契约 §5.3 / §7.7）：                                        *
      *   488  new-skill / import-skill / install / add-source             *
      *   480  update / uninstall / delete / confirm-remove-source         *
+     *   560  管理源列表（30-source-dialog 自绘，本文件预留同档）          *
      *   720  edit-content / preview                                      *
      * 无阴影、遮罩透明、Escape 分层、dialogStack 式的最上层优先。         *
      * ------------------------------------------------------------------ */
@@ -390,10 +391,29 @@
         }
         smTooltipState.target = null
         smTooltipState.label = ''
-        if (smTooltipState.node !== null) {
+        if (smTooltipState.node !== null && smTooltipState.node !== undefined) {
+            /* 样式表里 `.sm-tooltip.visible` 会把 opacity 拉回 1，必须移除。 */
+            if (smTooltipState.node.classList !== null && smTooltipState.node.classList !== undefined &&
+                typeof smTooltipState.node.classList.remove === 'function') {
+                smTooltipState.node.classList.remove('visible')
+                smTooltipState.node.classList.remove('show')
+            }
             smTooltipState.node.style.opacity = '0'
             smTooltipState.node.style.visibility = 'hidden'
         }
+    }
+
+    /** 目标被卸载时 mouseout 不会触发：渲染提交后主动核对一次。 */
+    function smHideTooltipIfTargetGone() {
+        const target = smTooltipState.target
+        if (target === null || target === undefined) return
+        if (typeof document === 'undefined' || document === null) {
+            smHideTooltip()
+            return
+        }
+        const body = document.body
+        if (body !== null && body !== undefined && typeof body.contains === 'function' && body.contains(target)) return
+        smHideTooltip()
     }
 
     function smPlaceTooltip() {
@@ -462,8 +482,16 @@
         return null
     }
 
+    /** 每次渲染提交后核对 hover 目标是否还在 DOM 中（卸载后 mouseout 不触发）。 */
+    function SmTooltipGuard() {
+        useEffect(function () {
+            smHideTooltipIfTargetGone()
+        })
+        return null
+    }
+
     function renderTooltipLayer() {
-        return h(SmTooltipLifecycle)
+        return h(Fragment, null, h(SmTooltipLifecycle), h(SmTooltipGuard))
     }
 
     /* ------------------------------------------------------------------ *
@@ -472,7 +500,9 @@
 
     function SmDialogFrame(props) {
         const confirm = props.confirm === true
-        const width = props.width === 720 ? 720 : (props.width === 480 ? 480 : 488)
+        /* 四档：480 确认 / 488 表单 / 560 管理源列表 / 720 大内容。 */
+        const width = props.width === 720 ? 720
+            : (props.width === 560 ? 560 : (props.width === 480 ? 480 : 488))
         const layerIndex = typeof props.layerIndex === 'number' ? props.layerIndex : 0
         const boxRef = useRef(null)
         const close = function () {
@@ -513,9 +543,11 @@
             }
         }
 
-        const widthStyle = width === 480
-            ? 'min(480px, calc(100vw - 32px))'
-            : (width === 720 ? 'min(720px, 100%)' : 'min(488px, 100%)')
+        /* 每档都不超过视口（两侧各留 16px），窄窗口下跟着 100vw - 32px 收缩。 */
+        const widthStyle = 'min(' + String(width) + 'px, calc(100vw - 32px))'
+        const maxHeightStyle = width === 720
+            ? 'min(720px, calc(100vh - 96px))'
+            : (width === 560 ? 'min(560px, calc(100vh - 96px))' : 'calc(100vh - 48px)')
 
         return h('div', {
             className: 'sm-dialog-mask sm-modal-backdrop',
@@ -536,7 +568,9 @@
             onKeyDown: onKeyDown,
             style: {
                 width: widthStyle,
-                maxHeight: width === 720 ? 'min(720px, calc(100vh - 96px))' : 'calc(100vh - 48px)',
+                maxWidth: 'calc(100vw - 32px)',
+                maxHeight: maxHeightStyle,
+                boxSizing: 'border-box',
                 display: 'flex',
                 flexDirection: 'column',
                 overflow: 'hidden',
@@ -1796,6 +1830,7 @@
     }
 
     function openDiagnosticsDrawer() {
+        smHideTooltip()
         if (!smDiagnostics.open) {
             smDiagnostics.open = true
             smLockScroll()

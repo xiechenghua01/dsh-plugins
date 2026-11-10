@@ -572,7 +572,10 @@
         const broken = skill.status === 'broken' || skill.status === 'invalid'
         const readonly = skill.writable === false
         const updateVersion = skillUpdateVersion(skill)
-        const description = typeof skill.description === 'string' ? skill.description : ''
+        // Locale-aware description when the market index carries both languages.
+        const description = typeof smSkillDescription === 'function'
+            ? smSkillDescription(skill)
+            : (typeof skill.description === 'string' ? skill.description : '')
         const badges = []
         /* Upgrade badge sits first in the tag bar (interaction spec §4.2). */
         if (updateVersion !== '') {
