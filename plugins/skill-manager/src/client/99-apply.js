@@ -87,7 +87,7 @@
       ctx.effect(() => {
         if (typeof document === 'undefined' || document === null) return () => {}
         const style = document.createElement('style')
-        style.dataset.plugin = '@xiechenghua01/dsh-skill-manager'
+        style.dataset.plugin = '@chengze/dsh-skill-manager'
         style.textContent = STYLES
         const head = document.head !== undefined && document.head !== null ? document.head : document.documentElement
         if (head === undefined || head === null) return () => {}

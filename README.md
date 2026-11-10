@@ -8,7 +8,7 @@ A monorepo of DeepSeek Harness plugins **and** a plugin market index source that
 
 | 项目 / Item | 值 / Value |
 | --- | --- |
-| 索引地址 / Index URL | `https://cdn.jsdelivr.net/gh/xiechenghua01/dsh-plugins@main/index.json` |
+| 索引地址 / Index URL | `https://cdn.jsdelivr.net/npm/@chengze/dsh-plugins-market/index.json` |
 | 索引格式 / Index format | format 1（`@deepseek-ai/dsh-plugin-market-index` 校验） |
 | 仓库 / Repository | <https://github.com/xiechenghua01/dsh-plugins> |
 | 兼容 / Compatibility | DSH `>=0.2.1-rc.5 <0.3.0`（各插件在 `engines.dsh` 中声明） |
@@ -18,7 +18,7 @@ A monorepo of DeepSeek Harness plugins **and** a plugin market index source that
 
 | 插件 / Plugin | 版本 | 说明 / Description |
 | --- | --- | --- |
-| [`@xiechenghua01/dsh-session-stats`](plugins/session-stats) | 1.1.11 | 会话统计面板：token 消耗、会话数、成本与预算、按模型的每日 Token 趋势（可悬停/切换视角）、各会话用量、CPU/内存、日志占用。 Session stats panel: tokens, sessions, cost & budget, per-model daily token trend with hover and view toggle, per-session usage, CPU/memory, log footprint. |
+| [`@chengze/dsh-session-stats`](plugins/session-stats) | 1.1.11 | 会话统计面板：token 消耗、会话数、成本与预算、按模型的每日 Token 趋势（可悬停/切换视角）、各会话用量、CPU/内存、日志占用。 Session stats panel: tokens, sessions, cost & budget, per-model daily token trend with hover and view toggle, per-session usage, CPU/memory, log footprint. |
 
 ## 使用 / Usage
 
@@ -30,20 +30,20 @@ A monorepo of DeepSeek Harness plugins **and** a plugin market index source that
 3. 在 **Discover** 中添加索引地址：
 
    ```text
-   https://cdn.jsdelivr.net/gh/xiechenghua01/dsh-plugins@main/index.json
+   https://cdn.jsdelivr.net/npm/@chengze/dsh-plugins-market/index.json
    ```
 
-4. 在 Discover 里选择插件安装。Harness 会把索引中的版本解析成固定 commit 的安装目标，
-   再交给 `plugin_manager`：
+4. 在 Discover 里选择插件安装。插件本身也已发布到 npm，Harness 会把索引里的版本解析成
+   一个普通的包安装目标，再交给 `plugin_manager`：
 
    ```text
-   git+https://github.com/xiechenghua01/dsh-plugins.git#<40-hex commit>&path:/plugins/<plugin>
+   @chengze/dsh-session-stats@1.1.12
    ```
 
 ### 2. 直接把安装目标交给 `plugin_manager`
 
 ```text
-plugin_manager action=install_bundle target=git+https://github.com/xiechenghua01/dsh-plugins.git#<commit>&path:/plugins/session-stats
+plugin_manager action=install_bundle target=@chengze/dsh-session-stats@1.1.12
 ```
 
 当前版本对应的完整 target 见索引 JSON 的 `versions[].source`，或运行 `pnpm run validate` 打印。
@@ -86,26 +86,40 @@ pnpm install          # 安装校验用 devDependencies
 pnpm test             # = check-plugins + validate-index
 ```
 
-发布一个插件的新版本（索引把版本固定到 commit，所以分两步）：
+发布一个插件的新版本（代码进 npm，索引进 index.json，发布由 CI 执行）：
 
 ```bash
 # 1. 改插件代码，并把 plugins/<slug>/package.json 的 version 升级；提交
 git add -A && git commit -m "feat(session-stats): ..."
 
-# 2. 生成并提交 index.json（固定到刚才那个 commit），然后推送
+# 2. 生成并提交 index.json
 pnpm run release session-stats
+
+# 3. 推送到 main
 git push origin main
 ```
 
+4. 到 GitHub Actions 里手动运行 **publish** workflow（不确定就先勾 `dry-run`）。
+
+发布放在 CI 里，是因为本账号的 2FA 只有安全密钥：`npm publish` 只接受 6 位 TOTP，终端里没有码可输。workflow 会跑测试、补齐 registry 上缺失的插件包、再发索引包，最后刷新 jsDelivr 缓存。
+
 `pnpm run release` 的行为：
 
-- 工作区必须干净（索引固定的是 HEAD，先把插件改动提交）；
-- 已发布版本是 no-op（同一 commit，或该版本后插件随包发布的文件没有改动）；
-  同一版本下改动过可安装文件会拒绝，要求先升版本（只改 README/CONTRACT 等文档不算）；
+- 工作区必须干净（索引记录 HEAD 作为发布时的 commit）；
+- npm 条目以版本号为准：版本已在索引里就是 no-op，要发布新内容必须先升版本
+  （npm 也会拒绝覆盖同版本）；
 - 用 Harness 自己的 `@deepseek-ai/dsh-plugin-market-index` 校验生成的索引，失败不落盘；
 - 追加版本条目后提交 `index.json`，并打印每个新版本的 `plugin_manager` 安装目标。
 
 只预览不写文件：`pnpm run release --dry-run`；写文件但不提交：`--no-commit`。
+
+publish workflow 内部调用 `pnpm run publish:npm`：先补齐 registry 上缺的插件包，再发索引包；如果 `index.json`
+指向了 registry 上不存在的版本，它直接拒绝，避免把坏索引推上线。索引包若遇到版本已占用，会自动改用 UTC
+时间戳发布，所以 CI 不需要往仓库里回写版本号。
+
+首次发布需要先在仓库 Settings → Secrets 里配置 `NPM_TOKEN`：一个勾了 **Read and write**（不是
+`stage only`）+ bypass 2FA 的 granular token。四个包都发出去之后，到每个包的 npm 设置里添加
+trusted publisher（指向本仓库与 `publish.yml`），然后删掉这个 secret —— 之后全程走 OIDC，无需长期令牌。
 
 新增插件：复制一个 `plugins/<slug>/` 为模板，改 `package.json` / `market.json` /
 `cordis.patch.yml` / `client.js` 里的包名与行 id，补 `engines.dsh`，然后提交并用
@@ -113,9 +127,11 @@ git push origin main
 
 ## 注意 / Notes
 
-- 索引里的版本固定到 40 位 commit SHA，因此已发布版本不可变；要撤换代码请发新版本。
-- 索引经 jsDelivr 分发（`cdn.jsdelivr.net`），直接返回 200、不 redirect，满足 Harness 的要求。
-  `@main` 是分支地址，默认缓存 12 小时；CI 在推送到 `main` 后会调用 purge 端点刷新，通常
-  几分钟内生效。已发布版本固定到 commit，不受影响。
+- 索引里的版本以 npm 版本为身份，已发布版本不可变（registry 拒绝覆盖同版本）；要撤换代码请发新版本。
+- 索引是一个 npm 包（`@chengze/dsh-plugins-market`），经 jsDelivr 从 npm registry 取，
+  直接 200、不 redirect，满足 Harness 的要求。地址不带版本号时走 npm 的 `latest`，默认缓存
+  7 天；CI 在推送到 `main` 后会调用 purge 端点刷新，通常几分钟内生效。
+- 插件本身也是 npm 包，安装就是 `pnpm add <name>@<version>`，走安装端配置的 registry。
+  不再克隆整个仓库，也不再依赖 github.com 的可用性。
 - 本仓库必须保持 **public**：索引通过匿名 https 读取；私有仓库需要凭据，Discover 不会带凭据。
 - 索引 `name`、`version`、`repository` 是索引的声明；真正装上的内容以被安装包的 manifest 为准。

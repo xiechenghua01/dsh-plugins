@@ -1,5 +1,5 @@
 /**
- * Session Stats — Host half of the `@xiechenghua01/dsh-session-stats` bundle.
+ * Session Stats — Host half of the `@chengze/dsh-session-stats` bundle.
  *
  * Routes (registered on `ctx.webServer`, behind the `ctx.connection` trust fence):
  *   GET /session-stats/overview?days=N   -> the `overview` payload (CONTRACT §4)

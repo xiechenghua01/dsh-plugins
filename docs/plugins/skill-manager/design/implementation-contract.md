@@ -12,7 +12,7 @@
 
 | 项 | 值 |
 | --- | --- |
-| 包名 | `@xiechenghua01/dsh-skill-manager` |
+| 包名 | `@chengze/dsh-skill-manager` |
 | Loader 行 id | `skill-manager` |
 | `main` 槽 key | `skill-manager` |
 | `sidebar.panellist` id | `skill-manager`，`order: 20` |
@@ -67,7 +67,7 @@ plugins/skill-manager/
 
 ```js
 window.__ModuleLoader__.load({
-  id: '@xiechenghua01/dsh-skill-manager',
+  id: '@chengze/dsh-skill-manager',
   factory(require) {
     const React = require('react')
     const h = React.createElement
@@ -457,7 +457,7 @@ function renderPage()                 // 返回整页 React 元素（99-apply �
 ## 9. 硬约束清单（`pnpm test` 会检查）
 
 - [ ] `index.js` 只 import `node:` 与相对路径；导出 `name`、`inject`（数组）、`apply(ctx, config)`。
-- [ ] `client.js` 含 `window.__ModuleLoader__.load(`，`id: '@xiechenghua01/dsh-skill-manager'`；只 `require('react')`；不含 `@deepseek-ai/` 字符串。
+- [ ] `client.js` 含 `window.__ModuleLoader__.load(`，`id: '@chengze/dsh-skill-manager'`；只 `require('react')`；不含 `@deepseek-ai/` 字符串。
 - [ ] `client.js` 中 `const zh = {` 与 `const en = {` 各一次，`    }` 收尾，键集一致、值非空、全部被引用。
 - [ ] `locale/en.json` 与 `locale/zh.json` 键集一致、无空值。
 - [ ] `market.json` 的 `category`/`labels` 已在根 `market.json` 声明（见 §10）。

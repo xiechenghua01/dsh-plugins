@@ -7,7 +7,7 @@ A statistics panel for the DeepSeek Harness Web GUI, derived from the machine's 
 logs: token usage, session counts, estimated cost and budget, a token timeline, per-session
 usage, CPU/memory runtime, and log footprint.
 
-- 包名：`@xiechenghua01/dsh-session-stats`，属于 [dsh-plugins](../../README.md) 仓库与插件索引源
+- 包名：`@chengze/dsh-session-stats`，属于 [dsh-plugins](../../README.md) 仓库与插件索引源
 - 面板入口：侧边栏底部、账号菜单上方「会话统计」按钮（`sidebar.footer.action`，order 10）→ 主面板 `main` / key `session-stats`
 - 数据来源：`ctx.sessionQuery` 读取的会话日志 + `ctx.sessionPersistence` 的日志体积 + `process`/`os` 采样
 - 两个受连接鉴权保护的路由：`GET /session-stats/overview`、`GET /session-stats/system`
@@ -39,21 +39,20 @@ usage, CPU/memory runtime, and log footprint.
 2. 在 **Discover** 标签中添加索引地址：
 
    ```text
-   https://cdn.jsdelivr.net/gh/xiechenghua01/dsh-plugins@main/index.json
+   https://cdn.jsdelivr.net/npm/@chengze/dsh-plugins-market/index.json
    ```
 
 3. 在 Discover 里找到 **Session Stats** 安装。
 
 ### 直接给出安装目标
 
-索引里每个版本都固定到 commit，可把下面的 target 交给 `plugin_manager`：
+插件已发布到 npm，可把下面的 target 交给 `plugin_manager`：
 
 ```text
-plugin_manager action=install_bundle target=git+https://github.com/xiechenghua01/dsh-plugins.git#<40 位 commit>&path:/plugins/session-stats
+plugin_manager action=install_bundle target=@chengze/dsh-session-stats@1.1.12
 ```
 
-`pnpm run release` 会打印当前版本对应的完整 target；也可在索引 JSON 的
-`versions[].source` 里查到同一个 commit。
+`pnpm run release` 会打印当前版本对应的完整 target。
 
 ### 本地开发目录（开发态，改动即时生效）
 
@@ -69,7 +68,7 @@ plugin_manager action=install_bundle target=/absolute/path/to/dsh-plugins/plugin
 
 1. 确认返回 `application: applied` 且 `warnings` 为空；若返回 `restart-required` 则重启 Harness。
 2. 刷新 Web GUI，左侧栏出现「会话统计」图标，点击打开面板。
-3. 卸载：`plugin_manager action=remove_bundle target=@xiechenghua01/dsh-session-stats`。
+3. 卸载：`plugin_manager action=remove_bundle target=@chengze/dsh-session-stats`。
 
 ## 配置
 
@@ -78,7 +77,7 @@ plugin_manager action=install_bundle target=/absolute/path/to/dsh-plugins/plugin
 ```yaml
 - insert:
     - id: session-stats-panel
-      name: '@xiechenghua01/dsh-session-stats'
+      name: '@chengze/dsh-session-stats'
       config:
         days: 30                                  # 时间线窗口（1..365）
         budget: { amount: 10, currency: USD, period: monthly }  # monthly|weekly|daily|total

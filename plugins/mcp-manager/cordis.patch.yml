@@ -7,4 +7,4 @@
 # install one at a time).
 - insert:
     - id: mcp-manager
-      name: '@xiechenghua01/dsh-mcp-manager'
+      name: '@chengze/dsh-mcp-manager'

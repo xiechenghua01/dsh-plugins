@@ -2,11 +2,11 @@
 /**
  * Publish the current state of one or more plugins to the plugin market index.
  *
- * A release pins the exact commit that is HEAD when it runs, so the index is published in two
- * steps: commit the plugin change first, then run this script, which appends one version entry
- * per selected plugin and commits `index.json`. Re-running for an already published version is a
- * no-op; releasing changed code under a version that is already published is refused, so a
- * version is always bumped before its commit changes.
+ * Plugins install from npm, so a release records the version numbers that `pnpm run publish:npm`
+ * will push: bump a plugin's `version`, commit it, then run this script, which appends one version
+ * entry per selected plugin and commits `index.json`. Re-running for a version already in the
+ * index is a no-op; changing code without bumping the version cannot ship, because npm refuses to
+ * overwrite a published version.
  *
  * Usage: node scripts/release.mjs [plugin ...] [--dry-run] [--no-commit]
  */
@@ -91,20 +91,27 @@ async function main() {
     const version = plugin.manifest.version
     const existing = entry.versions.find((item) => item.version === version)
     if (existing !== undefined) {
-      if (existing.source.commit === head) {
-        console.log(`${entry.name}@${version} is already published at ${short(head)}; nothing to do`)
-        continue
-      }
-      if (gitDiffClean(existing.source.commit, head, shippedPaths(plugin))) {
-        console.log(
-          `${entry.name}@${version} is already published at ${short(existing.source.commit)} and the files it ships are unchanged since; nothing to do`,
+      if (existing.source.type === 'git' && existing.source.commit !== undefined) {
+        // 历史条目仍按 commit 判断，保持原有严格性；新条目不再产生这种来源。
+        if (existing.source.commit === head) {
+          console.log(`${entry.name}@${version} is already published at ${short(head)}; nothing to do`)
+          continue
+        }
+        if (gitDiffClean(existing.source.commit, head, shippedPaths(plugin))) {
+          console.log(
+            `${entry.name}@${version} is already published at ${short(existing.source.commit)} and the files it ships are unchanged since; nothing to do`,
+          )
+          continue
+        }
+        throw new Error(
+          `${entry.name}@${version} is already published at ${short(existing.source.commit)}; ` +
+            `bump "version" in ${plugin.relDir}/package.json to release changed code`,
         )
-        continue
       }
-      throw new Error(
-        `${entry.name}@${version} is already published at ${short(existing.source.commit)}; ` +
-          `bump "version" in ${plugin.relDir}/package.json to release changed code`,
-      )
+      // npm 条目：版本本身就是唯一身份，同版本已在索引里即视为已发布。
+      // 内容是否真的变过由 npm registry 的同版本不可覆盖来兜底（publish 会报 EPUBLISHCONFLICT）。
+      console.log(`${entry.name}@${version} is already in the index; nothing to do`)
+      continue
     }
     const versionEntry = buildVersionEntry(config, plugin, head, publishedAt)
     entry.versions.push(versionEntry)

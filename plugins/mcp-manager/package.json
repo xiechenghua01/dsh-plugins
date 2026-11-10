@@ -1,7 +1,9 @@
 {
-  "name": "@xiechenghua01/dsh-mcp-manager",
-  "version": "0.7.4",
-  "private": true,
+  "name": "@chengze/dsh-mcp-manager",
+  "version": "0.7.5",
+  "publishConfig": {
+    "access": "public"
+  },
   "type": "module",
   "description": "MCP server manager for the DeepSeek Harness Web GUI: a Settings page that adds, edits, enables, disables, deletes and connection-tests global (home-layer) and workspace (profile-layer) MCP servers, with structured and JSON editing plus a machine-wide server library for reuse across workspaces.",
   "license": "MIT",

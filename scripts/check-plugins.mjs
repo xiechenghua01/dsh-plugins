@@ -80,7 +80,10 @@ async function checkPlugin(plugin, config, report) {
 
   if (!PACKAGE_NAME.test(manifest.name)) report(`package name ${JSON.stringify(manifest.name)} is not a valid npm package name`)
   if (semver.valid(manifest.version) === null) report(`version ${JSON.stringify(manifest.version)} is not an exact SemVer version`)
-  if (manifest.private !== true) report('package.json must keep "private": true; plugins install from Git and are never published to npm')
+  if (manifest.private === true) report('package.json must not be "private": true; plugins are published to npm and installed from there')
+  if (manifest.publishConfig?.access !== 'public') {
+    report('package.json publishConfig.access must be "public"; scoped packages default to restricted')
+  }
 
   if (typeof manifest.exports?.['.'] !== 'string') report('package.json exports["."] must name the host entry file')
 

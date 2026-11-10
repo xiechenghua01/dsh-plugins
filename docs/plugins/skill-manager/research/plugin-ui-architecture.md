@@ -1,6 +1,6 @@
 # DSH 插件 UI 架构研究：左侧栏入口 + 全屏主面板页
 
-> 目标读者：实现 `@xiechenghua01/dsh-skill-manager`（左侧栏入口 + 全屏 Skill 管理页）的开发者。
+> 目标读者：实现 `@chengze/dsh-skill-manager`（左侧栏入口 + 全屏 Skill 管理页）的开发者。
 > 结论先行：**注册 `main`（keyed）+ `sidebar.panellist`（list），两侧共用同一个 id/key；`order: 20`；不要用 `sidebar.footer.action`。**
 >
 > 调研对象：本机安装的 DeepSeek Harness 桌面应用（`/Applications/DeepSeek Harness.app/Contents/Resources/app.asar`，下文简写 `<asar>`）与本仓库两个第三方插件。
@@ -231,7 +231,7 @@ icon.svg
 
 ```json
 {
-  "name": "@xiechenghua01/dsh-skill-manager",
+  "name": "@chengze/dsh-skill-manager",
   "version": "0.1.0",
   "private": true,
   "type": "module",
@@ -282,7 +282,7 @@ icon.svg
 # 行 id `skill-manager` 只属于本包，不得与 shipped 行（如 session-stats、plugins、schedules）冲突。
 - insert:
     - id: skill-manager
-      name: '@xiechenghua01/dsh-skill-manager'
+      name: '@chengze/dsh-skill-manager'
       config:
         # 可选：额外的 skill 根目录（默认读 DSH 自身的 skill 目录，见 §6）
         roots: []
@@ -381,7 +381,7 @@ export function apply(ctx, config) {
 
 ```js
 window.__ModuleLoader__.load({
-  id: '@xiechenghua01/dsh-skill-manager',
+  id: '@chengze/dsh-skill-manager',
   factory(require) {
     const React = require('react')
     const h = React.createElement
@@ -540,7 +540,7 @@ window.__ModuleLoader__.load({
         ctx.effect(() => {
           if (typeof document === 'undefined' || document === null) return () => {}
           const style = document.createElement('style')
-          style.dataset.plugin = '@xiechenghua01/dsh-skill-manager'
+          style.dataset.plugin = '@chengze/dsh-skill-manager'
           style.textContent = CSS
           const head = document.head !== undefined && document.head !== null ? document.head : document.documentElement
           if (head === undefined || head === null) return () => {}
@@ -785,7 +785,7 @@ node --check plugins/skill-manager/index.js
 node --check plugins/skill-manager/client.js
 
 # 2. Loader 行是否被识别（不安装也能查已安装的；安装后必须查）
-#    cordis_inspect_query host/Config listConfigs { name: "@xiechenghua01/dsh-skill-manager" }
+#    cordis_inspect_query host/Config listConfigs { name: "@chengze/dsh-skill-manager" }
 #    → entries[0] 应出现 patchId: skill-manager；entry 查询会带 packageDir（可 read 校验 bundle 路径）
 
 # 3. client slot 注册（页面已连接时）

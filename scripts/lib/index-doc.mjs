@@ -2,10 +2,10 @@
  * Assembling and checking the plugin market index (format 1) from the repository's declarations.
  *
  * The index is generated, never hand-edited: display metadata comes from `market.json`, versions
- * from each plugin's `package.json`, and a version's Git source pins the commit that was HEAD when
- * it was released. Validation uses the same `@deepseek-ai/dsh-plugin-market-index` package the
- * DeepSeek Harness plugin market reads indexes with, so a published index cannot drift from the
- * reader's rules.
+ * from each plugin's `package.json`, and a version's source is npm, which installs as
+ * `<name>@<version>` from the registry. Validation uses the same
+ * `@deepseek-ai/dsh-plugin-market-index` package the DeepSeek Harness plugin market reads indexes
+ * with, so a published index cannot drift from the reader's rules.
  */
 import { marketInstallTarget, parseMarketIndex } from '@deepseek-ai/dsh-plugin-market-index'
 import { pluginSource } from './repo.mjs'
@@ -37,7 +37,7 @@ export function buildPluginEntry(config, plugin, versions) {
   return entry
 }
 
-/** One version entry pinning a plugin's current package version to a commit. */
+/** One version entry: the package version plus where to install it from. */
 export function buildVersionEntry(config, plugin, commit, publishedAt) {
   const entry = {
     version: plugin.manifest.version,

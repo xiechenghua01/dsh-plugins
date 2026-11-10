@@ -3,7 +3,7 @@
 > 配套规范：[skill-market-index-spec.md](../product/skill-market-index-spec.md)
 > 调研：[skill-market-index-research.md](../research/skill-market-index-research.md)
 > 产品文档：[skills-manager-prd.md](../product/skills-manager-prd.md)
-> 目标：在 Skills 管理插件（`@xiechenghua01/dsh-skills-manager`）里实现「市场源读取 + 搜索 + 安装 + 自动检查更新（手动更新）」，并让第三方开发者按规范发布索引。
+> 目标：在 Skills 管理插件（`@chengze/dsh-skills-manager`）里实现「市场源读取 + 搜索 + 安装 + 自动检查更新（手动更新）」，并让第三方开发者按规范发布索引。
 
 ---
 

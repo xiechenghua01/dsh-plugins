@@ -1,6 +1,6 @@
 # Skill Manager 插件 — 技术落地方案（v1）
 
-> 目标包：`@xiechenghua01/dsh-skill-manager`
+> 目标包：`@chengze/dsh-skill-manager`
 > 形态：左侧栏 `sidebar.panellist` 入口 + `main` 全屏面板页（与 Plugins / 自动化任务同级）
 > 依据：`docs/plugins/skill-manager/design/skill-manager-interaction.md`（交互稿）、`docs/plugins/skill-manager/research/`（调研）、
 > 仓库现有插件 `plugins/session-stats` 与 `plugins/mcp-manager` 的实测契约
@@ -81,7 +81,7 @@ plugins/skill-manager/
 
 ```json
 {
-  "name": "@xiechenghua01/dsh-skill-manager",
+  "name": "@chengze/dsh-skill-manager",
   "version": "0.1.0",
   "private": true,
   "type": "module",
@@ -114,7 +114,7 @@ plugins/skill-manager/
 ```yaml
 - insert:
     - id: skill-manager
-      name: '@xiechenghua01/dsh-skill-manager'
+      name: '@chengze/dsh-skill-manager'
 ```
 
 > 行 id 不能与 `session-stats` / `mcp-manager` / shipped 行冲突；`skill-manager` 未占用。
@@ -304,7 +304,7 @@ type Issue = {
 
 ```js
 window.__ModuleLoader__.load({
-  id: '@xiechenghua01/dsh-skill-manager',
+  id: '@chengze/dsh-skill-manager',
   factory(require) {
     const React = require('react')
     const h = React.createElement

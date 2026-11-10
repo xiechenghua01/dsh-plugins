@@ -1,5 +1,5 @@
 window.__ModuleLoader__.load({
-  id: '@xiechenghua01/dsh-session-stats',
+  id: '@chengze/dsh-session-stats',
   factory(require) {
     const React = require('react')
     const h = React.createElement
@@ -2087,7 +2087,7 @@ window.__ModuleLoader__.load({
         ctx.effect(() => {
           if (typeof document === 'undefined' || document === null) return () => {}
           const style = document.createElement('style')
-          style.dataset.plugin = '@xiechenghua01/dsh-session-stats'
+          style.dataset.plugin = '@chengze/dsh-session-stats'
           style.textContent = CSS
           const head = document.head !== undefined && document.head !== null ? document.head : document.documentElement
           if (head === undefined || head === null) return () => {}

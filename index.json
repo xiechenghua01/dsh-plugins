@@ -94,7 +94,7 @@
   },
   "plugins": [
     {
-      "name": "@xiechenghua01/dsh-mcp-manager",
+      "name": "@chengze/dsh-mcp-manager",
       "author": "xiechenghua01",
       "homepage": "https://github.com/xiechenghua01/dsh-plugins/tree/main/plugins/mcp-manager",
       "repository": {
@@ -369,6 +369,16 @@
           "engines": {
             "dsh": ">=0.2.1-rc.5 <0.3.0"
           }
+        },
+        {
+          "version": "0.7.5",
+          "publishTimestamp": 1794301929,
+          "source": {
+            "type": "npm"
+          },
+          "engines": {
+            "dsh": ">=0.2.1-rc.5 <0.3.0"
+          }
         }
       ],
       "title": {
@@ -382,7 +392,7 @@
       "icon": "plugins/mcp-manager/icon.svg"
     },
     {
-      "name": "@xiechenghua01/dsh-session-stats",
+      "name": "@chengze/dsh-session-stats",
       "author": "xiechenghua01",
       "homepage": "https://github.com/xiechenghua01/dsh-plugins/tree/main/plugins/session-stats",
       "repository": {
@@ -581,6 +591,16 @@
           "engines": {
             "dsh": ">=0.2.1-rc.5 <0.3.0"
           }
+        },
+        {
+          "version": "1.1.12",
+          "publishTimestamp": 1794301929,
+          "source": {
+            "type": "npm"
+          },
+          "engines": {
+            "dsh": ">=0.2.1-rc.5 <0.3.0"
+          }
         }
       ],
       "title": {
@@ -594,7 +614,7 @@
       "icon": "plugins/session-stats/icon.svg"
     },
     {
-      "name": "@xiechenghua01/dsh-skill-manager",
+      "name": "@chengze/dsh-skill-manager",
       "author": "xiechenghua01",
       "homepage": "https://github.com/xiechenghua01/dsh-plugins/tree/main/plugins/skill-manager",
       "repository": {
@@ -669,6 +689,16 @@
             "url": "https://github.com/xiechenghua01/dsh-plugins",
             "commit": "d269f69f9a47986cc30d04fd7c17cdc5b3fc7f40",
             "path": "plugins/skill-manager"
+          },
+          "engines": {
+            "dsh": ">=0.2.1-rc.5 <0.3.0"
+          }
+        },
+        {
+          "version": "0.2.1",
+          "publishTimestamp": 1794301929,
+          "source": {
+            "type": "npm"
           },
           "engines": {
             "dsh": ">=0.2.1-rc.5 <0.3.0"

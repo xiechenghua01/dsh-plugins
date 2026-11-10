@@ -5,7 +5,7 @@ against: DeepSeek Harness `0.2.1-rc.5` (the shipped `dsh` packages inside the de
 session data on the development machine. Read it before changing `index.js` or `client.js`: the
 wire contracts in sections 4 and 5 are what the host and browser halves agree on.
 
-The package is `@xiechenghua01/dsh-session-stats`, served from this repository's plugin market
+The package is `@chengze/dsh-session-stats`, served from this repository's plugin market
 index. Paths below are relative to this plugin directory.
 
 ---
@@ -311,7 +311,7 @@ Deep-merge `config` over `DEFAULTS` (shallow per sub-object is fine). Accept
 
 ```js
 window.__ModuleLoader__.load({
-  id: '@xiechenghua01/dsh-session-stats',
+  id: '@chengze/dsh-session-stats',
   factory(require) {
     const React = require('react')
     const h = React.createElement

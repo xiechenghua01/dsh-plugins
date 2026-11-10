@@ -26,10 +26,10 @@ configured server reusable from any other layer without retyping it.
 
 ## 安装 / Install
 
-本插件随本仓库的插件索引发布：
+本插件已发布到 npm，也可随本仓库的插件索引分发：
 
 ```text
-plugin_manager action=install_bundle target=git+https://github.com/xiechenghua01/dsh-plugins.git#<commit>&path:/plugins/mcp-manager
+plugin_manager action=install_bundle target=@chengze/dsh-mcp-manager@0.7.5
 ```
 
 或把本仓库加为 Discover 的插件索引源后安装。本地开发目录也可直接安装：

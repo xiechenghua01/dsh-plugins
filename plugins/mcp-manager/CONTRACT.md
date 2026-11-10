@@ -1,6 +1,6 @@
 # MCP Manager plugin — implementation contract
 
-`@xiechenghua01/dsh-mcp-manager` adds one Settings page (`设置 → MCP 服务`) that owns the MCP
+`@chengze/dsh-mcp-manager` adds one Settings page (`设置 → MCP 服务`) that owns the MCP
 server rows of this Harness. Read this document before touching `index.js`, `lib/*.mjs` or
 `client.js`: the wire contracts below are what the Host and browser halves agree on, and what the
 parallel work splits rely on.
@@ -495,7 +495,7 @@ Module shape required by the repository checks:
 
 ```js
 window.__ModuleLoader__.load({
-  id: '@xiechenghua01/dsh-mcp-manager',
+  id: '@chengze/dsh-mcp-manager',
   factory(require) {
     const React = require('react')
     const h = React.createElement

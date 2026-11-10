@@ -12,7 +12,7 @@
 
 | 项 | 值 |
 | --- | --- |
-| 包名 | `@xiechenghua01/dsh-skill-manager` |
+| 包名 | `@chengze/dsh-skill-manager` |
 | 版本 | 从 `0.1.2` 升到 **`0.2.0`**（结构不兼容变更） |
 | Loader 行 id | `skill-manager` |
 | `main` 槽 key | `skill-manager` |

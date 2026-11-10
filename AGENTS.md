@@ -72,18 +72,32 @@ every push and pull request. A red check blocks the release.
 
 ## Releasing
 
-The index pins a commit, so a release is always two commits: the plugin change, then the
-generated `index.json`.
+A release touches two registries: npm holds the plugin code, `index.json` holds the catalog. Publishing
+runs in CI (`.github/workflows/publish.yml`), because this account's 2FA is a security key and
+`npm publish` only accepts a 6-digit TOTP — there is no code to type locally.
 
-1. Bump `version` in `plugins/<slug>/package.json` (required — releasing changed code under an
-   already published version is refused; files the package does not ship, such as this repo's
-   Markdown docs, do not require a bump).
+1. Bump `version` in `plugins/<slug>/package.json` (required — npm refuses to overwrite a
+   published version; files the package does not ship, such as this repo's Markdown docs, do not
+   require a bump).
 2. Commit the plugin change.
-3. `pnpm run release <slug>` (omit the slug to release every pending plugin version).
-4. `git push origin main`.
+3. `pnpm run release <slug>` (omit the slug for every pending plugin). It appends one version entry
+   per plugin, validates the document with `@deepseek-ai/dsh-plugin-market-index` before writing,
+   and commits only `index.json`.
+4. Push, then run the **publish** workflow from the Actions tab (`dry-run` first if unsure).
+5. The workflow runs the tests, publishes every plugin version missing from the registry, publishes
+   the catalog, then purges the jsDelivr cache. It refuses to publish the catalog while an indexed
+   plugin version is still missing.
 
-`pnpm run release` refuses a dirty tree, validates the generated document with
-`@deepseek-ai/dsh-plugin-market-index` before writing, and commits only `index.json`.
+The catalog publishes under a UTC timestamp when its declared version is already taken, so CI never
+writes back to the repository and the workflow can be re-run.
+
+First release only: trusted publishing requires the package to already exist, so bootstrap it with an
+`NPM_TOKEN` repository secret — a granular token with **Read and write** (not `stage only`) and
+bypass 2FA. Once all four packages exist, add a trusted publisher on npmjs.com for each one pointing
+at this repository and `publish.yml`, then delete the secret.
+
+`pnpm run release` still refuses a dirty tree, because it records HEAD as `publishTimestamp`
+provenance.
 
 ## Verifying against a real Harness
 
@@ -93,7 +107,7 @@ generated `index.json`.
 - Install from the local directory for iteration:
   `plugin_manager action=install_bundle target=<repo>/plugins/<slug>`.
 - Install exactly what the index publishes:
-  `plugin_manager action=install_bundle target=git+https://github.com/xiechenghua01/dsh-plugins.git#<commit>&path:/plugins/<slug>`.
+  `plugin_manager action=install_bundle target=<name>@<version>` — the packages live on npm.
 - After installing, refresh the Web GUI and check the sidebar entry and routes (`401` from an
   unauthenticated curl means a guarded route is registered; `404` means it is not installed).
 - The profile's own `cordis.patch.yml`, applied after bundle layers, is the documented place for
@@ -101,19 +115,23 @@ generated `index.json`.
 
 ## Constraints that cost time if forgotten
 
-- The index URL in `market.json` must stay canonical, `https`, without credentials or fragment,
-  and the Harness refuses redirects. `cdn.jsdelivr.net/gh/...@main/index.json` answers `200`
-  directly with zero redirects (verified), which is why the index is distributed through
-  jsDelivr rather than `raw.githubusercontent.com`. The repository must stay public.
-- jsDelivr caches branch URLs for 12 hours, longer than raw's 5 minutes, so the `purge` job in
-  `.github/workflows/validate.yml` calls
-  `https://purge.jsdelivr.net/gh/<owner>/<repo>@main/index.json` after every push to `main`.
-  Purge is best-effort: if it is throttled, the index still goes live within 12 hours.
+- The index is published on npm as `@chengze/dsh-plugins-market` and read through
+  `https://cdn.jsdelivr.net/npm/@chengze/dsh-plugins-market/index.json`, which answers `200`
+  with zero redirects (verified — the Harness refuses redirects). It is distributed through npm
+  rather than `raw.githubusercontent.com` because jsDelivr pulls npm tarballs from the registry and
+  never touches github.com. The repository must stay public.
+- The unversioned address resolves to npm's `latest` and caches for 7 days, so the `purge` job in
+  `.github/workflows/validate.yml` calls the jsDelivr purge endpoint after every push to `main`.
+  Purge is best-effort: if it is throttled, the index still goes live within 7 days.
 - Relative `icon` references resolve against the index URL, so `market.json` icons are written
-  repository-root-relative (`plugins/<slug>/icon.svg`). That also means icons are served by
-  whichever host serves the index.
-- Index versions are immutable (commit-pinned); fix a bad release with a new version, never by
-  editing an entry.
+  repository-root-relative (`plugins/<slug>/icon.svg`). The published catalog ships those files via
+  its `files` list, which keeps icon URLs inside the npm package instead of pointing at a repo host.
+- Plugins install from npm: `versions[].source` is `{"type":"npm"}`, so the install target is
+  `<name>@<version>`. A git source makes `pnpm` clone the whole monorepo over github.com, which no
+  CDN can accelerate — do not reintroduce one.
+- Index versions are immutable; fix a bad release with a new version, never by editing an entry.
+  Git sources were pinned by commit; npm versions are immutable because the registry refuses to
+  overwrite a published version.
 - `version` in `package.json` and the latest index version are expected to differ between a
   plugin change and its release commit; that is normal.
 - UI plugins style with `--dsw-*` tokens only. Data-visualization series may use the eight

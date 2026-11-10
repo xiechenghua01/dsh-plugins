@@ -1,4 +1,4 @@
-# @xiechenghua01/dsh-skill-manager
+# @chengze/dsh-skill-manager
 
 DSH Web GUI 的**技能管理**插件：左侧栏入口 + 全屏面板，按安装位置管理本地技能，
 诊断「文件存在但未生效」的技能，并可从符合规范的技能市场索引安装、更新、卸载技能。
@@ -39,7 +39,7 @@ plugin_manager action=install_bundle target=<repo>/plugins/skill-manager
 刷新 Web GUI 后，左侧栏出现「技能」。卸载：
 
 ```bash
-plugin_manager action=remove_bundle target=@xiechenghua01/dsh-skill-manager
+plugin_manager action=remove_bundle target=@chengze/dsh-skill-manager
 ```
 
 ## 开发

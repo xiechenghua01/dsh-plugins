@@ -70,9 +70,19 @@ export async function listPlugins() {
   return plugins
 }
 
-/** The Git install source of one plugin at one commit. */
-export function pluginSource(config, plugin, commit) {
-  return { type: 'git', url: config.repository, commit, path: plugin.relDir }
+/**
+ * The install source of one plugin version.
+ *
+ * Plugins are published to npm and installed with `pnpm add <name>@<version>`, so the source
+ * carries no registry: the installing client's configured registry is used, which keeps mirrors
+ * working. A git source would force `pnpm add git+https://…#<commit>&path:/…`, which clones the
+ * whole monorepo over github.com and cannot be served by a CDN — the reason this moved to npm.
+ *
+ * `commit` stays in the signature because callers still pin the release commit for
+ * `publishTimestamp` bookkeeping; npm versions are immutable on their own terms.
+ */
+export function pluginSource(_config, _plugin, _commit) {
+  return { type: 'npm' }
 }
 
 /** Run one command synchronously and return its trimmed stdout; throws with stderr on failure. */

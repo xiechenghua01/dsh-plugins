@@ -3,7 +3,7 @@
 > 状态：设计稿 v1（待评审）
 > 依据：`docs/plugins/skill-manager/research/skill-subsystem.md`、`docs/plugins/skill-manager/research/plugin-ui-architecture.md`、
 > `docs/plugins/skill-manager/research/ui-patterns.md`（真实界面实测）、`docs/plugins/skill-manager/research/README.md`（一页事实）
-> 目标插件：`@xiechenghua01/dsh-skill-manager`，左侧栏入口 + 全屏面板页
+> 目标插件：`@chengze/dsh-skill-manager`，左侧栏入口 + 全屏面板页
 > 视觉基线：DSH 暗色主题，仅使用 `--dsw-*` token；几何取 `ui-patterns.md` 实测值
 
 ---

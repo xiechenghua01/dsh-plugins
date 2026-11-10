@@ -1,6 +1,6 @@
 # skill-manager 实现契约（实测记录）
 
-本文件记录 `@xiechenghua01/dsh-skill-manager` 的实现契约与验证事实。
+本文件记录 `@chengze/dsh-skill-manager` 的实现契约与验证事实。
 产品与设计来源：[PRD](../../docs/plugins/skill-manager/product/skills-manager-prd.md)、
 [索引规范](../../docs/plugins/skill-manager/product/skill-market-index-spec.md)、
 [实现契约](../../docs/plugins/skill-manager/design/implementation-contract.md)。
@@ -11,7 +11,7 @@
 
 | 项 | 值 |
 | --- | --- |
-| 包名 | `@xiechenghua01/dsh-skill-manager` |
+| 包名 | `@chengze/dsh-skill-manager` |
 | Loader 行 id | `skill-manager` |
 | `main` key | `skill-manager` |
 | `sidebar.panellist` | `id: skill-manager`，`order: 20` |

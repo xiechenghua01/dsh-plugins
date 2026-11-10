@@ -1,0 +1,69 @@
+name: publish
+
+# 发布链路：插件包先进 npm，索引包最后进——索引指向的版本必须先真实存在。
+#
+# 认证分两段：
+#   1. 首次发布：npm 的 OIDC trusted publishing 只对「已存在」的包生效，所以第一次必须先
+#      配 NPM_TOKEN（granular token，勾 bypass 2FA，权限选 Read and write 而不是 stage only）。
+#   2. 首次成功后：到每个包的 Settings → Trusted publishing 添加本 workflow，然后删掉
+#      NPM_TOKEN。npm CLI 会优先用 OIDC，删掉 secret 后不需要再改这里。
+#
+# 本仓库的 2FA 只有安全密钥（WebAuthn），CLI 的 --otp 只认 6 位 TOTP，所以本地直接
+# npm publish 是发不出去的——这是走 CI 的主要原因。
+
+on:
+  workflow_dispatch:
+    inputs:
+      dry-run:
+        description: 只演练打包与校验，不真正发布
+        type: boolean
+        default: false
+
+permissions:
+  contents: read
+  id-token: write # OIDC trusted publishing 必需
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          # 索引校验要读取历史 commit，浅克隆会失败。
+          fetch-depth: 0
+
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 11.22.0
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+          registry-url: https://registry.npmjs.org
+
+      - name: Upgrade npm for trusted publishing
+        # OIDC trusted publishing 需要 npm >= 11.5.1，Node 22 自带的是 10.x。
+        run: npm install -g npm@11
+
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm test
+
+      - name: Dry run
+        if: ${{ inputs.dry-run }}
+        run: pnpm run publish:npm -- --dry-run
+
+      - name: Publish to npm
+        if: ${{ !inputs.dry-run }}
+        run: pnpm run publish:npm
+        env:
+          # 首次发布用它引导；配好 trusted publisher 后删掉这个 secret 即可。
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+
+      - name: Purge jsDelivr cache
+        # npm 的无版本地址走 latest，缓存 7 天；发完立即刷新，Discover 才能马上看到新版本。
+        if: ${{ !inputs.dry-run }}
+        run: |
+          PKG=$(python3 -c "import json;print(json.load(open('package.json'))['name'])")
+          curl -fsS -m 30 "https://purge.jsdelivr.net/npm/${PKG}/index.json" \
+            || echo "::warning::jsDelivr purge 失败，索引将在 7 天内自然过期"

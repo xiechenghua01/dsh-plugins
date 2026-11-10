@@ -1,18 +1,35 @@
 {
-  "name": "dsh-plugins",
-  "version": "0.0.0",
-  "private": true,
+  "name": "@chengze/dsh-plugins-market",
+  "version": "1.0.0",
   "type": "module",
-  "description": "DeepSeek Harness plugin monorepo and plugin market index source",
+  "description": "DeepSeek Harness plugin market index (format 1) and the monorepo that generates it",
   "license": "MIT",
   "repository": {
     "type": "git",
     "url": "git+https://github.com/xiechenghua01/dsh-plugins.git"
   },
+  "keywords": [
+    "dsh",
+    "dsh-plugin",
+    "deepseek-harness",
+    "catalog",
+    "plugin-market"
+  ],
+  "exports": {
+    "./index.json": "./index.json"
+  },
+  "files": [
+    "index.json",
+    "plugins/*/icon.svg"
+  ],
+  "publishConfig": {
+    "access": "public"
+  },
   "scripts": {
     "check": "node scripts/check-plugins.mjs",
     "validate": "node scripts/validate-index.mjs",
     "release": "node scripts/release.mjs",
+    "publish:npm": "node scripts/publish.mjs",
     "test": "node scripts/check-plugins.mjs && node scripts/validate-index.mjs"
   },
   "devDependencies": {

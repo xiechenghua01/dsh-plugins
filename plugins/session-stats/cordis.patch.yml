@@ -4,7 +4,7 @@
 # declares a `session-stats` row for @deepseek-ai/dsh-session-stats.
 - insert:
     - id: session-stats-panel
-      name: '@xiechenghua01/dsh-session-stats'
+      name: '@chengze/dsh-session-stats'
       config:
         days: 30
         budget:

@@ -5,4 +5,4 @@
 # shipped rows nor the other plugins in this repository.
 - insert:
     - id: skill-manager
-      name: '@xiechenghua01/dsh-skill-manager'
+      name: '@chengze/dsh-skill-manager'

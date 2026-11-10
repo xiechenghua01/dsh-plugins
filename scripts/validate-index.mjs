@@ -51,11 +51,16 @@ async function main() {
     }
     for (const version of entry.versions) {
       const label = `${entry.name}@${version.version}`
-      if (version.source.path !== plugin.relDir) {
-        problems.push(`${label}: source.path must be ${plugin.relDir}`)
-      }
-      if (!hasCommit(version.source.commit)) {
-        problems.push(`${label}: pins ${version.source.commit}, which is not in this Git history`)
+      // Git entries are historical (the catalog now installs from npm); they still have to pin
+      // a commit this clone has, or the recorded provenance is a lie. npm entries carry no
+      // commit, because the registry's own version immutability replaces that guarantee.
+      if (version.source.type === 'git') {
+        if (version.source.path !== plugin.relDir) {
+          problems.push(`${label}: source.path must be ${plugin.relDir}`)
+        }
+        if (!hasCommit(version.source.commit)) {
+          problems.push(`${label}: pins ${version.source.commit}, which is not in this Git history`)
+        }
       }
     }
   }

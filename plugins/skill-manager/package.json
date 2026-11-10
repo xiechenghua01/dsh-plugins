@@ -1,7 +1,9 @@
 {
-  "name": "@xiechenghua01/dsh-skill-manager",
-  "version": "0.2.0",
-  "private": true,
+  "name": "@chengze/dsh-skill-manager",
+  "version": "0.2.1",
+  "publishConfig": {
+    "access": "public"
+  },
   "type": "module",
   "description": "Skills manager for the DeepSeek Harness Web GUI: a sidebar panel that lists skills by install location, edits and disables them, diagnoses silently skipped skills, and installs skills from market indexes.",
   "license": "MIT",

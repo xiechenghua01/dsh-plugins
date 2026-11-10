@@ -26,15 +26,17 @@ jobs:
       - run: pnpm test
 
   purge:
-    # The index is served from a jsDelivr branch URL, which caches for 12 hours;
-    # refresh it right after main changes so new versions show up in Discover.
+    # The index is read from a jsDelivr npm address, whose unversioned form caches for
+    # 7 days; refresh it right after main changes so new versions show up in Discover.
     if: github.event_name == 'push' && github.ref == 'refs/heads/main'
     needs: validate
     runs-on: ubuntu-latest
     steps:
-      - name: Purge jsDelivr branch cache
+      - uses: actions/checkout@v4
+      - name: Purge jsDelivr cache
         # Best-effort: a throttled or failing purge must not fail the build, because
-        # the index still goes live on its own within the 12-hour cache window.
+        # the index still goes live on its own within the 7-day cache window.
         run: |
-          curl -fsS -m 30 "https://purge.jsdelivr.net/gh/${GITHUB_REPOSITORY}@main/index.json" \
-            || echo "::warning::jsDelivr purge failed; the index will refresh within 12 hours"
+          PKG=$(python3 -c "import json;print(json.load(open('package.json'))['name'])")
+          curl -fsS -m 30 "https://purge.jsdelivr.net/npm/${PKG}/index.json" \
+            || echo "::warning::jsDelivr purge failed; the index will refresh within 7 days"

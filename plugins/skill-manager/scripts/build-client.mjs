@@ -21,7 +21,7 @@ const PLUGIN = resolve(HERE, '..')
 const SRC = join(PLUGIN, 'src', 'client')
 const OUT = join(PLUGIN, 'client.js')
 
-const PACKAGE_NAME = '@xiechenghua01/dsh-skill-manager'
+const PACKAGE_NAME = '@chengze/dsh-skill-manager'
 const HEADER = `window.__ModuleLoader__.load({
   id: '${PACKAGE_NAME}',
   factory(require) {

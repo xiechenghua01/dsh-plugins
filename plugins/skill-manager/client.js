@@ -1,5 +1,5 @@
 window.__ModuleLoader__.load({
-  id: '@xiechenghua01/dsh-skill-manager',
+  id: '@chengze/dsh-skill-manager',
   factory(require) {
     const React = require('react')
     const h = React.createElement
@@ -11694,7 +11694,7 @@ textarea.sm-input.sm-edit-body {
       ctx.effect(() => {
         if (typeof document === 'undefined' || document === null) return () => {}
         const style = document.createElement('style')
-        style.dataset.plugin = '@xiechenghua01/dsh-skill-manager'
+        style.dataset.plugin = '@chengze/dsh-skill-manager'
         style.textContent = STYLES
         const head = document.head !== undefined && document.head !== null ? document.head : document.documentElement
         if (head === undefined || head === null) return () => {}

@@ -7,7 +7,7 @@
 // Visible strings go through the client locale service; colors use `--dsw-*` tokens only.
 
 window.__ModuleLoader__.load({
-  id: '@xiechenghua01/dsh-mcp-manager',
+  id: '@chengze/dsh-mcp-manager',
   factory(require) {
     const React = require('react')
     const h = React.createElement
@@ -2656,7 +2656,7 @@ window.__ModuleLoader__.load({
         ctx.effect(() => {
           if (typeof document === 'undefined' || document === null) return () => {}
           const style = document.createElement('style')
-          style.dataset.plugin = '@xiechenghua01/dsh-mcp-manager'
+          style.dataset.plugin = '@chengze/dsh-mcp-manager'
           style.textContent = CSS
           const head = document.head !== undefined && document.head !== null ? document.head : document.documentElement
           if (head === undefined || head === null) return () => {}
