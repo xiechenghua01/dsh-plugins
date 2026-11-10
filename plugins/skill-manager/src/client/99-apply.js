@@ -74,8 +74,10 @@
       } catch {
         /* settings are best effort; the page still works with defaults */
       }
-      await Promise.all([loadSources(), loadInstalled()])
+      /* /updates depends on neither sources nor installed; start it first so all
+       * three requests are in flight together. */
       void loadUpdates()
+      await Promise.all([loadSources(), loadInstalled()])
     }
 
     /** Browser half entry. */

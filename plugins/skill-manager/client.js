@@ -5129,17 +5129,50 @@ window.__ModuleLoader__.load({
      * 详情页。                                                           *
      * ------------------------------------------------------------------ */
 
+    /**
+     * 整页骨架：标题 + 左栏 2 个卡片占位 + 右栏 1 个卡片占位。
+     * 市场详情在拿到 `{ skill, content }` 之前只渲染这一块，避免框架先出、
+     * 内容卡片后补导致的整页跳动。浅色块不带动画，避免加载期额外开销。
+     */
     function SmDetailSkeleton() {
-        const block = function (width, height) {
-            return h('div', { style: { width: width, height: height, borderRadius: '10px', background: 'var(--dsw-alias-bg-layer-2)' } })
+        const block = function (width, height, radius) {
+            return h('div', {
+                style: {
+                    width: width,
+                    height: height,
+                    borderRadius: radius === undefined ? '10px' : radius,
+                    background: 'var(--dsw-alias-bg-layer-2)',
+                },
+            })
         }
-        return h('div', { className: 'sm-detail sm-detail-skeleton', style: { display: 'flex', flexDirection: 'column', gap: '24px' } },
-            h('div', { style: { display: 'flex', alignItems: 'center', gap: '14px' } },
-                block('56px', '56px'),
+        const card = function (key, children) {
+            return h('div', {
+                key: key,
+                style: {
+                    display: 'flex',
+                    flexDirection: 'column',
+                    gap: '12px',
+                    padding: '16px',
+                    borderRadius: '16px',
+                    border: '1px solid var(--dsw-alias-border-l2)',
+                    background: 'var(--dsw-alias-bg-layer-1)',
+                },
+            }, children)
+        }
+        return h('div', {
+            className: 'sm-detail sm-detail-skeleton',
+            'aria-busy': 'true',
+            style: { display: 'flex', flexDirection: 'column', gap: '24px' },
+        },
+            h('div', { style: { display: 'flex', alignItems: 'center', gap: '14px', paddingBottom: '20px', borderBottom: '1px solid var(--dsw-alias-border-l2)' } },
+                block('56px', '56px', '16px'),
                 h('div', { style: { display: 'flex', flexDirection: 'column', gap: '8px' } }, block('220px', '20px'), block('140px', '14px'))),
             h('div', { className: 'sm-detail-body' },
-                h('div', { style: { display: 'flex', flexDirection: 'column', gap: '16px' } }, block('100%', '140px'), block('100%', '220px')),
-                h('div', { style: { display: 'flex', flexDirection: 'column', gap: '16px' } }, block('100%', '180px'), block('100%', '120px'))),
+                h('div', { className: 'sm-detail-main' },
+                    card('desc', block('40%', '16px'), block('100%', '96px')),
+                    card('content', block('32%', '16px'), block('100%', '240px'))),
+                h('div', { className: 'sm-detail-side' },
+                    card('meta', block('50%', '16px'), block('100%', '168px')))),
             h('div', { style: { color: 'var(--dsw-alias-label-secondary)', fontSize: 'calc(var(--sm-fs) - 1px)' } }, t('state.loading')))
     }
 
@@ -5404,7 +5437,9 @@ window.__ModuleLoader__.load({
         const detail = props.detail
         const key = smMarketKey(detail)
         const [data, setData] = useState(props.marketSkill)
-        const [loading, setLoading] = useState(props.marketSkill === null)
+        /* 首帧一律骨架：索引里的 `marketSkill` 只有摘要、没有 SKILL.md 正文，
+         * 若先渲染它，正文卡片会在请求返回后再补进来，造成整页跳动。 */
+        const [loading, setLoading] = useState(true)
         const [error, setError] = useState('')
         const alive = useRef(true)
         const installed = props.installed
@@ -5439,7 +5474,8 @@ window.__ModuleLoader__.load({
             load()
         }, [load])
 
-        if (loading && data === null) {
+        /* 整页骨架 → 整页内容，中间不插入任何卡片。 */
+        if (loading) {
             return h('div', { className: 'sm-detail-page sm-scroll' },
                 h(SmDetailBack, { kind: 'market' }),
                 h(SmDetailSkeleton))
@@ -5453,6 +5489,7 @@ window.__ModuleLoader__.load({
         const market = data.skill !== null && data.skill !== undefined && typeof data.skill === 'object' ? data.skill : data
         /* 详情正文：优先 Host 返回的 SKILL.md 原文（data.content），旧数据回退 README。 */
         const content = smText(data.content, smText(data.readme))
+        const contentError = smText(data.contentError, error)
         const name = smText(market.name, key.name)
         const version = smSkillVersion(market)
         const sourceName = smText(market.sourceName, smText(detail.sourceName, smSourceNameById(smText(market.sourceId, key.sourceId))))
@@ -5515,20 +5552,26 @@ window.__ModuleLoader__.load({
                     h(SmCard, null,
                         h(SmCardTitle, null, t('market.detailDesc')),
                         h('div', { style: { color: 'var(--dsw-alias-label-primary)', fontSize: 'var(--sm-fs)', lineHeight: '1.55' } }, smText(smSkillDescription(market), '—'))),
-                    content !== ''
-                        ? h(SmCard, { className: 'sm-detail-content' },
-                            h(SmCardTitle, { extra: h('button', {
-                                type: 'button',
-                                className: 'sm-icon-btn',
-                                'aria-label': t('action.copy'),
-                                'data-tip': t('action.copy'),
-                                onClick: function () {
-                                    smCopyText(content, t('toast.copied'))
-                                    openModal('preview', { name: name, content: content })
-                                },
-                            }, icon('copy', 16)) }, 'SKILL.md'),
-                            h(SmCodeBlock, { text: content.split('\n').slice(0, 40).join('\n'), maxHeight: '420px' }))
-                        : null),
+                    /* 正文卡片始终占位（即使正文为空），保证骨架与内容页结构一致。 */
+                    h(SmCard, { className: 'sm-detail-content' },
+                        h(SmCardTitle, {
+                            extra: content !== ''
+                                ? h('button', {
+                                    type: 'button',
+                                    className: 'sm-icon-btn',
+                                    'aria-label': t('action.copy'),
+                                    'data-tip': t('action.copy'),
+                                    onClick: function () {
+                                        smCopyText(content, t('toast.copied'))
+                                        openModal('preview', { name: name, content: content })
+                                    },
+                                }, icon('copy', 16))
+                                : null,
+                        }, 'SKILL.md'),
+                        content !== ''
+                            ? h(SmCodeBlock, { text: content.split('\n').slice(0, 40).join('\n'), maxHeight: '420px' })
+                            : h('div', { style: { color: 'var(--dsw-alias-label-secondary)', fontSize: 'calc(var(--sm-fs) - 1px)' } },
+                                contentError !== '' ? t('source.error.fetch') : t('detail.content.empty')))),
                 h('div', { className: 'sm-detail-side' },
                     h(SmCard, null,
                         h(SmCardTitle, {
@@ -11511,8 +11554,10 @@ textarea.sm-input.sm-edit-body {
       } catch {
         /* settings are best effort; the page still works with defaults */
       }
-      await Promise.all([loadSources(), loadInstalled()])
+      /* /updates depends on neither sources nor installed; start it first so all
+       * three requests are in flight together. */
       void loadUpdates()
+      await Promise.all([loadSources(), loadInstalled()])
     }
 
     /** Browser half entry. */
