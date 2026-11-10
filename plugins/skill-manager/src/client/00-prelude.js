@@ -1727,6 +1727,7 @@
                         tone: 'primary',
                         icon: 'plus',
                         className: 'sm-toolbar-btn sm-split-main',
+                        style: { borderRadius: '12px 0 0 12px' },
                         onClick: function () {
                             if (typeof openModal === 'function') openModal('new-skill', {})
                         },
