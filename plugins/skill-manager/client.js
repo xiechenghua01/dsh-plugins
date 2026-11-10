@@ -6809,10 +6809,17 @@ window.__ModuleLoader__.load({
                         })
                     },
                 })
+                // Installing from the market detail keeps the user on that page;
+                // every other entry point still returns to the installed list.
+                const stayInMarketDetail = appState.view === 'detail'
+                    && appState.detail !== null && typeof appState.detail === 'object'
+                    && appState.detail.kind === 'market'
                 closeModal()
-                setState({ tab: 'skills', category: smSaveTargetCategory(location), view: 'list', detail: null })
                 void loadInstalled(true)
                 void loadMarket()
+                if (!stayInMarketDetail) {
+                    setState({ tab: 'skills', category: smSaveTargetCategory(location), view: 'list', detail: null })
+                }
             } catch (failure) {
                 if (timerRef.current !== null) {
                     clearInterval(timerRef.current)
