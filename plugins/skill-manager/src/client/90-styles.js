@@ -131,8 +131,8 @@
   flex: 1 1 auto;
   overflow: hidden;
   --sm-content-max: 960px;
-  /* DSH plugin page puts its h1 28px from the window top. */
-  padding: 28px clamp(20px, 4vw, 48px) 0;
+  /* Keep a little more breathing room above than the plugin page's 28px. */
+  padding: 40px clamp(20px, 4vw, 48px) 0;
 }
 
 /* Header, tabs, list and detail share the same column, so their left
