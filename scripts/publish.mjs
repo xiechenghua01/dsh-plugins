@@ -40,15 +40,33 @@ function isPublished(name, version) {
   return npm(['view', `${name}@${version}`, 'version']).status === 0
 }
 
+/** Versions published (or found already published) by this run; `npm view` lags behind. */
+const justPublished = new Set()
+
 function publish(dir, label) {
   if (dryRun) {
     console.log(`dry run: would publish ${label}`)
     return
   }
-  // stdio 必须是 inherit：账号开了 auth-and-writes 时 npm 要交互式读 OTP，管道会把提示吞掉。
-  const result = spawnSync('npm', ['publish', '--access', 'public', ...otp], { cwd: dir, stdio: 'inherit' })
-  if (result.status !== 0) throw new Error(`npm publish failed for ${label} (see npm output above)`)
-  console.log(`published ${label}`)
+  // 捕获而不是继承：需要看 stderr 判断「版本已存在」，那在重跑和并发下是正常结果。
+  const result = spawnSync('npm', ['publish', '--access', 'public', ...otp], {
+    cwd: dir,
+    encoding: 'utf8',
+  })
+  process.stdout.write(result.stdout ?? '')
+  process.stderr.write(result.stderr ?? '')
+  if (result.status === 0) {
+    console.log(`published ${label}`)
+    justPublished.add(label)
+    return
+  }
+  const stderr = result.stderr ?? ''
+  if (/EPUBLISHCONFLICT|cannot publish over|previously published|already been published/i.test(stderr)) {
+    console.log(`skip ${label} (already on the registry)`)
+    justPublished.add(label)
+    return
+  }
+  throw new Error(`npm publish failed for ${label} (see npm output above)`)
 }
 
 const whoami = npm(['whoami'])
@@ -80,7 +98,10 @@ for (const entry of index.plugins) {
   const npmVersions = entry.versions.filter((item) => item.source?.type === 'npm')
   if (npmVersions.length === 0) continue
   const newest = npmVersions.reduce((a, b) => (semver.gt(b.version, a.version) ? b : a))
-  if (!isPublished(entry.name, newest.version)) missing.push(`${entry.name}@${newest.version}`)
+  const label = `${entry.name}@${newest.version}`
+  // 刚发布成功的版本 `npm view` 还查不到，以本次发布结果为准，否则会把自己拦下来。
+  if (justPublished.has(label)) continue
+  if (!isPublished(entry.name, newest.version)) missing.push(label)
 }
 if (missing.length > 0) {
   if (dryRun) {
