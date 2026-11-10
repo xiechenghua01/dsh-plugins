@@ -634,17 +634,28 @@
             onClick: function () { openModal(removeKind, { skill: skill }) },
         }, removeKind === 'uninstall' ? t('action.uninstall') : t('action.delete')))
 
-        const previewActions = h('div', { style: { display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' } },
+        // Icon-only actions with 300ms tooltips: copy the body, or edit in place.
+        const previewActions = h('div', { style: { display: 'flex', alignItems: 'center', gap: '4px' } },
             contentState === 'ready'
-                ? h(SmButton, { tone: 'ghost', icon: 'file', onClick: function () { openModal('preview', { name: name, content: content }) } }, t('detail.content'))
+                ? h('button', {
+                    type: 'button',
+                    className: 'sm-icon-btn',
+                    'aria-label': t('action.copy'),
+                    'data-tip': t('action.copy'),
+                    onClick: function () {
+                        smCopyText(content, t('toast.copied'))
+                        openModal('preview', { name: name, content: content })
+                    },
+                }, icon('copy', 16))
                 : null,
-            h(SmButton, {
-                tone: 'secondary',
-                icon: 'edit',
+            h('button', {
+                type: 'button',
+                className: 'sm-icon-btn',
+                'aria-label': t('action.edit'),
+                'data-tip': disabled ? t('detail.disabledNote') : (!writable ? readonlyReason : (path === '' ? t('detail.location.builtin') : t('action.edit'))),
                 disabled: disabled || !writable || path === '',
-                tip: disabled ? t('detail.disabledNote') : (!writable ? readonlyReason : (path === '' ? t('detail.location.builtin') : '')),
                 onClick: openEditor,
-            }, t('action.edit')))
+            }, icon('edit', 16)))
 
         const badge = h(SmBadge, { tone: smStatusTone(skill) }, t(statusKey))
 
@@ -670,7 +681,7 @@
                             h('div', { style: { color: 'var(--dsw-alias-label-secondary)', fontSize: 'calc(var(--sm-fs) - 1px)', lineHeight: '1.5' } }, whenToUse))
                         : null,
                     h(SmCard, { className: 'sm-detail-content' },
-                        h(SmCardTitle, { extra: previewActions }, 'SKILL.md · ' + t('detail.content')),
+                        h(SmCardTitle, { extra: previewActions }, 'SKILL.md'),
                         contentState === 'loading'
                             ? h('div', { style: { color: 'var(--dsw-alias-label-secondary)', fontSize: 'calc(var(--sm-fs) - 1px)' } }, t('state.loading'))
                             : contentState === 'error'
@@ -693,7 +704,7 @@
                             h(SmMetaRow, { label: t('detail.location'), mono: path !== '' },
                                 path !== ''
                                     ? h('span', { className: 'sm-detail-path' },
-                                        h('span', { className: 'sm-mono sm-detail-path-text', title: path }, path),
+                                        h('span', { className: 'sm-mono sm-detail-path-text', 'data-tip': path }, path),
                                         h('button', {
                                             type: 'button',
                                             className: 'sm-icon-btn sm-detail-path-copy',
@@ -756,10 +767,12 @@
         }
 
         const market = data.skill !== null && data.skill !== undefined && typeof data.skill === 'object' ? data.skill : data
-        const readme = smText(data.readme)
+        /* 详情正文：优先 Host 返回的 SKILL.md 原文（data.content），旧数据回退 README。 */
+        const content = smText(data.content, smText(data.readme))
         const name = smText(market.name, key.name)
         const version = smSkillVersion(market)
         const sourceName = smText(market.sourceName, smText(detail.sourceName, smSourceNameById(smText(market.sourceId, key.sourceId))))
+        const homepage = smText(market.homepage)
         const installedSkill = installed
         const updateVersion = installedSkill !== null ? smSkillUpdateVersion(installedSkill) : smText(market.updateAvailable)
         const installedNow = installedSkill !== null || market.installed === true
@@ -818,13 +831,20 @@
                     h(SmCard, null,
                         h(SmCardTitle, null, t('market.detailDesc')),
                         h('div', { style: { color: 'var(--dsw-alias-label-primary)', fontSize: 'var(--sm-fs)', lineHeight: '1.55' } }, smText(smSkillDescription(market), '—'))),
-                    h(SmCard, null,
-                        h(SmCardTitle, { extra: readme !== ''
-                            ? h(SmButton, { tone: 'ghost', icon: 'file', onClick: function () { openModal('preview', { name: name, content: readme }) } }, t('detail.content'))
-                            : null }, t('market.readme')),
-                        readme !== ''
-                            ? h(SmCodeBlock, { text: readme.split('\n').slice(0, 40).join('\n'), maxHeight: '420px' })
-                            : h('div', { style: { color: 'var(--dsw-alias-label-caption)', fontSize: 'calc(var(--sm-fs) - 1px)' } }, t('detail.content.empty')))),
+                    content !== ''
+                        ? h(SmCard, { className: 'sm-detail-content' },
+                            h(SmCardTitle, { extra: h('button', {
+                                type: 'button',
+                                className: 'sm-icon-btn',
+                                'aria-label': t('action.copy'),
+                                'data-tip': t('action.copy'),
+                                onClick: function () {
+                                    smCopyText(content, t('toast.copied'))
+                                    openModal('preview', { name: name, content: content })
+                                },
+                            }, icon('copy', 16)) }, 'SKILL.md'),
+                            h(SmCodeBlock, { text: content.split('\n').slice(0, 40).join('\n'), maxHeight: '420px' }))
+                        : null),
                 h('div', { className: 'sm-detail-side' },
                     h(SmCard, null,
                         h(SmCardTitle, null, t('market.source')),
@@ -833,7 +853,18 @@
                             version !== '' ? h(SmMetaRow, { label: t('market.version'), mono: true }, version) : null,
                             smText(market.author) !== '' ? h(SmMetaRow, { label: t('market.author') }, smText(market.author)) : null,
                             smText(market.license) !== '' ? h(SmMetaRow, { label: t('market.license') }, smText(market.license)) : null,
-                            smText(market.homepage) !== '' ? h(SmMetaRow, { label: t('market.homepage'), mono: true }, smText(market.homepage)) : null,
+                            homepage !== ''
+                                ? h(SmMetaRow, { label: t('market.homepage'), mono: true },
+                                    h('span', { className: 'sm-detail-path', style: { maxWidth: '100%' } },
+                                        h('span', { className: 'sm-mono sm-detail-path-text', 'data-tip': homepage }, homepage),
+                                        h('button', {
+                                            type: 'button',
+                                            className: 'sm-icon-btn sm-detail-path-copy',
+                                            'aria-label': t('action.copyPath'),
+                                            'data-tip': t('action.copyPath'),
+                                            onClick: function () { smCopyText(homepage) },
+                                        }, icon('copy', 14))))
+                                : null,
                             smText(market.enginesDsh) !== '' ? h('div', { style: { color: 'var(--dsw-alias-label-secondary)', fontSize: 'calc(var(--sm-fs) - 2px)' } }, t('market.engines', { range: smText(market.enginesDsh) })) : null,
                             smNumber(market.publishTimestamp, 0) > 0 ? h('div', { style: { color: 'var(--dsw-alias-label-secondary)', fontSize: 'calc(var(--sm-fs) - 2px)' } }, t('market.published', { time: fmtTime(market.publishTimestamp) })) : null,
                             installedNow ? h(SmMetaRow, { label: t('market.installed') }, installedSkill !== null ? fmtTime(smNumber(installedSkill.mtime, 0)) : t('market.installed')) : null)))

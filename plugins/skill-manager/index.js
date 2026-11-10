@@ -28,7 +28,7 @@ import {
   resolveCwd,
   scanAll,
 } from './lib/scan.mjs'
-import { MarketIndexError, localizedPair, validateIndex } from './lib/market-index.mjs'
+import { MAX_SKILL_MD_BYTES, MarketIndexError, localizedPair, validateIndex } from './lib/market-index.mjs'
 import { createIndexFetcher } from './lib/fetch-index.mjs'
 import { compareVersions, satisfiesRange } from './lib/compat.mjs'
 import { defaultVersionOf as defaultMarketVersion, searchBySource } from './lib/search.mjs'
@@ -494,6 +494,208 @@ function marketListView(entry, context) {
   }
 }
 
+// ---------------------------------------------------------------------------
+// SKILL.md body fetching (market detail)
+// ---------------------------------------------------------------------------
+
+/** Overall timeout for one SKILL.md download (headers + body). */
+const SKILL_MD_TIMEOUT_MS = 15_000
+/** Upper bound on cached bodies; one body is at most `MAX_SKILL_MD_BYTES`. */
+const SKILL_MD_CACHE_MAX = 64
+/** A failed download is remembered briefly so a dead URL does not retry on every open. */
+const SKILL_MD_ERROR_TTL_MS = 60_000
+
+/** Validate a file URL from the index: absolute http(s), no credentials, no fragment. */
+function checkSkillMarkdownUrl(url) {
+  if (typeof url !== 'string' || url === '') throw new Error('SKILL.md URL is missing')
+  if (url.length > 2048) throw new Error('SKILL.md URL is too long')
+  if (/\s/.test(url)) throw new Error('SKILL.md URL contains whitespace')
+
+  let parsed
+  try {
+    parsed = new URL(url)
+  } catch {
+    throw new Error('SKILL.md URL is not absolute')
+  }
+  if (parsed.protocol !== 'http:' && parsed.protocol !== 'https:') {
+    throw new Error('SKILL.md URL must use http(s)')
+  }
+  if (parsed.username || parsed.password) throw new Error('SKILL.md URL must not contain credentials')
+  if (parsed.hash || url.includes('#')) throw new Error('SKILL.md URL must not contain a fragment')
+  return parsed.href
+}
+
+/** Read a response body with a hard byte cap, then decode it as strict UTF-8. */
+async function readSkillMarkdownBody(response) {
+  const contentLength = Number(response.headers?.get?.('content-length'))
+  if (Number.isFinite(contentLength) && contentLength > MAX_SKILL_MD_BYTES) {
+    throw new Error(`SKILL.md exceeds ${MAX_SKILL_MD_BYTES} bytes`)
+  }
+
+  const chunks = []
+  let total = 0
+  const push = (chunk) => {
+    total += chunk.byteLength
+    if (total > MAX_SKILL_MD_BYTES) throw new Error(`SKILL.md exceeds ${MAX_SKILL_MD_BYTES} bytes`)
+    chunks.push(chunk)
+  }
+
+  if (response.body && typeof response.body.getReader === 'function') {
+    const reader = response.body.getReader()
+    try {
+      for (;;) {
+        const { done, value } = await reader.read()
+        if (done) break
+        if (!value) continue
+        try {
+          push(Buffer.from(value))
+        } catch (error) {
+          try {
+            await reader.cancel()
+          } catch {
+            /* ignore cancellation errors */
+          }
+          throw error
+        }
+      }
+    } finally {
+      try {
+        reader.releaseLock?.()
+      } catch {
+        /* ignore */
+      }
+    }
+  } else if (typeof response.arrayBuffer === 'function') {
+    push(Buffer.from(await response.arrayBuffer()))
+  } else {
+    throw new Error('SKILL.md response has no readable body')
+  }
+
+  let body
+  try {
+    body = new TextDecoder('utf-8', { fatal: true }).decode(Buffer.concat(chunks))
+  } catch {
+    throw new Error('SKILL.md body is not valid UTF-8')
+  }
+  if (body.charCodeAt(0) === 0xfeff) body = body.slice(1)
+  return body
+}
+
+/**
+ * Create the in-memory SKILL.md reader used by `GET /market/skill`.
+ *
+ * The cache key is `sourceId + skill name + version + sha256`: the digest identifies the
+ * immutable file content, so a hit never needs the network. Successes stay cached (LRU,
+ * bounded); failures are kept for `SKILL_MD_ERROR_TTL_MS` and always resolve to
+ * `{ content: '', error }` so a missing body never fails the detail request.
+ *
+ * `fetchImpl` and `now` are injectable for tests.
+ *
+ * @param {{ fetchImpl?: typeof fetch, now?: () => number }} [options]
+ * @returns {{
+ *   read: (file: { sourceId: string, name: string, version: string, sha256: string, url: string }) =>
+ *     Promise<{ content: string, error: string }>,
+ *   invalidate: (key: string) => void,
+ *   dispose: () => void,
+ * }}
+ */
+export function createSkillMarkdownReader({ fetchImpl = globalThis.fetch, now = Date.now } = {}) {
+  if (typeof fetchImpl !== 'function') throw new TypeError('createSkillMarkdownReader requires a fetch implementation')
+
+  /** @type {Map<string, { content: string, error: string, failedAt: number }>} */
+  const cache = new Map()
+  /** @type {Map<string, Promise<{ content: string, error: string }>>} */
+  const inflight = new Map()
+
+  const keyOf = ({ sourceId, name, version, sha256 }) => (
+    `${sourceId ?? ''} ${name ?? ''} ${version ?? ''} ${sha256 ?? ''}`
+  )
+
+  const readCache = (key) => {
+    const entry = cache.get(key)
+    if (entry === undefined) return undefined
+    if (entry.error !== '' && now() - entry.failedAt >= SKILL_MD_ERROR_TTL_MS) {
+      cache.delete(key)
+      return undefined
+    }
+    // Refresh recency so the bound below drops the least recently used entry.
+    cache.delete(key)
+    cache.set(key, entry)
+    return entry
+  }
+
+  const writeCache = (key, entry) => {
+    cache.delete(key)
+    cache.set(key, entry)
+    while (cache.size > SKILL_MD_CACHE_MAX) {
+      const oldest = cache.keys().next()
+      if (oldest.done) break
+      cache.delete(oldest.value)
+    }
+  }
+
+  async function download(url) {
+    const href = checkSkillMarkdownUrl(url)
+    const timeoutSignal = AbortSignal.timeout(SKILL_MD_TIMEOUT_MS)
+    let response
+    try {
+      response = await fetchImpl(href, {
+        redirect: 'error',
+        signal: timeoutSignal,
+        headers: { accept: 'text/markdown, text/plain;q=0.9, */*;q=0.1' },
+      })
+    } catch (error) {
+      if (timeoutSignal.aborted) throw new Error(`SKILL.md download timed out after ${SKILL_MD_TIMEOUT_MS} ms`)
+      const reason = String(error?.message || error || 'fetch failed')
+      if (/redirect/i.test(reason)) throw new Error('redirects are not allowed')
+      throw new Error(reason)
+    }
+
+    if (!response || typeof response !== 'object') throw new Error('fetch returned no response')
+    if (response.status !== 200) throw new Error(`unexpected HTTP status ${response.status}`)
+    return readSkillMarkdownBody(response)
+  }
+
+  async function load(key, url) {
+    let result
+    try {
+      result = { content: await download(url), error: '' }
+    } catch (error) {
+      result = { content: '', error: message(error) }
+    }
+    writeCache(key, { ...result, failedAt: result.error === '' ? 0 : now() })
+    return result
+  }
+
+  const read = (file) => {
+    const key = keyOf(isObject(file) ? file : {})
+    const cached = readCache(key)
+    if (cached !== undefined) return Promise.resolve({ content: cached.content, error: cached.error })
+    const url = typeof file?.url === 'string' ? file.url : ''
+    if (url === '') return Promise.resolve({ content: '', error: 'SKILL.md file has no URL' })
+
+    const existing = inflight.get(key)
+    if (existing !== undefined) return existing
+    const promise = load(key, url).finally(() => {
+      if (inflight.get(key) === promise) inflight.delete(key)
+    })
+    inflight.set(key, promise)
+    return promise
+  }
+
+  return {
+    read,
+    invalidate: (key) => { cache.delete(key) },
+    dispose: () => { cache.clear(); inflight.clear() },
+  }
+}
+
+/** Locate the root-level `SKILL.md` file record in a version entry. */
+function skillMarkdownFileOf(version) {
+  const files = Array.isArray(version?.files) ? version.files : []
+  return files.find((file) => isObject(file) && file.path === 'SKILL.md')
+}
+
 /**
  * Resolve the `tag` query parameter against one index. A tag is a declared label or
  * category; a source that declares neither contributes no rows (contract v1 §4).
@@ -794,6 +996,7 @@ export function apply(ctx, config) {
   const state = createState({ home: settings.home !== '' ? settings.home : undefined })
   const indexFetcher = createIndexFetcher()
   const fetchIndex = indexFetcher.fetchIndex
+  const skillMarkdown = createSkillMarkdownReader()
 
   /**
    * Installed views need each install record's market index entry to expose the optional
@@ -890,7 +1093,10 @@ export function apply(ctx, config) {
   // but must report `stale: true` until a later check (or explicit refresh) succeeds.
   const staleSources = new Set()
 
-  ctx.effect(() => () => indexFetcher.dispose(), 'skill-manager: index fetcher')
+  ctx.effect(() => () => {
+    indexFetcher.dispose()
+    skillMarkdown.dispose()
+  }, 'skill-manager: index fetcher')
 
   /** The H3 writer/installer are cheap closures bound to the request's cwd. */
   const writerFor = async (cwd) => createWriter({ roots: await rootsFor(ctx, cwd) })
@@ -1414,10 +1620,23 @@ export function apply(ctx, config) {
         enginesDsh: typeof candidate.engines?.dsh === 'string' ? candidate.engines.dsh : '',
         yanked: candidate.yanked === true,
       }))
+    // The detail view shows the SKILL.md *text*, not the index's `readme` URL. A network
+    // failure must never fail the request: `content` becomes `''` and `contentError`
+    // carries the reason. `readme` stays for backward compatibility.
+    const skillMdFile = skillMarkdownFileOf(version)
+    const skillMd = await skillMarkdown.read({
+      sourceId,
+      name,
+      version: typeof version.version === 'string' ? version.version : '',
+      sha256: typeof skillMdFile?.sha256 === 'string' ? skillMdFile.sha256 : '',
+      url: typeof skillMdFile?.url === 'string' ? skillMdFile.url : '',
+    })
     return {
       skill: marketSkillView(entry, { source, index, version, installed, updates, dshVersion }),
       versions,
       readme: typeof version.readme === 'string' ? version.readme : '',
+      content: skillMd.content,
+      contentError: skillMd.error,
     }
   })
 

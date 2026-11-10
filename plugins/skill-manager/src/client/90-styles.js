@@ -131,7 +131,7 @@
   flex: 1 1 auto;
   overflow: hidden;
   --sm-content-max: 960px;
-  padding: 28px clamp(20px, 4vw, 48px) 0;
+  padding: 40px clamp(20px, 4vw, 48px) 0;
 }
 
 /* Header, tabs, list and detail share the same column, so their left
@@ -154,8 +154,10 @@
   min-height: 0;
 }
 
+/* Header → primary tabs keeps one step above the 16px in-page rhythm, so
+ * the 40px top inset reads as breathing room rather than a gap. */
 .sm-page > * + * {
-  margin-top: 16px;
+  margin-top: 20px;
 }
 
 .sm-page-head {
@@ -181,7 +183,7 @@
 }
 
 .sm-page-desc {
-  margin: 4px 0 0;
+  margin: 6px 0 0;
   font-size: calc(var(--sm-fs) - 1px);
   line-height: 1.5;
   color: var(--dsw-alias-label-secondary);
@@ -211,7 +213,7 @@
 }
 
 .sm-desc {
-  margin: 4px 0 0;
+  margin: 6px 0 0;
   font-size: calc(var(--sm-fs) - 1px);
   line-height: 1.5;
   color: var(--dsw-alias-label-secondary);
@@ -2007,6 +2009,11 @@ textarea.sm-input.sm-edit-body {
   flex-shrink: 0;
 }
 
+.sm-detail-path-copy svg {
+  width: 14px;
+  height: 14px;
+}
+
 /* Detail panel card (distinct from .sm-card-item). */
 .sm-card {
   padding: 16px 18px;
@@ -2118,6 +2125,11 @@ textarea.sm-input.sm-edit-body {
  * 12. Modals: 488 / 480 / 720 widths, transparent veil, no shadow    *
  * ------------------------------------------------------------------ */
 
+@keyframes sm-mask-in {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
 .sm-modal-backdrop,
 .sm-modal-layer,
 .sm-dialog-mask {
@@ -2128,7 +2140,9 @@ textarea.sm-input.sm-edit-body {
   align-items: center;
   justify-content: center;
   padding: 16px;
-  background: transparent;
+  /* DSH dialog mask: a real dim layer, not a transparent hit area. */
+  background: var(--dsw-alias-bg-mask-1, rgba(0, 0, 0, 0.5));
+  animation: sm-mask-in 160ms ease-out;
   backdrop-filter: none;
 }
 
@@ -2403,9 +2417,10 @@ textarea.sm-input.sm-edit-body {
  * ------------------------------------------------------------------ */
 
 .sm-source-dialog {
-  /* DSH 实测三档 480 / 488 / 720；管理源是窄列表，取 560 居中，内容少时自然收缩。 */
-  width: min(560px, 100vw - 32px);
-  max-height: min(560px, 100vh - 96px);
+  /* 与大内容弹窗同档 720；列表需要留白，最少 480 高，多源时到 720 再滚动。 */
+  width: min(720px, 100vw - 32px);
+  min-height: min(480px, 100vh - 96px);
+  max-height: min(720px, 100vh - 96px);
   border-radius: var(--dsw-radius-panel);
   border: 0.5px solid var(--dsw-alias-border-inverted);
   box-shadow: none;
@@ -3004,10 +3019,14 @@ textarea.sm-input.sm-edit-body {
   color: var(--dsw-alias-state-error-primary);
 }
 
+/* Fixed 16px glyph box: never participates in the label's flex growth. */
 .sm-menu-item .sm-menu-icon {
   display: inline-flex;
+  align-items: center;
+  justify-content: center;
   color: var(--dsw-alias-label-secondary);
   width: 16px;
+  height: 16px;
   flex-shrink: 0;
 }
 
@@ -3016,8 +3035,9 @@ textarea.sm-input.sm-edit-body {
   color: var(--dsw-alias-state-error-primary);
 }
 
-/* The label owns the remaining width so the whole row stays clickable. */
-.sm-menu-item > span {
+/* Only the label owns the remaining width so the whole row stays
+ * clickable; the icon span keeps its fixed 16px box. */
+.sm-menu-item > span:not(.sm-menu-icon) {
   flex: 1 1 auto;
   min-width: 0;
   text-align: left;

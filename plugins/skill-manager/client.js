@@ -50,6 +50,7 @@ window.__ModuleLoader__.load({
       'action.checkUpdates': '检查更新',
       'action.clear': '清除',
       'action.close': '关闭',
+      'action.copy': '复制',
       'action.copyPath': '复制路径',
       'action.create': '创建技能',
       'action.delete': '删除',
@@ -223,7 +224,6 @@ window.__ModuleLoader__.load({
       'market.license': '许可证',
       'market.loadingMore': '正在加载更多…',
       'market.published': '发布于 {time}',
-      'market.readme': 'README',
       'market.source': '来源',
       'market.updateTo': '更新到 {version}',
       'market.version': '版本',
@@ -341,6 +341,7 @@ window.__ModuleLoader__.load({
       'action.checkUpdates': 'Check for updates',
       'action.clear': 'Clear',
       'action.close': 'Close',
+      'action.copy': 'Copy',
       'action.copyPath': 'Copy path',
       'action.create': 'Create skill',
       'action.delete': 'Delete',
@@ -514,7 +515,6 @@ window.__ModuleLoader__.load({
       'market.license': 'License',
       'market.loadingMore': 'Loading more…',
       'market.published': 'Published {time}',
-      'market.readme': 'README',
       'market.source': 'Source',
       'market.updateTo': 'Update to {version}',
       'market.version': 'Version',
@@ -3698,7 +3698,7 @@ window.__ModuleLoader__.load({
     /* ------------------------------------------------------------------ *
      * C3 · 管理源弹窗                                                     *
      *                                                                    *
-     * 560px 居中弹窗；内容少时自然收缩。源列表支持拖动排序               *
+     * 720px 居中弹窗；内容少时自然收缩。源列表支持拖动排序               *
      * （HTML5 DnD + 4px 阈值）与 Alt+↑/↓ 键盘替代。排序结果写入          *
      * appState.sourceOrder 并调用 PUT /sources/order；dataTransfer key    *
      * 与拖动钩子来自 00-prelude 的 smDragSource。                         *
@@ -4669,8 +4669,11 @@ window.__ModuleLoader__.load({
             'aria-label': t('source.title'),
             tabIndex: -1,
             style: {
-                width: 'min(560px, 100vw - 32px)',
-                maxHeight: 'min(560px, 100vh - 96px)',
+                width: 'min(720px, 100vw - 32px)',
+                // A list dialog needs room even with one source; 480 keeps the
+                // empty space reasonable while still growing to 720 for many rows.
+                minHeight: 'min(480px, 100vh - 96px)',
+                maxHeight: 'min(720px, 100vh - 96px)',
                 boxSizing: 'border-box',
                 display: 'flex',
                 flexDirection: 'column',
@@ -5342,17 +5345,28 @@ window.__ModuleLoader__.load({
             onClick: function () { openModal(removeKind, { skill: skill }) },
         }, removeKind === 'uninstall' ? t('action.uninstall') : t('action.delete')))
 
-        const previewActions = h('div', { style: { display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' } },
+        // Icon-only actions with 300ms tooltips: copy the body, or edit in place.
+        const previewActions = h('div', { style: { display: 'flex', alignItems: 'center', gap: '4px' } },
             contentState === 'ready'
-                ? h(SmButton, { tone: 'ghost', icon: 'file', onClick: function () { openModal('preview', { name: name, content: content }) } }, t('detail.content'))
+                ? h('button', {
+                    type: 'button',
+                    className: 'sm-icon-btn',
+                    'aria-label': t('action.copy'),
+                    'data-tip': t('action.copy'),
+                    onClick: function () {
+                        smCopyText(content, t('toast.copied'))
+                        openModal('preview', { name: name, content: content })
+                    },
+                }, icon('copy', 16))
                 : null,
-            h(SmButton, {
-                tone: 'secondary',
-                icon: 'edit',
+            h('button', {
+                type: 'button',
+                className: 'sm-icon-btn',
+                'aria-label': t('action.edit'),
+                'data-tip': disabled ? t('detail.disabledNote') : (!writable ? readonlyReason : (path === '' ? t('detail.location.builtin') : t('action.edit'))),
                 disabled: disabled || !writable || path === '',
-                tip: disabled ? t('detail.disabledNote') : (!writable ? readonlyReason : (path === '' ? t('detail.location.builtin') : '')),
                 onClick: openEditor,
-            }, t('action.edit')))
+            }, icon('edit', 16)))
 
         const badge = h(SmBadge, { tone: smStatusTone(skill) }, t(statusKey))
 
@@ -5378,7 +5392,7 @@ window.__ModuleLoader__.load({
                             h('div', { style: { color: 'var(--dsw-alias-label-secondary)', fontSize: 'calc(var(--sm-fs) - 1px)', lineHeight: '1.5' } }, whenToUse))
                         : null,
                     h(SmCard, { className: 'sm-detail-content' },
-                        h(SmCardTitle, { extra: previewActions }, 'SKILL.md · ' + t('detail.content')),
+                        h(SmCardTitle, { extra: previewActions }, 'SKILL.md'),
                         contentState === 'loading'
                             ? h('div', { style: { color: 'var(--dsw-alias-label-secondary)', fontSize: 'calc(var(--sm-fs) - 1px)' } }, t('state.loading'))
                             : contentState === 'error'
@@ -5401,7 +5415,7 @@ window.__ModuleLoader__.load({
                             h(SmMetaRow, { label: t('detail.location'), mono: path !== '' },
                                 path !== ''
                                     ? h('span', { className: 'sm-detail-path' },
-                                        h('span', { className: 'sm-mono sm-detail-path-text', title: path }, path),
+                                        h('span', { className: 'sm-mono sm-detail-path-text', 'data-tip': path }, path),
                                         h('button', {
                                             type: 'button',
                                             className: 'sm-icon-btn sm-detail-path-copy',
@@ -5464,10 +5478,12 @@ window.__ModuleLoader__.load({
         }
 
         const market = data.skill !== null && data.skill !== undefined && typeof data.skill === 'object' ? data.skill : data
-        const readme = smText(data.readme)
+        /* 详情正文：优先 Host 返回的 SKILL.md 原文（data.content），旧数据回退 README。 */
+        const content = smText(data.content, smText(data.readme))
         const name = smText(market.name, key.name)
         const version = smSkillVersion(market)
         const sourceName = smText(market.sourceName, smText(detail.sourceName, smSourceNameById(smText(market.sourceId, key.sourceId))))
+        const homepage = smText(market.homepage)
         const installedSkill = installed
         const updateVersion = installedSkill !== null ? smSkillUpdateVersion(installedSkill) : smText(market.updateAvailable)
         const installedNow = installedSkill !== null || market.installed === true
@@ -5526,13 +5542,20 @@ window.__ModuleLoader__.load({
                     h(SmCard, null,
                         h(SmCardTitle, null, t('market.detailDesc')),
                         h('div', { style: { color: 'var(--dsw-alias-label-primary)', fontSize: 'var(--sm-fs)', lineHeight: '1.55' } }, smText(smSkillDescription(market), '—'))),
-                    h(SmCard, null,
-                        h(SmCardTitle, { extra: readme !== ''
-                            ? h(SmButton, { tone: 'ghost', icon: 'file', onClick: function () { openModal('preview', { name: name, content: readme }) } }, t('detail.content'))
-                            : null }, t('market.readme')),
-                        readme !== ''
-                            ? h(SmCodeBlock, { text: readme.split('\n').slice(0, 40).join('\n'), maxHeight: '420px' })
-                            : h('div', { style: { color: 'var(--dsw-alias-label-caption)', fontSize: 'calc(var(--sm-fs) - 1px)' } }, t('detail.content.empty')))),
+                    content !== ''
+                        ? h(SmCard, { className: 'sm-detail-content' },
+                            h(SmCardTitle, { extra: h('button', {
+                                type: 'button',
+                                className: 'sm-icon-btn',
+                                'aria-label': t('action.copy'),
+                                'data-tip': t('action.copy'),
+                                onClick: function () {
+                                    smCopyText(content, t('toast.copied'))
+                                    openModal('preview', { name: name, content: content })
+                                },
+                            }, icon('copy', 16)) }, 'SKILL.md'),
+                            h(SmCodeBlock, { text: content.split('\n').slice(0, 40).join('\n'), maxHeight: '420px' }))
+                        : null),
                 h('div', { className: 'sm-detail-side' },
                     h(SmCard, null,
                         h(SmCardTitle, null, t('market.source')),
@@ -5541,7 +5564,18 @@ window.__ModuleLoader__.load({
                             version !== '' ? h(SmMetaRow, { label: t('market.version'), mono: true }, version) : null,
                             smText(market.author) !== '' ? h(SmMetaRow, { label: t('market.author') }, smText(market.author)) : null,
                             smText(market.license) !== '' ? h(SmMetaRow, { label: t('market.license') }, smText(market.license)) : null,
-                            smText(market.homepage) !== '' ? h(SmMetaRow, { label: t('market.homepage'), mono: true }, smText(market.homepage)) : null,
+                            homepage !== ''
+                                ? h(SmMetaRow, { label: t('market.homepage'), mono: true },
+                                    h('span', { className: 'sm-detail-path', style: { maxWidth: '100%' } },
+                                        h('span', { className: 'sm-mono sm-detail-path-text', 'data-tip': homepage }, homepage),
+                                        h('button', {
+                                            type: 'button',
+                                            className: 'sm-icon-btn sm-detail-path-copy',
+                                            'aria-label': t('action.copyPath'),
+                                            'data-tip': t('action.copyPath'),
+                                            onClick: function () { smCopyText(homepage) },
+                                        }, icon('copy', 14))))
+                                : null,
                             smText(market.enginesDsh) !== '' ? h('div', { style: { color: 'var(--dsw-alias-label-secondary)', fontSize: 'calc(var(--sm-fs) - 2px)' } }, t('market.engines', { range: smText(market.enginesDsh) })) : null,
                             smNumber(market.publishTimestamp, 0) > 0 ? h('div', { style: { color: 'var(--dsw-alias-label-secondary)', fontSize: 'calc(var(--sm-fs) - 2px)' } }, t('market.published', { time: fmtTime(market.publishTimestamp) })) : null,
                             installedNow ? h(SmMetaRow, { label: t('market.installed') }, installedSkill !== null ? fmtTime(smNumber(installedSkill.mtime, 0)) : t('market.installed')) : null)))
@@ -5630,7 +5664,6 @@ window.__ModuleLoader__.load({
      * 宽度档（契约 §5.3 / §7.7）：                                        *
      *   488  new-skill / import-skill / install / add-source             *
      *   480  update / uninstall / delete / confirm-remove-source         *
-     *   560  管理源列表（30-source-dialog 自绘，本文件预留同档）          *
      *   720  edit-content / preview                                      *
      * 无阴影、遮罩透明、Escape 分层、dialogStack 式的最上层优先。         *
      * ------------------------------------------------------------------ */
@@ -6126,9 +6159,9 @@ window.__ModuleLoader__.load({
 
     function SmDialogFrame(props) {
         const confirm = props.confirm === true
-        /* 四档：480 确认 / 488 表单 / 560 管理源列表 / 720 大内容。 */
+        /* 三档：480 确认 / 488 表单 / 720 大内容。 */
         const width = props.width === 720 ? 720
-            : (props.width === 560 ? 560 : (props.width === 480 ? 480 : 488))
+            : (props.width === 480 ? 480 : 488)
         const layerIndex = typeof props.layerIndex === 'number' ? props.layerIndex : 0
         const boxRef = useRef(null)
         const close = function () {
@@ -6173,7 +6206,7 @@ window.__ModuleLoader__.load({
         const widthStyle = 'min(' + String(width) + 'px, calc(100vw - 32px))'
         const maxHeightStyle = width === 720
             ? 'min(720px, calc(100vh - 96px))'
-            : (width === 560 ? 'min(560px, calc(100vh - 96px))' : 'calc(100vh - 48px)')
+            : 'calc(100vh - 48px)'
 
         return h('div', {
             className: 'sm-dialog-mask sm-modal-backdrop',
@@ -7884,7 +7917,7 @@ window.__ModuleLoader__.load({
   flex: 1 1 auto;
   overflow: hidden;
   --sm-content-max: 960px;
-  padding: 28px clamp(20px, 4vw, 48px) 0;
+  padding: 40px clamp(20px, 4vw, 48px) 0;
 }
 
 /* Header, tabs, list and detail share the same column, so their left
@@ -7907,8 +7940,10 @@ window.__ModuleLoader__.load({
   min-height: 0;
 }
 
+/* Header → primary tabs keeps one step above the 16px in-page rhythm, so
+ * the 40px top inset reads as breathing room rather than a gap. */
 .sm-page > * + * {
-  margin-top: 16px;
+  margin-top: 20px;
 }
 
 .sm-page-head {
@@ -7934,7 +7969,7 @@ window.__ModuleLoader__.load({
 }
 
 .sm-page-desc {
-  margin: 4px 0 0;
+  margin: 6px 0 0;
   font-size: calc(var(--sm-fs) - 1px);
   line-height: 1.5;
   color: var(--dsw-alias-label-secondary);
@@ -7964,7 +7999,7 @@ window.__ModuleLoader__.load({
 }
 
 .sm-desc {
-  margin: 4px 0 0;
+  margin: 6px 0 0;
   font-size: calc(var(--sm-fs) - 1px);
   line-height: 1.5;
   color: var(--dsw-alias-label-secondary);
@@ -9760,6 +9795,11 @@ textarea.sm-input.sm-edit-body {
   flex-shrink: 0;
 }
 
+.sm-detail-path-copy svg {
+  width: 14px;
+  height: 14px;
+}
+
 /* Detail panel card (distinct from .sm-card-item). */
 .sm-card {
   padding: 16px 18px;
@@ -9871,6 +9911,11 @@ textarea.sm-input.sm-edit-body {
  * 12. Modals: 488 / 480 / 720 widths, transparent veil, no shadow    *
  * ------------------------------------------------------------------ */
 
+@keyframes sm-mask-in {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
 .sm-modal-backdrop,
 .sm-modal-layer,
 .sm-dialog-mask {
@@ -9881,7 +9926,9 @@ textarea.sm-input.sm-edit-body {
   align-items: center;
   justify-content: center;
   padding: 16px;
-  background: transparent;
+  /* DSH dialog mask: a real dim layer, not a transparent hit area. */
+  background: var(--dsw-alias-bg-mask-1, rgba(0, 0, 0, 0.5));
+  animation: sm-mask-in 160ms ease-out;
   backdrop-filter: none;
 }
 
@@ -10156,9 +10203,10 @@ textarea.sm-input.sm-edit-body {
  * ------------------------------------------------------------------ */
 
 .sm-source-dialog {
-  /* DSH 实测三档 480 / 488 / 720；管理源是窄列表，取 560 居中，内容少时自然收缩。 */
-  width: min(560px, 100vw - 32px);
-  max-height: min(560px, 100vh - 96px);
+  /* 与大内容弹窗同档 720；列表需要留白，最少 480 高，多源时到 720 再滚动。 */
+  width: min(720px, 100vw - 32px);
+  min-height: min(480px, 100vh - 96px);
+  max-height: min(720px, 100vh - 96px);
   border-radius: var(--dsw-radius-panel);
   border: 0.5px solid var(--dsw-alias-border-inverted);
   box-shadow: none;
@@ -10757,10 +10805,14 @@ textarea.sm-input.sm-edit-body {
   color: var(--dsw-alias-state-error-primary);
 }
 
+/* Fixed 16px glyph box: never participates in the label's flex growth. */
 .sm-menu-item .sm-menu-icon {
   display: inline-flex;
+  align-items: center;
+  justify-content: center;
   color: var(--dsw-alias-label-secondary);
   width: 16px;
+  height: 16px;
   flex-shrink: 0;
 }
 
@@ -10769,8 +10821,9 @@ textarea.sm-input.sm-edit-body {
   color: var(--dsw-alias-state-error-primary);
 }
 
-/* The label owns the remaining width so the whole row stays clickable. */
-.sm-menu-item > span {
+/* Only the label owns the remaining width so the whole row stays
+ * clickable; the icon span keeps its fixed 16px box. */
+.sm-menu-item > span:not(.sm-menu-icon) {
   flex: 1 1 auto;
   min-width: 0;
   text-align: left;

@@ -1,7 +1,7 @@
     /* ------------------------------------------------------------------ *
      * C3 · 管理源弹窗                                                     *
      *                                                                    *
-     * 560px 居中弹窗；内容少时自然收缩。源列表支持拖动排序               *
+     * 720px 居中弹窗；内容少时自然收缩。源列表支持拖动排序               *
      * （HTML5 DnD + 4px 阈值）与 Alt+↑/↓ 键盘替代。排序结果写入          *
      * appState.sourceOrder 并调用 PUT /sources/order；dataTransfer key    *
      * 与拖动钩子来自 00-prelude 的 smDragSource。                         *
@@ -972,8 +972,11 @@
             'aria-label': t('source.title'),
             tabIndex: -1,
             style: {
-                width: 'min(560px, 100vw - 32px)',
-                maxHeight: 'min(560px, 100vh - 96px)',
+                width: 'min(720px, 100vw - 32px)',
+                // A list dialog needs room even with one source; 480 keeps the
+                // empty space reasonable while still growing to 720 for many rows.
+                minHeight: 'min(480px, 100vh - 96px)',
+                maxHeight: 'min(720px, 100vh - 96px)',
                 boxSizing: 'border-box',
                 display: 'flex',
                 flexDirection: 'column',

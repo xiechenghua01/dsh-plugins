@@ -4,7 +4,6 @@
      * 宽度档（契约 §5.3 / §7.7）：                                        *
      *   488  new-skill / import-skill / install / add-source             *
      *   480  update / uninstall / delete / confirm-remove-source         *
-     *   560  管理源列表（30-source-dialog 自绘，本文件预留同档）          *
      *   720  edit-content / preview                                      *
      * 无阴影、遮罩透明、Escape 分层、dialogStack 式的最上层优先。         *
      * ------------------------------------------------------------------ */
@@ -500,9 +499,9 @@
 
     function SmDialogFrame(props) {
         const confirm = props.confirm === true
-        /* 四档：480 确认 / 488 表单 / 560 管理源列表 / 720 大内容。 */
+        /* 三档：480 确认 / 488 表单 / 720 大内容。 */
         const width = props.width === 720 ? 720
-            : (props.width === 560 ? 560 : (props.width === 480 ? 480 : 488))
+            : (props.width === 480 ? 480 : 488)
         const layerIndex = typeof props.layerIndex === 'number' ? props.layerIndex : 0
         const boxRef = useRef(null)
         const close = function () {
@@ -547,7 +546,7 @@
         const widthStyle = 'min(' + String(width) + 'px, calc(100vw - 32px))'
         const maxHeightStyle = width === 720
             ? 'min(720px, calc(100vh - 96px))'
-            : (width === 560 ? 'min(560px, calc(100vh - 96px))' : 'calc(100vh - 48px)')
+            : 'calc(100vh - 48px)'
 
         return h('div', {
             className: 'sm-dialog-mask sm-modal-backdrop',
