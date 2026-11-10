@@ -57,6 +57,7 @@ window.__ModuleLoader__.load({
       'action.deleteSource': '删除源',
       'action.disable': '停用',
       'action.disableSource': '停用源',
+      'action.editSource': '编辑源',
       'action.edit': '编辑原文',
       'action.enable': '恢复',
       'action.enableSource': '启用源',
@@ -239,6 +240,7 @@ window.__ModuleLoader__.load({
       'sort.recommended': '推荐',
       'sort.source': '按来源',
       'sort.updated': '最近更新',
+      'source.edit.title': '编辑源',
       'source.add.title': '添加技能索引源',
       'source.confirmDelete.body': '已安装的技能不会被删除，但之后无法再检查更新。',
       'source.confirmDelete.title': '删除这个源？',
@@ -306,6 +308,7 @@ window.__ModuleLoader__.load({
       'toast.noUpdates': '已检查 {sources} 个源，已是最新',
       'toast.openedFolder': '已打开目录：{path}',
       'toast.saved': '已保存',
+      'toast.sourceUpdated': '已更新源 {name}',
       'toast.sourceAdded': '已添加源 {name}',
       'toast.sourceDeleted': '已删除源 {name}',
       'uninstall.body': '将删除 {name} 和安装记录；不会影响其他技能。',
@@ -346,6 +349,7 @@ window.__ModuleLoader__.load({
       'action.deleteSource': 'Delete source',
       'action.disable': 'Disable',
       'action.disableSource': 'Disable source',
+      'action.editSource': 'Edit source',
       'action.edit': 'Edit content',
       'action.enable': 'Restore',
       'action.enableSource': 'Enable source',
@@ -528,6 +532,7 @@ window.__ModuleLoader__.load({
       'sort.recommended': 'Recommended',
       'sort.source': 'By source',
       'sort.updated': 'Recently updated',
+      'source.edit.title': 'Edit skill index source',
       'source.add.title': 'Add skill index source',
       'source.confirmDelete.body': 'Installed skills will not be deleted, but they cannot be checked for updates afterward.',
       'source.confirmDelete.title': 'Delete this source?',
@@ -595,6 +600,7 @@ window.__ModuleLoader__.load({
       'toast.noUpdates': 'Checked {sources} sources; everything is up to date',
       'toast.openedFolder': 'Opened folder: {path}',
       'toast.saved': 'Saved',
+      'toast.sourceUpdated': 'Updated source {name}',
       'toast.sourceAdded': 'Added source {name}',
       'toast.sourceDeleted': 'Deleted source {name}',
       'uninstall.body': 'This removes {name} and its install record. Other skills are unaffected.',
@@ -4431,6 +4437,9 @@ window.__ModuleLoader__.load({
             style: { display: 'flex', alignItems: 'center', gap: '4px', flexShrink: 0 },
         },
         smSourceSwitch(source, frozen),
+        smSourceIconAction('edit', 'edit', t('action.editSource'), function () {
+            if (typeof openModal === 'function') openModal('add-source', { source: source })
+        }, frozen || busy),
         smSourceIconAction('refresh', 'refresh', t('action.refresh'), function () {
             smSourceRefresh(source)
         }, frozen || busy),
@@ -7213,8 +7222,11 @@ window.__ModuleLoader__.load({
      * ------------------------------------------------------------------ */
 
     function SmAddSourceModal(props) {
-        const [name, setName] = useState('')
-        const [url, setUrl] = useState('')
+        const payload = props.payload !== null && typeof props.payload === 'object' ? props.payload : {}
+        const editingSource = payload.source !== null && payload.source !== undefined && typeof payload.source === 'object' ? payload.source : null
+        const editing = editingSource !== null
+        const [name, setName] = useState(editing ? smText(editingSource.name) : '')
+        const [url, setUrl] = useState(editing ? smText(editingSource.url) : '')
         const [validating, setValidating] = useState(false)
         const [result, setResult] = useState(null)
         const [validateError, setValidateError] = useState('')
@@ -7249,10 +7261,13 @@ window.__ModuleLoader__.load({
             const request = { url: url.trim() }
             if (name.trim() !== '') request.name = name.trim()
             try {
-                const data = await api('sources', { method: 'POST', body: request })
+                const data = editing
+                    ? await api('sources/' + encodeURIComponent(smText(editingSource.id)), { method: 'PUT', body: request })
+                    : await api('sources', { method: 'POST', body: request })
                 const source = data !== null && typeof data === 'object' && data.source !== undefined ? data.source : null
                 setBusy(false)
-                toast(t('toast.sourceAdded', { name: source !== null ? smText(source.name, name.trim()) : name.trim() }))
+                const label = source !== null ? smText(source.name, name.trim()) : name.trim()
+                toast(editing ? t('toast.sourceUpdated', { name: label }) : t('toast.sourceAdded', { name: label }))
                 closeModal()
                 void loadSources()
                 void loadMarket()
@@ -7270,7 +7285,7 @@ window.__ModuleLoader__.load({
             isTop: props.isTop,
             layerIndex: props.layerIndex,
             width: 488,
-            title: t('source.add.title'),
+            title: editing ? t('source.edit.title') : t('source.add.title'),
             footer: h(SmFooter, null, h(SmButton, { tone: 'primary', disabled: !canSave, onClick: function () { void submit() } }, t('action.save'))),
         },
         serverError !== '' ? h(SmBanner, { tone: 'error' }, serverError) : null,

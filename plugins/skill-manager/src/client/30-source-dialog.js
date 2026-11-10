@@ -685,6 +685,9 @@
             style: { display: 'flex', alignItems: 'center', gap: '4px', flexShrink: 0 },
         },
         smSourceSwitch(source, frozen),
+        smSourceIconAction('edit', 'edit', t('action.editSource'), function () {
+            if (typeof openModal === 'function') openModal('add-source', { source: source })
+        }, frozen || busy),
         smSourceIconAction('refresh', 'refresh', t('action.refresh'), function () {
             smSourceRefresh(source)
         }, frozen || busy),

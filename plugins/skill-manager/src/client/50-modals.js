@@ -1466,8 +1466,11 @@
      * ------------------------------------------------------------------ */
 
     function SmAddSourceModal(props) {
-        const [name, setName] = useState('')
-        const [url, setUrl] = useState('')
+        const payload = props.payload !== null && typeof props.payload === 'object' ? props.payload : {}
+        const editingSource = payload.source !== null && payload.source !== undefined && typeof payload.source === 'object' ? payload.source : null
+        const editing = editingSource !== null
+        const [name, setName] = useState(editing ? smText(editingSource.name) : '')
+        const [url, setUrl] = useState(editing ? smText(editingSource.url) : '')
         const [validating, setValidating] = useState(false)
         const [result, setResult] = useState(null)
         const [validateError, setValidateError] = useState('')
@@ -1502,10 +1505,13 @@
             const request = { url: url.trim() }
             if (name.trim() !== '') request.name = name.trim()
             try {
-                const data = await api('sources', { method: 'POST', body: request })
+                const data = editing
+                    ? await api('sources/' + encodeURIComponent(smText(editingSource.id)), { method: 'PUT', body: request })
+                    : await api('sources', { method: 'POST', body: request })
                 const source = data !== null && typeof data === 'object' && data.source !== undefined ? data.source : null
                 setBusy(false)
-                toast(t('toast.sourceAdded', { name: source !== null ? smText(source.name, name.trim()) : name.trim() }))
+                const label = source !== null ? smText(source.name, name.trim()) : name.trim()
+                toast(editing ? t('toast.sourceUpdated', { name: label }) : t('toast.sourceAdded', { name: label }))
                 closeModal()
                 void loadSources()
                 void loadMarket()
@@ -1523,7 +1529,7 @@
             isTop: props.isTop,
             layerIndex: props.layerIndex,
             width: 488,
-            title: t('source.add.title'),
+            title: editing ? t('source.edit.title') : t('source.add.title'),
             footer: h(SmFooter, null, h(SmButton, { tone: 'primary', disabled: !canSave, onClick: function () { void submit() } }, t('action.save'))),
         },
         serverError !== '' ? h(SmBanner, { tone: 'error' }, serverError) : null,
