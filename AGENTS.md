@@ -102,10 +102,16 @@ generated `index.json`.
 ## Constraints that cost time if forgotten
 
 - The index URL in `market.json` must stay canonical, `https`, without credentials or fragment,
-  and the Harness refuses redirects; `raw.githubusercontent.com/.../main/index.json` answers
-  directly. The repository must stay public.
+  and the Harness refuses redirects. `cdn.jsdelivr.net/gh/...@main/index.json` answers `200`
+  directly with zero redirects (verified), which is why the index is distributed through
+  jsDelivr rather than `raw.githubusercontent.com`. The repository must stay public.
+- jsDelivr caches branch URLs for 12 hours, longer than raw's 5 minutes, so the `purge` job in
+  `.github/workflows/validate.yml` calls
+  `https://purge.jsdelivr.net/gh/<owner>/<repo>@main/index.json` after every push to `main`.
+  Purge is best-effort: if it is throttled, the index still goes live within 12 hours.
 - Relative `icon` references resolve against the index URL, so `market.json` icons are written
-  repository-root-relative (`plugins/<slug>/icon.svg`).
+  repository-root-relative (`plugins/<slug>/icon.svg`). That also means icons are served by
+  whichever host serves the index.
 - Index versions are immutable (commit-pinned); fix a bad release with a new version, never by
   editing an entry.
 - `version` in `package.json` and the latest index version are expected to differ between a

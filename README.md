@@ -8,7 +8,7 @@ A monorepo of DeepSeek Harness plugins **and** a plugin market index source that
 
 | 项目 / Item | 值 / Value |
 | --- | --- |
-| 索引地址 / Index URL | `https://raw.githubusercontent.com/xiechenghua01/dsh-plugins/main/index.json` |
+| 索引地址 / Index URL | `https://cdn.jsdelivr.net/gh/xiechenghua01/dsh-plugins@main/index.json` |
 | 索引格式 / Index format | format 1（`@deepseek-ai/dsh-plugin-market-index` 校验） |
 | 仓库 / Repository | <https://github.com/xiechenghua01/dsh-plugins> |
 | 兼容 / Compatibility | DSH `>=0.2.1-rc.5 <0.3.0`（各插件在 `engines.dsh` 中声明） |
@@ -30,7 +30,7 @@ A monorepo of DeepSeek Harness plugins **and** a plugin market index source that
 3. 在 **Discover** 中添加索引地址：
 
    ```text
-   https://raw.githubusercontent.com/xiechenghua01/dsh-plugins/main/index.json
+   https://cdn.jsdelivr.net/gh/xiechenghua01/dsh-plugins@main/index.json
    ```
 
 4. 在 Discover 里选择插件安装。Harness 会把索引中的版本解析成固定 commit 的安装目标，
@@ -114,6 +114,8 @@ git push origin main
 ## 注意 / Notes
 
 - 索引里的版本固定到 40 位 commit SHA，因此已发布版本不可变；要撤换代码请发新版本。
-- `raw.githubusercontent.com` 有约数分钟的 CDN 缓存，刚推送的索引可能需要稍等或强制刷新。
+- 索引经 jsDelivr 分发（`cdn.jsdelivr.net`），直接返回 200、不 redirect，满足 Harness 的要求。
+  `@main` 是分支地址，默认缓存 12 小时；CI 在推送到 `main` 后会调用 purge 端点刷新，通常
+  几分钟内生效。已发布版本固定到 commit，不受影响。
 - 本仓库必须保持 **public**：索引通过匿名 https 读取；私有仓库需要凭据，Discover 不会带凭据。
 - 索引 `name`、`version`、`repository` 是索引的声明；真正装上的内容以被安装包的 manifest 为准。

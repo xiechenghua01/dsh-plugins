@@ -39,7 +39,7 @@ usage, CPU/memory runtime, and log footprint.
 2. 在 **Discover** 标签中添加索引地址：
 
    ```text
-   https://raw.githubusercontent.com/xiechenghua01/dsh-plugins/main/index.json
+   https://cdn.jsdelivr.net/gh/xiechenghua01/dsh-plugins@main/index.json
    ```
 
 3. 在 Discover 里找到 **Session Stats** 安装。

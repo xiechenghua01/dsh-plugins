@@ -1,6 +1,6 @@
 {
   "repository": "https://github.com/xiechenghua01/dsh-plugins",
-  "indexUrl": "https://raw.githubusercontent.com/xiechenghua01/dsh-plugins/main/index.json",
+  "indexUrl": "https://cdn.jsdelivr.net/gh/xiechenghua01/dsh-plugins@main/index.json",
   "branch": "main",
   "author": "xiechenghua01",
   "title": {
