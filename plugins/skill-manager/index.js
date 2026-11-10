@@ -1626,13 +1626,29 @@ export function apply(ctx, config) {
     // failure must never fail the request: `content` becomes `''` and `contentError`
     // carries the reason. `readme` stays for backward compatibility.
     const skillMdFile = skillMarkdownFileOf(version)
-    const skillMd = await skillMarkdown.read({
-      sourceId,
-      name,
-      version: typeof version.version === 'string' ? version.version : '',
-      sha256: typeof skillMdFile?.sha256 === 'string' ? skillMdFile.sha256 : '',
-      url: typeof skillMdFile?.url === 'string' ? skillMdFile.url : '',
-    })
+    // An installed copy already sits on disk: read it instead of downloading again.
+    // This is what makes opening an installed skill from the market list instant.
+    const localRecord = (Array.isArray(installed) ? installed : []).find((record) => (
+      record !== null && typeof record === 'object'
+      && record.sourceId === sourceId && record.name === name
+      && typeof record.path === 'string' && record.path !== ''
+    ))
+    let skillMd
+    if (localRecord !== undefined) {
+      try {
+        skillMd = { content: await readFile(localRecord.path, 'utf8'), error: '' }
+      } catch (error) {
+        skillMd = { content: '', error: message(error) }
+      }
+    } else {
+      skillMd = await skillMarkdown.read({
+        sourceId,
+        name,
+        version: typeof version.version === 'string' ? version.version : '',
+        sha256: typeof skillMdFile?.sha256 === 'string' ? skillMdFile.sha256 : '',
+        url: typeof skillMdFile?.url === 'string' ? skillMdFile.url : '',
+      })
+    }
     return {
       skill: marketSkillView(entry, { source, index, version, installed, updates, dshVersion }),
       versions,
