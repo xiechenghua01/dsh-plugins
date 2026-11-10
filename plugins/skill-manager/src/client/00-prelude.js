@@ -1722,22 +1722,89 @@
                         if (typeof checkUpdates === 'function') void checkUpdates()
                     },
                 }, t('action.checkUpdates')),
-                h(SmButton, {
-                    tone: 'secondary',
-                    icon: 'import',
-                    className: 'sm-toolbar-btn',
-                    onClick: function () {
-                        if (typeof openModal === 'function') openModal('import-skill', {})
-                    },
-                }, t('action.import')),
-                h(SmButton, {
-                    tone: 'primary',
-                    icon: 'plus',
-                    className: 'sm-toolbar-btn',
-                    onClick: function () {
-                        if (typeof openModal === 'function') openModal('new-skill', {})
-                    },
-                }, t('action.newSkill'))))
+                h('div', { className: 'sm-split-btn' },
+                    h(SmButton, {
+                        tone: 'primary',
+                        icon: 'plus',
+                        className: 'sm-toolbar-btn sm-split-main',
+                        onClick: function () {
+                            if (typeof openModal === 'function') openModal('new-skill', {})
+                        },
+                    }, t('action.newSkill')),
+                    h('button', {
+                        type: 'button',
+                        className: 'sm-split-arrow',
+                        'aria-label': t('action.more'),
+                        'aria-haspopup': 'menu',
+                        'aria-expanded': appState.menu !== null && typeof appState.menu === 'object' && appState.menu.type === 'new-skill' ? 'true' : 'false',
+                        onClick: openNewSkillMenu,
+                    }, icon('chevron-down', 14)))))
+    }
+
+    /** Split-button menu: new skill vs import skill. */
+    function openNewSkillMenu(event) {
+        let rect = null
+        if (event !== null && event !== undefined && event.currentTarget !== null && event.currentTarget !== undefined
+            && typeof event.currentTarget.getBoundingClientRect === 'function') {
+            rect = event.currentTarget.getBoundingClientRect()
+        }
+        const width = 180
+        const height = 92
+        const viewportWidth = typeof window !== 'undefined' && window !== null ? window.innerWidth : 1024
+        const viewportHeight = typeof window !== 'undefined' && window !== null ? window.innerHeight : 768
+        const x = rect !== null ? rect.right - width : viewportWidth - width - 24
+        let y = rect !== null ? rect.bottom + 4 : 120
+        if (y + height > viewportHeight - 8) y = rect !== null ? rect.top - height - 4 : y
+        setState({
+            menu: {
+                type: 'new-skill',
+                x: Math.max(8, Math.min(viewportWidth - width - 8, x)),
+                y: Math.max(8, Math.min(viewportHeight - height - 8, y)),
+            },
+        })
+    }
+
+    function renderNewSkillMenu() {
+        const menu = appState.menu
+        if (menu === null || typeof menu !== 'object' || menu.type !== 'new-skill') return null
+        const close = function () { setState({ menu: null }) }
+        const item = function (key, label, iconName, action) {
+            return h('button', {
+                key: key,
+                type: 'button',
+                role: 'menuitem',
+                className: 'sm-menu-item',
+                onClick: function () {
+                    close()
+                    if (typeof action === 'function') action()
+                },
+            },
+            h('span', { className: 'sm-menu-icon' }, icon(iconName, 15)),
+            h('span', null, label))
+        }
+        return [
+            h('div', {
+                key: 'backdrop',
+                className: 'sm-menu-backdrop',
+                onMouseDown: function (event) {
+                    if (typeof event.preventDefault === 'function') event.preventDefault()
+                    close()
+                },
+            }),
+            h('div', {
+                key: 'menu',
+                className: 'sm-menu',
+                role: 'menu',
+                style: { left: menu.x + 'px', top: menu.y + 'px', width: '180px' },
+                onClick: function (event) { event.stopPropagation() },
+            },
+            item('new', t('action.newSkill'), 'plus', function () {
+                if (typeof openModal === 'function') openModal('new-skill', {})
+            }),
+            item('import', t('action.import'), 'import', function () {
+                if (typeof openModal === 'function') openModal('import-skill', {})
+            })),
+        ]
     }
 
     function renderPageHeader() {
@@ -1763,6 +1830,7 @@
             typeof renderModalLayer === 'function' ? renderModalLayer() : null,
             typeof renderSourceDialog === 'function' ? renderSourceDialog() : null,
             typeof renderDiagnosticsDrawer === 'function' ? renderDiagnosticsDrawer() : null,
+            renderNewSkillMenu(),
             typeof renderTooltipLayer === 'function' ? renderTooltipLayer() : null,
             typeof renderToastHost === 'function' ? renderToastHost() : null)
     }

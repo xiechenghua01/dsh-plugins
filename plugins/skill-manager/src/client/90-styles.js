@@ -236,6 +236,36 @@
   min-width: 0;
 }
 
+.sm-split-btn {
+  display: inline-flex;
+  align-items: center;
+  flex: none;
+}
+
+/* Split button: the primary half keeps the left radius, the caret the right one. */
+.sm-toolbar .sm-split-btn .sm-btn.sm-split-main {
+  border-radius: 12px 0 0 12px;
+}
+
+.sm-toolbar .sm-split-arrow {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 32px;
+  height: 32px;
+  padding: 0;
+  border: none;
+  border-radius: 0 12px 12px 0;
+  background: var(--dsw-static-neutral-bluish-50, #f9fafb);
+  color: var(--dsw-static-neutral-bluish-1000, #0f1115);
+  cursor: pointer;
+  box-shadow: inset 1px 0 0 var(--dsw-alias-border-l1);
+}
+
+.sm-toolbar .sm-split-arrow:hover {
+  background: var(--dsw-static-neutral-bluish-60, #f1f3f5);
+}
+
 .sm-toolbar-actions {
   display: flex;
   align-items: center;
