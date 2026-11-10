@@ -2128,11 +2128,6 @@ textarea.sm-input.sm-edit-body {
  * 12. Modals: 488 / 480 / 720 widths, transparent veil, no shadow    *
  * ------------------------------------------------------------------ */
 
-@keyframes sm-mask-in {
-  from { opacity: 0; }
-  to { opacity: 1; }
-}
-
 .sm-modal-backdrop,
 .sm-modal-layer,
 .sm-dialog-mask {
@@ -2145,7 +2140,6 @@ textarea.sm-input.sm-edit-body {
   padding: 16px;
   /* DSH dialog mask: a real dim layer, not a transparent hit area. */
   background: var(--dsw-alias-bg-mask-1, rgba(0, 0, 0, 0.5));
-  animation: sm-mask-in 160ms ease-out;
   backdrop-filter: none;
 }
 
