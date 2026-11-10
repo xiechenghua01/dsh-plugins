@@ -236,6 +236,29 @@
   min-width: 0;
 }
 
+/* Split menu: DSH plugin-page dropdown shape — larger radius, roomier rows. */
+.sm-menu.sm-split-menu {
+  padding: 6px;
+  border-radius: 16px;
+  min-width: 200px;
+  max-width: 200px;
+  border-color: var(--dsw-alias-border-l1);
+  background: var(--dsw-alias-bg-layer-2, var(--dsw-static-neutral-bluish-850));
+}
+
+.sm-split-menu .sm-menu-item {
+  height: 40px;
+  padding: 0 10px;
+  border-radius: 10px;
+  gap: 10px;
+  font-size: var(--sm-fs);
+}
+
+.sm-split-menu .sm-menu-item .sm-menu-icon {
+  width: 18px;
+  color: var(--dsw-alias-label-secondary);
+}
+
 .sm-split-btn {
   display: inline-flex;
   align-items: center;

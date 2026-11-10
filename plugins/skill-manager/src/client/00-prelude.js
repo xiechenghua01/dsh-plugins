@@ -1794,14 +1794,11 @@
             }),
             h('div', {
                 key: 'menu',
-                className: 'sm-menu',
+                className: 'sm-menu sm-split-menu',
                 role: 'menu',
-                style: { left: menu.x + 'px', top: menu.y + 'px', width: '180px' },
+                style: { left: menu.x + 'px', top: menu.y + 'px', width: '200px' },
                 onClick: function (event) { event.stopPropagation() },
             },
-            item('new', t('action.newSkill'), 'plus', function () {
-                if (typeof openModal === 'function') openModal('new-skill', {})
-            }),
             item('import', t('action.import'), 'import', function () {
                 if (typeof openModal === 'function') openModal('import-skill', {})
             })),
