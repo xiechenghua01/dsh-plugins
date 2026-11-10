@@ -132,7 +132,7 @@
   overflow: hidden;
   --sm-content-max: 960px;
   /* Requested top breathing room. */
-  padding: 82px clamp(20px, 4vw, 48px) 0;
+  padding: 78px clamp(20px, 4vw, 48px) 0;
 }
 
 /* Header, tabs, list and detail share the same column, so their left
