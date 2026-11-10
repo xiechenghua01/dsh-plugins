@@ -206,7 +206,8 @@
 
 .sm-title {
   margin: 0;
-  font-size: calc(var(--sm-fs) + 2px);
+  /* v1 alias shares the same element as .sm-page-title; keep both at 20px. */
+  font-size: calc(var(--sm-fs) + 6px);
   font-weight: 500;
   line-height: 1.4;
   letter-spacing: -0.01em;
