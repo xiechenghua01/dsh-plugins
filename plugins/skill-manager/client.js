@@ -1725,36 +1725,32 @@ window.__ModuleLoader__.load({
             SKILL_SORTS.map(function (key) {
                 return h('option', { key: key, value: key }, t(SKILL_SORT_LABEL_KEYS[key] || 'sort.name'))
             })),
-            h('div', { className: 'sm-toolbar-icons' },
-                h('button', {
-                    type: 'button',
-                    className: 'sm-tool-btn',
-                    'aria-label': t('action.newSkill'),
-                    'data-tip': t('action.newSkill'),
-                    onClick: function () {
-                        if (typeof openModal === 'function') openModal('new-skill', {})
-                    },
-                }, icon('plus', 16)),
-                h('button', {
-                    type: 'button',
-                    className: 'sm-tool-btn',
-                    'aria-label': t('action.import'),
-                    'data-tip': t('action.import'),
-                    onClick: function () {
-                        if (typeof openModal === 'function') openModal('import-skill', {})
-                    },
-                }, icon('import', 16)),
-                h('button', {
-                    type: 'button',
-                    className: 'sm-tool-btn',
-                    'aria-label': t('action.checkUpdates'),
-                    'data-tip': checking ? t('status.checking') : t('action.checkUpdates'),
+            h('div', { className: 'sm-toolbar-actions' },
+                h(SmButton, {
+                    tone: 'secondary',
+                    icon: 'refresh',
+                    className: 'sm-toolbar-btn',
                     disabled: checking,
-                    'aria-busy': checking ? 'true' : undefined,
                     onClick: function () {
                         if (typeof checkUpdates === 'function') void checkUpdates()
                     },
-                }, icon('refresh', 16))))
+                }, t('action.checkUpdates')),
+                h(SmButton, {
+                    tone: 'secondary',
+                    icon: 'import',
+                    className: 'sm-toolbar-btn',
+                    onClick: function () {
+                        if (typeof openModal === 'function') openModal('import-skill', {})
+                    },
+                }, t('action.import')),
+                h(SmButton, {
+                    tone: 'primary',
+                    icon: 'plus',
+                    className: 'sm-toolbar-btn',
+                    onClick: function () {
+                        if (typeof openModal === 'function') openModal('new-skill', {})
+                    },
+                }, t('action.newSkill'))))
     }
 
     function renderPageHeader() {
@@ -7898,7 +7894,8 @@ window.__ModuleLoader__.load({
   flex: 1 1 auto;
   overflow: hidden;
   --sm-content-max: 960px;
-  padding: 40px clamp(20px, 4vw, 48px) 0;
+  /* DSH plugin page puts its h1 28px from the window top. */
+  padding: 28px clamp(20px, 4vw, 48px) 0;
 }
 
 /* Header, tabs, list and detail share the same column, so their left
@@ -8000,6 +7997,44 @@ window.__ModuleLoader__.load({
   flex-wrap: wrap;
   margin-left: auto;
   min-width: 0;
+}
+
+.sm-toolbar-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex: none;
+}
+
+/* Toolbar buttons follow the plugin page: the secondary one is borderless and
+ * transparent, the primary one is the near-white fill with dark label. */
+.sm-toolbar .sm-btn.sm-toolbar-btn {
+  height: 32px;
+  padding: 0 12px;
+  border-radius: 12px;
+  font-size: calc(var(--sm-fs) - 1px);
+  font-weight: 400;
+}
+
+.sm-toolbar .sm-btn-secondary.sm-toolbar-btn {
+  background: transparent;
+  border-color: transparent;
+  color: var(--dsw-alias-label-primary);
+}
+
+.sm-toolbar .sm-btn-secondary.sm-toolbar-btn:hover:not(:disabled) {
+  background: var(--dsw-alias-interactive-bg-hover);
+}
+
+.sm-toolbar .sm-btn-primary.sm-toolbar-btn {
+  background: var(--dsw-static-neutral-bluish-50, #f9fafb);
+  border-color: var(--dsw-static-neutral-bluish-50, #f9fafb);
+  color: var(--dsw-static-neutral-bluish-1000, #0f1115);
+}
+
+.sm-toolbar .sm-btn-primary.sm-toolbar-btn:hover:not(:disabled) {
+  background: var(--dsw-static-neutral-bluish-60, #f1f3f5);
+  border-color: var(--dsw-static-neutral-bluish-60, #f1f3f5);
 }
 
 .sm-toolbar-icons {

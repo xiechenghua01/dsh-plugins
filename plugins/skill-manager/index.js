@@ -1002,10 +1002,12 @@ export function apply(ctx, config) {
    * Installed views need each install record's market index entry to expose the optional
    * `descriptionByLocale`. Indexes come from the same 10-minute cache `/market` uses, so
    * the usual case is a memory hit. A slow source must not delay `/installed`: the read is
-   * raced against a short budget, while the underlying fetch keeps running and warms the
-   * cache for the next request. A source that failed is retried after a short back-off.
+   * raced against a 150ms budget, while the underlying fetch keeps running and warms the
+   * cache for the next request. When the index is missing we return without the optional
+   * `descriptionByLocale` — the client falls back to `description`. A source that failed
+   * is retried after a short back-off.
    */
-  const DESCRIPTION_WAIT_MS = 2000
+  const DESCRIPTION_WAIT_MS = 150
   const DESCRIPTION_RETRY_MS = 60_000
   const DESCRIPTION_TIMEOUT = Symbol('skill-manager:description-timeout')
   const descriptionIndexFailures = new Map()

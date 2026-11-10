@@ -1712,36 +1712,32 @@
             SKILL_SORTS.map(function (key) {
                 return h('option', { key: key, value: key }, t(SKILL_SORT_LABEL_KEYS[key] || 'sort.name'))
             })),
-            h('div', { className: 'sm-toolbar-icons' },
-                h('button', {
-                    type: 'button',
-                    className: 'sm-tool-btn',
-                    'aria-label': t('action.newSkill'),
-                    'data-tip': t('action.newSkill'),
-                    onClick: function () {
-                        if (typeof openModal === 'function') openModal('new-skill', {})
-                    },
-                }, icon('plus', 16)),
-                h('button', {
-                    type: 'button',
-                    className: 'sm-tool-btn',
-                    'aria-label': t('action.import'),
-                    'data-tip': t('action.import'),
-                    onClick: function () {
-                        if (typeof openModal === 'function') openModal('import-skill', {})
-                    },
-                }, icon('import', 16)),
-                h('button', {
-                    type: 'button',
-                    className: 'sm-tool-btn',
-                    'aria-label': t('action.checkUpdates'),
-                    'data-tip': checking ? t('status.checking') : t('action.checkUpdates'),
+            h('div', { className: 'sm-toolbar-actions' },
+                h(SmButton, {
+                    tone: 'secondary',
+                    icon: 'refresh',
+                    className: 'sm-toolbar-btn',
                     disabled: checking,
-                    'aria-busy': checking ? 'true' : undefined,
                     onClick: function () {
                         if (typeof checkUpdates === 'function') void checkUpdates()
                     },
-                }, icon('refresh', 16))))
+                }, t('action.checkUpdates')),
+                h(SmButton, {
+                    tone: 'secondary',
+                    icon: 'import',
+                    className: 'sm-toolbar-btn',
+                    onClick: function () {
+                        if (typeof openModal === 'function') openModal('import-skill', {})
+                    },
+                }, t('action.import')),
+                h(SmButton, {
+                    tone: 'primary',
+                    icon: 'plus',
+                    className: 'sm-toolbar-btn',
+                    onClick: function () {
+                        if (typeof openModal === 'function') openModal('new-skill', {})
+                    },
+                }, t('action.newSkill'))))
     }
 
     function renderPageHeader() {
