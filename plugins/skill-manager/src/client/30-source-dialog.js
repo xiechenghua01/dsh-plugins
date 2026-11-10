@@ -918,26 +918,6 @@
                 overflow: 'hidden',
             },
         },
-        h('p', {
-            key: 'intro',
-            className: 'sm-dialog-intro',
-            style: {
-                margin: 0,
-                fontSize: 'calc(var(--sm-fs) - 1px)',
-                lineHeight: 1.55,
-                color: 'var(--dsw-alias-label-secondary)',
-            },
-        }, t('source.priorityHint')),
-        h('p', {
-            key: 'hint',
-            className: 'sm-source-drag-hint',
-            style: {
-                margin: 0,
-                fontSize: 'calc(var(--sm-fs) - 3px)',
-                lineHeight: 1.5,
-                color: 'var(--dsw-alias-label-caption)',
-            },
-        }, t('source.dragHint')),
         smSourceDialogBody(list, scopedError, loading),
         h('div', { key: 'live', className: 'sm-sr-only', 'aria-live': 'polite' }, smSourceDialogAnnounce))
 
@@ -947,7 +927,7 @@
             style: {
                 display: 'flex',
                 alignItems: 'center',
-                justifyContent: 'flex-start',
+                justifyContent: 'flex-end',
                 gap: '8px',
                 padding: '12px 20px',
                 borderTop: '0.5px solid var(--dsw-alias-border-l2)',

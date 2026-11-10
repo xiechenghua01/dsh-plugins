@@ -411,6 +411,16 @@
         return t('detail.source.local')
     }
 
+    /** 详情里只展示源名，不重复「来自市场」这层前缀。 */
+    function smSourceShort(skill) {
+        if (skill === null || typeof skill !== 'object') return t('detail.source.local')
+        if (smIsBuiltin(skill)) return t('detail.status.builtin')
+        const sourceId = smText(skill.sourceId)
+        const sourceName = smText(skill.sourceName, smSourceNameById(sourceId))
+        if (sourceId !== '' || sourceName !== '') return sourceName
+        return t('detail.source.local')
+    }
+
     function smSkillVersion(skill) {
         if (skill === null || typeof skill !== 'object') return ''
         const version = smText(skill.version)
@@ -665,7 +675,7 @@
                 skill: skill,
                 name: name,
                 badge: badge,
-                subtitle: smSourceLabel(skill) + ' · ' + t('detail.updated', { time: fmtTime(smNumber(skill.mtime, 0)) }),
+                subtitle: smSourceShort(skill) + ' · ' + t('detail.updated', { time: fmtTime(smNumber(skill.mtime, 0)) }),
             }, actions),
             h('div', { className: 'sm-detail sm-detail-body' },
                 h('div', { className: 'sm-detail-main' },
@@ -699,7 +709,7 @@
                         h('div', { style: { display: 'flex', flexDirection: 'column', gap: '10px' } },
                             smSkillVersion(skill) !== '' ? h(SmMetaRow, { label: t('detail.version'), mono: true }, smSkillVersion(skill)) : null,
                             smText(skill.author) !== '' ? h(SmMetaRow, { label: t('detail.author') }, smText(skill.author)) : null,
-                            h(SmMetaRow, { label: t('market.source') }, smSourceLabel(skill)),
+                            h(SmMetaRow, { label: t('market.source') }, smSourceShort(skill)),
                             h(SmMetaRow, { label: t('sort.modified') }, fmtTime(smNumber(skill.mtime, 0))),
                             h(SmMetaRow, { label: t('detail.location'), mono: path !== '' },
                                 path !== ''
@@ -847,9 +857,13 @@
                         : null),
                 h('div', { className: 'sm-detail-side' },
                     h(SmCard, null,
-                        h(SmCardTitle, null, t('market.source')),
+                        h(SmCardTitle, {
+                            extra: smNumber(market.publishTimestamp, 0) > 0
+                                ? h('span', { style: { fontSize: 'calc(var(--sm-fs) - 3px)', color: 'var(--dsw-alias-label-caption)', whiteSpace: 'nowrap' } }, t('market.published', { time: fmtTime(market.publishTimestamp) }))
+                                : null,
+                        }, t('market.source')),
                         h('div', { style: { display: 'flex', flexDirection: 'column', gap: '10px' } },
-                            h(SmMetaRow, { label: t('market.source') }, sourceName),
+                            h(SmMetaRow, { label: t('market.source') }, sourceName || smSourceShort(market)),
                             version !== '' ? h(SmMetaRow, { label: t('market.version'), mono: true }, version) : null,
                             smText(market.author) !== '' ? h(SmMetaRow, { label: t('market.author') }, smText(market.author)) : null,
                             smText(market.license) !== '' ? h(SmMetaRow, { label: t('market.license') }, smText(market.license)) : null,
@@ -866,7 +880,7 @@
                                         }, icon('copy', 14))))
                                 : null,
                             smText(market.enginesDsh) !== '' ? h('div', { style: { color: 'var(--dsw-alias-label-secondary)', fontSize: 'calc(var(--sm-fs) - 2px)' } }, t('market.engines', { range: smText(market.enginesDsh) })) : null,
-                            smNumber(market.publishTimestamp, 0) > 0 ? h('div', { style: { color: 'var(--dsw-alias-label-secondary)', fontSize: 'calc(var(--sm-fs) - 2px)' } }, t('market.published', { time: fmtTime(market.publishTimestamp) })) : null,
+
                             installedNow ? h(SmMetaRow, { label: t('market.installed') }, installedSkill !== null ? fmtTime(smNumber(installedSkill.mtime, 0)) : t('market.installed')) : null)))
             )
         )
