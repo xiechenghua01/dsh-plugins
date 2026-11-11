@@ -17,8 +17,26 @@
       suppressFocusUntil: 0,
     }
 
+    /** Rebind the observer whenever the page remounts (theme switch / settings nav). */
+    function bindTooltipRoot() {
+      if (tooltip.observer !== null && tooltip.observer !== undefined) {
+        tooltip.observer.disconnect()
+        tooltip.observer = null
+      }
+      const root = typeof document !== 'undefined' && document !== null ? document.querySelector('.mm-root') : null
+      tooltip.root = root
+      if (root !== null && typeof MutationObserver === 'function') {
+        tooltip.observer = new MutationObserver(syncTooltipFontSize)
+        tooltip.observer.observe(root, { attributes: true, attributeFilter: ['style'] })
+      }
+    }
+
     function tooltipFontSize() {
-      const root = tooltip.root
+      let root = tooltip.root
+      if (root === null || root === undefined || root.isConnected !== true) {
+        bindTooltipRoot()
+        root = tooltip.root
+      }
       if (root !== null && root !== undefined && typeof getComputedStyle === 'function') {
         const value = getComputedStyle(root).getPropertyValue('--ds-fs').trim()
         if (value !== '') return value
@@ -45,11 +63,7 @@
       document.body.appendChild(host)
       tooltip.host = host
       tooltip.node = node
-      tooltip.root = document.querySelector('.mm-root')
-      if (tooltip.root !== null && typeof MutationObserver === 'function') {
-        tooltip.observer = new MutationObserver(syncTooltipFontSize)
-        tooltip.observer.observe(tooltip.root, { attributes: true, attributeFilter: ['style'] })
-      }
+      bindTooltipRoot()
       syncTooltipFontSize()
       return node
     }

@@ -112,8 +112,6 @@ window.__ModuleLoader__.load({
       'action.jsonTip': '仅写入非空与非默认字段，支持直接粘贴外部分享的 JSON',
       'toast.enabled': '{name} 已启用',
       'toast.disabled': '{name} 已停用',
-      'toast.testOk': '{name} 连通正常（{ms}ms · {tools} 个工具）',
-      'toast.testFail': '{name} 测试失败：{message}',
       'toast.testAllNone': '暂无已启用的 MCP 服务',
       'toast.testAllDone': '已完成 {count} 个启用服务的连通性测试',
       'toast.created': '已添加 {name}',
@@ -259,8 +257,6 @@ window.__ModuleLoader__.load({
       'action.jsonTip': 'Only non-empty and non-default fields are written; paste shared JSON directly',
       'toast.enabled': '{name} enabled',
       'toast.disabled': '{name} disabled',
-      'toast.testOk': '{name} is reachable ({ms}ms · {tools} tools)',
-      'toast.testFail': '{name} test failed: {message}',
       'toast.testAllNone': 'No enabled MCP servers to test',
       'toast.testAllDone': 'Finished testing {count} enabled services',
       'toast.created': 'Added {name}',
@@ -562,8 +558,26 @@ window.__ModuleLoader__.load({
       suppressFocusUntil: 0,
     }
 
+    /** Rebind the observer whenever the page remounts (theme switch / settings nav). */
+    function bindTooltipRoot() {
+      if (tooltip.observer !== null && tooltip.observer !== undefined) {
+        tooltip.observer.disconnect()
+        tooltip.observer = null
+      }
+      const root = typeof document !== 'undefined' && document !== null ? document.querySelector('.mm-root') : null
+      tooltip.root = root
+      if (root !== null && typeof MutationObserver === 'function') {
+        tooltip.observer = new MutationObserver(syncTooltipFontSize)
+        tooltip.observer.observe(root, { attributes: true, attributeFilter: ['style'] })
+      }
+    }
+
     function tooltipFontSize() {
-      const root = tooltip.root
+      let root = tooltip.root
+      if (root === null || root === undefined || root.isConnected !== true) {
+        bindTooltipRoot()
+        root = tooltip.root
+      }
       if (root !== null && root !== undefined && typeof getComputedStyle === 'function') {
         const value = getComputedStyle(root).getPropertyValue('--ds-fs').trim()
         if (value !== '') return value
@@ -590,11 +604,7 @@ window.__ModuleLoader__.load({
       document.body.appendChild(host)
       tooltip.host = host
       tooltip.node = node
-      tooltip.root = document.querySelector('.mm-root')
-      if (tooltip.root !== null && typeof MutationObserver === 'function') {
-        tooltip.observer = new MutationObserver(syncTooltipFontSize)
-        tooltip.observer.observe(tooltip.root, { attributes: true, attributeFilter: ['style'] })
-      }
+      bindTooltipRoot()
       syncTooltipFontSize()
       return node
     }
@@ -1206,6 +1216,55 @@ window.__ModuleLoader__.load({
       )
     }
 
+    /**
+     * Link-style text button (§7.1). `className` only appends to the base class;
+     * `tip` and `expanded` are optional so disclosure-style links keep their ARIA state.
+     */
+    function LinkButton(props) {
+      const className = 'mm-link-btn'
+        + (props.className !== undefined && props.className !== '' ? ' ' + props.className : '')
+      const attrs = {
+        type: 'button',
+        className: className,
+        onClick: props.onClick,
+      }
+      if (props.expanded !== undefined) attrs['aria-expanded'] = props.expanded === true ? 'true' : 'false'
+      return h('button', Object.assign(attrs, tooltipHandlers(props.tip)), props.children)
+    }
+
+    /** Disclosure header (§7.1): the chevron rotation follows `open`. */
+    function DisclosureButton(props) {
+      return h(
+        'button',
+        {
+          type: 'button',
+          className: 'mm-adv-toggle',
+          'aria-expanded': props.open === true ? 'true' : 'false',
+          onClick: props.onClick,
+        },
+        props.children,
+        h(Svg, {
+          d: ICON_CHEVRON,
+          size: 16,
+          className: 'mm-chevron' + (props.open === true ? ' mm-chevron-open' : ''),
+        }),
+      )
+    }
+
+    /** Icon-only delete control for key/value rows (§7.2). */
+    function KvDeleteButton(props) {
+      return h(
+        'button',
+        Object.assign({
+          type: 'button',
+          className: 'mm-kv-del',
+          'aria-label': props.label,
+          onClick: props.onClick,
+        }, tooltipHandlers(props.label)),
+        h(Svg, { d: ICON_X, size: 16 }),
+      )
+    }
+
     function HelpDot(props) {
       return h(
         'button',
@@ -1492,52 +1551,28 @@ window.__ModuleLoader__.load({
                 ? h('span', { className: 'mm-latency' }, t('list.latency', { ms: latency }))
                 : null,
               h(
-                'button',
-                Object.assign({
-                  type: 'button',
+                LinkButton,
+                {
                   className: 'mm-tools-btn',
-                  'aria-expanded': props.expanded === true ? 'true' : 'false',
+                  expanded: props.expanded === true,
+                  tip: t('list.toolsTip'),
                   onClick: props.onToggleExpand,
-                }, tooltipHandlers(t('list.toolsTip'))),
+                },
                 h('span', null, t('list.tools', { count: count === null ? DASH : String(count) })),
                 h(Svg, { d: ICON_CHEVRON, size: 12, className: 'mm-chevron' + (props.expanded === true ? ' mm-chevron-open' : '') }),
               ),
             ),
             h('div', { className: 'mm-summary' }, target !== '' ? target : DASH),
           ),
-          h(
-            'div',
-            { className: 'mm-actions' },
-            h(IconButton, {
-              icon: ICON_POWER,
-              label: enabled === true ? t('action.toggleDisable') : t('action.toggleEnable'),
-              tooltip: enabled === true ? t('action.toggleDisable') : t('action.toggleEnable'),
-              tone: enabled === true ? 'ok' : '',
-              disabled: blocked,
-              onClick: () => {
-                if (typeof props.onToggleEnabled === 'function') props.onToggleEnabled(row)
-              },
-            }),
-            h(IconButton, {
-              icon: ICON_EDIT,
-              label: t('action.edit'),
-              tooltip: t('action.edit'),
-              disabled: blocked,
-              onClick: () => {
-                if (typeof props.onEdit === 'function') props.onEdit(row)
-              },
-            }),
-            h(IconButton, {
-              icon: ICON_TRASH,
-              label: t('action.delete'),
-              tooltip: t('action.delete'),
-              tone: 'danger',
-              disabled: blocked,
-              onClick: () => {
-                if (typeof props.onDelete === 'function') props.onDelete(row)
-              },
-            }),
-          ),
+          h(RowActions, {
+            t: t,
+            row: row,
+            enabled: enabled,
+            disabled: blocked,
+            onToggleEnabled: props.onToggleEnabled,
+            onEdit: props.onEdit,
+            onDelete: props.onDelete,
+          }),
         ),
         props.expanded === true
           ? h(
@@ -1562,45 +1597,56 @@ window.__ModuleLoader__.load({
           : null,
       )
     }
-
     /* ------------------------------------------------------------------ *
-     * Editor dialog.                                                     *
+     * Row actions: enable/disable, edit, delete.                         *
      * ------------------------------------------------------------------ */
 
-    function EditorDialog(props) {
+    function RowActions(props) {
       const t = props.t
-      const mode = props.mode
       const row = props.row
-      const pushToast = props.pushToast
-
-      const initialTools = mode === 'edit' && isObject(row) ? probedToolsFromRow(row) : []
-      const initialProbe = mode === 'edit' && isObject(row) && isObject(row.lastProbe) ? row.lastProbe : null
-      const initialHasProbe = isObject(initialProbe)
-        && ((Array.isArray(initialProbe.tools) && initialProbe.tools.length > 0)
-          || (Array.isArray(initialProbe.toolNames) && initialProbe.toolNames.length > 0))
-      const [draft, setDraft] = useState(() => (mode === 'edit' && isObject(row) ? draftFromRow(row) : emptyDraft()))
-      const [policy, setPolicyState] = useState(() => (mode === 'edit' && isObject(row) ? policyFromRow(row) : {}))
-      const policyRef = useRef(policy)
-      const [probedTools, setProbedTools] = useState(initialTools)
-      const [probeState, setProbeState] = useState(() => (initialHasProbe
-        ? { phase: 'ok', message: t('editor.toolsProbed', { count: initialTools.length }) }
-        : { phase: 'idle', message: t('editor.toolsIdle') }))
-      const [toolFilter, setToolFilter] = useState('')
-      const [advancedOpen, setAdvancedOpen] = useState(false)
-      const [tab, setTab] = useState('form')
-      const [jsonText, setJsonText] = useState('')
-      const [jsonFeedback, setJsonFeedback] = useState({ kind: 'ok', text: '' })
-      const [testing, setTesting] = useState(false)
-      const [testResult, setTestResult] = useState({ kind: 'idle', text: '' })
-      const [saving, setSaving] = useState(false)
-
-      // Mirror every policy write into a ref synchronously so an in-flight probe merges its
-      // response against the policy as it is now, not the one captured when the probe started.
-      function setPolicy(next) {
-        const value = typeof next === 'function' ? next(policyRef.current) : next
-        policyRef.current = value
-        setPolicyState(value)
+      const enabled = props.enabled === true
+      const blocked = props.disabled === true
+      const toggleLabel = enabled === true ? t('action.toggleDisable') : t('action.toggleEnable')
+      const call = (handler) => {
+        if (typeof handler === 'function') handler(row)
       }
+      return h(
+        'div',
+        { className: 'mm-actions' },
+        h(IconButton, {
+          icon: ICON_POWER,
+          label: toggleLabel,
+          tooltip: toggleLabel,
+          tone: enabled === true ? 'ok' : '',
+          disabled: blocked,
+          onClick: () => call(props.onToggleEnabled),
+        }),
+        h(IconButton, {
+          icon: ICON_EDIT,
+          label: t('action.edit'),
+          tooltip: t('action.edit'),
+          disabled: blocked,
+          onClick: () => call(props.onEdit),
+        }),
+        h(IconButton, {
+          icon: ICON_TRASH,
+          label: t('action.delete'),
+          tooltip: t('action.delete'),
+          tone: 'danger',
+          disabled: blocked,
+          onClick: () => call(props.onDelete),
+        }),
+      )
+    }
+    /* ------------------------------------------------------------------ *
+     * Editor state.                                                      *
+     *                                                                    *
+     * One hook per concern (§6.3): draft, policy, probe, JSON tab, test  *
+     * and save. The dialog in 44-editor-dialog.js only composes them.    *
+     * ------------------------------------------------------------------ */
+
+    function useEditorDraft(initializer) {
+      const [draft, setDraft] = useState(initializer)
 
       function setField(key, value) {
         setDraft((prev) => {
@@ -1641,6 +1687,29 @@ window.__ModuleLoader__.load({
         })
       }
 
+      return {
+        draft: draft,
+        setDraft: setDraft,
+        setField: setField,
+        setArgsText: setArgsText,
+        updateRow: updateRow,
+        addRow: addRow,
+        removeRow: removeRow,
+      }
+    }
+
+    function useEditorPolicy(initializer) {
+      const [policy, setPolicyState] = useState(initializer)
+      const policyRef = useRef(policy)
+
+      // Mirror every policy write into a ref synchronously so an in-flight probe merges its
+      // response against the policy as it is now, not the one captured when the probe started.
+      function setPolicy(next) {
+        const value = typeof next === 'function' ? next(policyRef.current) : next
+        policyRef.current = value
+        setPolicyState(value)
+      }
+
       function setToolPolicy(name, next) {
         setPolicy((prev) => {
           const copy = Object.assign({}, prev)
@@ -1650,38 +1719,142 @@ window.__ModuleLoader__.load({
         })
       }
 
+      return { policy: policy, policyRef: policyRef, setPolicy: setPolicy, setToolPolicy: setToolPolicy }
+    }
+
+    /** Report fetched tools, noting the server-reported total when it differs. */
+    function probeMessageOf(t, row, count) {
+      const known = isObject(row) && Number.isFinite(row.toolCount) ? row.toolCount : null
+      if (known !== null && known > count) return t('editor.toolsProbedTotal', { count: count, total: known })
+      return t('editor.toolsProbed', { count: count })
+    }
+
+    function useEditorProbe(options) {
+      const t = options.t
+      const pushToast = options.pushToast
+      const [probedTools, setProbedTools] = useState(options.initialTools)
+      const [probeState, setProbeState] = useState(() => (options.initialHasProbe
+        ? { phase: 'ok', message: t('editor.toolsProbed', { count: options.initialTools.length }) }
+        : { phase: 'idle', message: t('editor.toolsIdle') }))
+      const [toolFilter, setToolFilter] = useState('')
+      const [advancedOpen, setAdvancedOpen] = useState(false)
+
+      async function runProbe(silent) {
+        const values = draftValues(options.draft, options.policy)
+        let validation = ''
+        if (values.transport === 'sse') validation = t('editor.sseBlocked')
+        else if (values.transport === 'stdio' && values.command === '') validation = t('editor.validationCommand')
+        else if (values.transport !== 'stdio' && values.url === '') validation = t('editor.validationUrl')
+        if (validation !== '') {
+          if (silent !== true) {
+            setProbeState({ phase: 'error', message: validation })
+            pushToast('err', validation)
+          }
+          return { ok: false, error: { message: validation } }
+        }
+        const name = values.serverName !== '' ? values.serverName : 'probe-server'
+        setProbeState({ phase: 'probing', message: '' })
+        try {
+          // Prefer the harness's own live connection: some MCP servers (searxng among them)
+          // allow a single concurrent session and answer a second one with 503 "Server busy".
+          let live = null
+          try {
+            live = await callApi('connectedTools', { serverName: name })
+          } catch {
+            live = null
+          }
+          if (isObject(live) && live.connected === true && Array.isArray(live.tools) && live.tools.length > 0) {
+            const mergedLive = mergeTools(live.tools, [], options.policyRef.current)
+            setProbedTools(mergedLive)
+            setProbeState({ phase: 'ok', message: probeMessageOf(t, options.row, mergedLive.length) })
+            if (silent !== true) pushToast('ok', t('toast.probeOk', { count: mergedLive.length }))
+            return { ok: true, tools: live.tools, toolCount: live.tools.length }
+          }
+          const config = cleanHostConfig(values)
+          config.serverName = name
+          const payload = await callApi('probe', { config: config })
+          const result = isObject(payload.result) ? payload.result : {}
+          if (result.ok === true) {
+            const tools = Array.isArray(result.tools) ? result.tools : []
+            // Replace the previous probe result; only tools that still carry a custom policy
+            // in the *latest* policy (it may have been reset while probing) but were not
+            // returned this time survive (same rule as the prototype).
+            const merged = mergeTools(tools, [], options.policyRef.current)
+            setProbedTools(merged)
+            setProbeState({ phase: 'ok', message: probeMessageOf(t, options.row, merged.length) })
+            if (silent !== true) pushToast('ok', t('toast.probeOk', { count: merged.length }))
+            return result
+          }
+          const message = isObject(result.error) && textOf(result.error.message) !== '' ? textOf(result.error.message) : t('common.unknownError')
+          setProbeState({ phase: 'error', message: t('editor.toolsFailed', { message: message }) })
+          if (silent !== true) pushToast('err', t('toast.probeFail', { message: message }))
+          return result
+        } catch (error) {
+          const message = describeError(t, error)
+          setProbeState({ phase: 'error', message: t('editor.toolsFailed', { message: message }) })
+          if (silent !== true) pushToast('err', t('toast.probeFail', { message: message }))
+          return { ok: false, error: { message: message } }
+        }
+      }
+
+      function toggleAdvanced() {
+        const next = !advancedOpen
+        setAdvancedOpen(next)
+        if (next === true && probeState.phase !== 'ok' && probeState.phase !== 'probing') {
+          runProbe(true)
+        }
+      }
+
+      return {
+        probedTools: probedTools,
+        setProbedTools: setProbedTools,
+        probeState: probeState,
+        toolFilter: toolFilter,
+        setToolFilter: setToolFilter,
+        advancedOpen: advancedOpen,
+        toggleAdvanced: toggleAdvanced,
+        runProbe: runProbe,
+      }
+    }
+
+    function parseEditorJsonValues(t, text, baseDraft) {
+      const raw = textOf(text).trim()
+      if (raw === '') return { ok: false, message: t('editor.jsonEmpty') }
+      let parsed
+      try {
+        parsed = JSON.parse(raw)
+      } catch (error) {
+        return { ok: false, message: t('editor.jsonInvalid', { message: messageOf(error) }) }
+      }
+      const extracted = extractServerNode(parsed)
+      if (extracted === null) return { ok: false, message: t('editor.jsonShape') }
+      const applied = applyParsedNode(baseDraft, extracted.node)
+      const nextDraft = extracted.id !== '' ? Object.assign({}, applied.draft, { serverName: extracted.id }) : applied.draft
+      return { ok: true, draft: nextDraft, policy: applied.policy, name: nextDraft.serverName }
+    }
+
+    function useEditorJson(options) {
+      const t = options.t
+      const [tab, setTab] = useState('form')
+      const [jsonText, setJsonText] = useState('')
+      const [jsonFeedback, setJsonFeedback] = useState({ kind: 'ok', text: '' })
+
       function syncJsonFromForm() {
-        const text = JSON.stringify(cleanJsonObject(draftValues(draft, policy)), null, 2)
+        const text = JSON.stringify(cleanJsonObject(draftValues(options.draft, options.policy)), null, 2)
         setJsonText(text)
         setJsonFeedback({ kind: 'ok', text: t('editor.jsonValid') })
         return text
       }
 
-      function parseJsonValues(text, baseDraft) {
-        const raw = textOf(text).trim()
-        if (raw === '') return { ok: false, message: t('editor.jsonEmpty') }
-        let parsed
-        try {
-          parsed = JSON.parse(raw)
-        } catch (error) {
-          return { ok: false, message: t('editor.jsonInvalid', { message: messageOf(error) }) }
-        }
-        const extracted = extractServerNode(parsed)
-        if (extracted === null) return { ok: false, message: t('editor.jsonShape') }
-        const applied = applyParsedNode(baseDraft, extracted.node)
-        const nextDraft = extracted.id !== '' ? Object.assign({}, applied.draft, { serverName: extracted.id }) : applied.draft
-        return { ok: true, draft: nextDraft, policy: applied.policy, name: nextDraft.serverName }
-      }
-
       function parseJsonText(text) {
-        const result = parseJsonValues(text, draft)
+        const result = parseEditorJsonValues(t, text, options.draft)
         if (result.ok !== true) {
           setJsonFeedback({ kind: 'err', text: result.message })
           return false
         }
-        setDraft(result.draft)
-        setPolicy(result.policy)
-        setProbedTools((prev) => mergeTools([], prev, result.policy))
+        options.setDraft(result.draft)
+        options.setPolicy(result.policy)
+        options.setProbedTools((prev) => mergeTools([], prev, result.policy))
         setJsonFeedback({ kind: 'ok', text: t('editor.jsonParsed', { name: result.name !== '' ? result.name : 'mcp-server' }) })
         return true
       }
@@ -1708,87 +1881,30 @@ window.__ModuleLoader__.load({
       async function copyJson() {
         const text = tab === 'json' ? jsonText : syncJsonFromForm()
         const ok = await copyText(text)
-        pushToast(ok === true ? 'ok' : 'err', ok === true ? t('toast.copied') : t('toast.copyFailed'))
+        options.pushToast(ok === true ? 'ok' : 'err', ok === true ? t('toast.copied') : t('toast.copyFailed'))
       }
 
       function fillSample() {
         const text = JSON.stringify(JSON_SAMPLE, null, 2)
         setJsonText(text)
-        if (parseJsonText(text)) pushToast('ok', t('toast.jsonSample'))
+        if (parseJsonText(text)) options.pushToast('ok', t('toast.jsonSample'))
       }
 
-      /** Report fetched tools, noting the server-reported total when it differs. */
-      function probeMessage(count) {
-        const known = isObject(props.row) && Number.isFinite(props.row.toolCount) ? props.row.toolCount : null
-        if (known !== null && known > count) return t('editor.toolsProbedTotal', { count: count, total: known })
-        return t('editor.toolsProbed', { count: count })
+      return {
+        tab: tab,
+        jsonText: jsonText,
+        jsonFeedback: jsonFeedback,
+        setJsonFeedback: setJsonFeedback,
+        switchTab: switchTab,
+        handleJsonChange: handleJsonChange,
+        copyJson: copyJson,
+        fillSample: fillSample,
       }
+    }
 
-      async function runProbe(silent) {
-        const values = draftValues(draft, policy)
-        let validation = ''
-        if (values.transport === 'sse') validation = t('editor.sseBlocked')
-        else if (values.transport === 'stdio' && values.command === '') validation = t('editor.validationCommand')
-        else if (values.transport !== 'stdio' && values.url === '') validation = t('editor.validationUrl')
-        if (validation !== '') {
-          if (silent !== true) {
-            setProbeState({ phase: 'error', message: validation })
-            pushToast('err', validation)
-          }
-          return { ok: false, error: { message: validation } }
-        }
-        const name = values.serverName !== '' ? values.serverName : 'probe-server'
-        setProbeState({ phase: 'probing', message: '' })
-        try {
-          // Prefer the harness's own live connection: some MCP servers (searxng among them)
-          // allow a single concurrent session and answer a second one with 503 "Server busy".
-          let live = null
-          try {
-            live = await callApi('connectedTools', { serverName: name })
-          } catch {
-            live = null
-          }
-          if (isObject(live) && live.connected === true && Array.isArray(live.tools) && live.tools.length > 0) {
-            const mergedLive = mergeTools(live.tools, [], policyRef.current)
-            setProbedTools(mergedLive)
-            setProbeState({ phase: 'ok', message: probeMessage(mergedLive.length) })
-            if (silent !== true) pushToast('ok', t('toast.probeOk', { count: mergedLive.length }))
-            return { ok: true, tools: live.tools, toolCount: live.tools.length }
-          }
-          const config = cleanHostConfig(values)
-          config.serverName = name
-          const payload = await callApi('probe', { config: config })
-          const result = isObject(payload.result) ? payload.result : {}
-          if (result.ok === true) {
-            const tools = Array.isArray(result.tools) ? result.tools : []
-            // Replace the previous probe result; only tools that still carry a custom policy
-            // in the *latest* policy (it may have been reset while probing) but were not
-            // returned this time survive (same rule as the prototype).
-            const merged = mergeTools(tools, [], policyRef.current)
-            setProbedTools(merged)
-            setProbeState({ phase: 'ok', message: probeMessage(merged.length) })
-            if (silent !== true) pushToast('ok', t('toast.probeOk', { count: merged.length }))
-            return result
-          }
-          const message = isObject(result.error) && textOf(result.error.message) !== '' ? textOf(result.error.message) : t('common.unknownError')
-          setProbeState({ phase: 'error', message: t('editor.toolsFailed', { message: message }) })
-          if (silent !== true) pushToast('err', t('toast.probeFail', { message: message }))
-          return result
-        } catch (error) {
-          const message = describeError(t, error)
-          setProbeState({ phase: 'error', message: t('editor.toolsFailed', { message: message }) })
-          if (silent !== true) pushToast('err', t('toast.probeFail', { message: message }))
-          return { ok: false, error: { message: message } }
-        }
-      }
-
-      function toggleAdvanced() {
-        const next = !advancedOpen
-        setAdvancedOpen(next)
-        if (next === true && probeState.phase !== 'ok' && probeState.phase !== 'probing') {
-          runProbe(true)
-        }
-      }
+    function useEditorTest(t, runProbe) {
+      const [testing, setTesting] = useState(false)
+      const [testResult, setTestResult] = useState({ kind: 'idle', text: '' })
 
       async function handleTest() {
         if (testing === true) return
@@ -1808,67 +1924,69 @@ window.__ModuleLoader__.load({
         setTesting(false)
       }
 
+      return { testing: testing, testResult: testResult, handleTest: handleTest }
+    }
+
+    function editorValidationMessage(t, values, draft) {
+      if (!SERVER_NAME_PATTERN.test(values.serverName)) return t('editor.validationName')
+      if (values.transport === 'sse') return t('editor.sseBlocked')
+      if (values.transport === 'stdio' && values.command === '') return t('editor.validationCommand')
+      if (values.transport !== 'stdio' && (values.url === '' || !HTTP_URL_PATTERN.test(values.url))) return t('editor.validationUrl')
+      if (draft.timeoutText.trim() !== '' && (!Number.isFinite(values.timeout) || values.timeout < 1000 || values.timeout > 3600000)) return t('editor.validationTimeout')
+      if (draft.retriesText.trim() !== '' && (!Number.isFinite(values.retries) || values.retries < 1 || values.retries > 1000)) return t('editor.validationRetries')
+      return ''
+    }
+
+    function useEditorSave(options) {
+      const t = options.t
+      const [saving, setSaving] = useState(false)
+
       async function handleSave() {
         if (saving === true) return
-        let valuesDraft = draft
-        let valuesPolicy = policy
-        if (tab === 'json') {
-          const parsed = parseJsonValues(jsonText, draft)
+        let valuesDraft = options.draft
+        let valuesPolicy = options.policy
+        if (options.tab === 'json') {
+          const parsed = parseEditorJsonValues(t, options.jsonText, options.draft)
           if (parsed.ok !== true) {
-            setJsonFeedback({ kind: 'err', text: parsed.message })
-            pushToast('err', t('editor.jsonBlocked'))
+            options.setJsonFeedback({ kind: 'err', text: parsed.message })
+            options.pushToast('err', t('editor.jsonBlocked'))
             return
           }
           valuesDraft = parsed.draft
           valuesPolicy = parsed.policy
-          setDraft(valuesDraft)
-          setPolicy(valuesPolicy)
+          options.setDraft(valuesDraft)
+          options.setPolicy(valuesPolicy)
         }
         const values = draftValues(valuesDraft, valuesPolicy)
-        if (!SERVER_NAME_PATTERN.test(values.serverName)) {
-          pushToast('err', t('editor.validationName'))
-          return
-        }
-        if (values.transport === 'sse') {
-          pushToast('err', t('editor.sseBlocked'))
-          return
-        }
-        if (values.transport === 'stdio' && values.command === '') {
-          pushToast('err', t('editor.validationCommand'))
-          return
-        }
-        if (values.transport !== 'stdio' && (values.url === '' || !HTTP_URL_PATTERN.test(values.url))) {
-          pushToast('err', t('editor.validationUrl'))
-          return
-        }
-        if (valuesDraft.timeoutText.trim() !== '' && (!Number.isFinite(values.timeout) || values.timeout < 1000 || values.timeout > 3600000)) {
-          pushToast('err', t('editor.validationTimeout'))
-          return
-        }
-        if (valuesDraft.retriesText.trim() !== '' && (!Number.isFinite(values.retries) || values.retries < 1 || values.retries > 1000)) {
-          pushToast('err', t('editor.validationRetries'))
+        const validation = editorValidationMessage(t, values, valuesDraft)
+        if (validation !== '') {
+          options.pushToast('err', validation)
           return
         }
         const config = cleanHostConfig(values)
-        const extra = cleanExtra(values, mode === 'edit' && isObject(row) ? row.extra : null)
+        const extra = cleanExtra(values, options.mode === 'edit' && isObject(options.row) ? options.row.extra : null)
         setSaving(true)
         try {
-          if (mode === 'edit' && isObject(row)) {
-            await callApi('update', { id: row.id, level: row.level, config: config, extra: extra })
-            pushToast('ok', t('toast.updated', { name: values.serverName }))
+          if (options.mode === 'edit' && isObject(options.row)) {
+            await callApi('update', { id: options.row.id, level: options.row.level, config: config, extra: extra })
+            options.pushToast('ok', t('toast.updated', { name: values.serverName }))
           } else {
             await callApi('create', { level: 'workspace', config: config, extra: extra })
-            pushToast('ok', t('toast.created', { name: values.serverName }))
+            options.pushToast('ok', t('toast.created', { name: values.serverName }))
           }
-          if (typeof props.onSaved === 'function') props.onSaved()
+          if (typeof options.onSaved === 'function') options.onSaved()
         } catch (error) {
-          pushToast('err', t('toast.saveFailed', { message: describeError(t, error) }))
+          options.pushToast('err', t('toast.saveFailed', { message: describeError(t, error) }))
         } finally {
           setSaving(false)
         }
       }
 
-      const values = draftValues(draft, policy)
+      return { saving: saving, handleSave: handleSave }
+    }
+
+    /** Counts and the "customized" badge condition for the advanced section. */
+    function editorSummaryOf(draft, policy) {
       let autoCount = 0
       let disabledCount = 0
       for (const name of Object.keys(policy)) {
@@ -1882,173 +2000,114 @@ window.__ModuleLoader__.load({
         || (Number.isFinite(retriesValue) && retriesValue !== DEFAULT_MAX_RETRIES)
         || (draft.transport !== 'stdio' && (draft.oauthClientId.trim() !== '' || draft.oauthScopes.trim() !== ''))
         || Object.keys(policy).length > 0
-      const filterQuery = toolFilter.trim().toLowerCase()
-      const filteredTools = filterQuery === ''
-        ? probedTools
-        : probedTools.filter((tool) => tool.name.toLowerCase().includes(filterQuery) || tool.description.toLowerCase().includes(filterQuery))
-      const statusClass = probeState.phase === 'ok'
-        ? ' mm-tools-status-ok'
-        : probeState.phase === 'error'
-          ? ' mm-tools-status-err'
-          : probeState.phase === 'probing' ? ' mm-tools-status-warn' : ''
-      const statusText = probeState.phase === 'probing'
-        ? t('editor.toolsProbing')
-        : probeState.message !== '' ? probeState.message : t('editor.toolsIdle')
+      return { autoCount: autoCount, disabledCount: disabledCount, customized: customized }
+    }
 
-      const tabs = h(Tabs, {
-        value: tab,
-        onChange: switchTab,
-        items: [
-          { value: 'form', label: t('editor.tabForm') },
-          { value: 'json', label: t('editor.tabJson'), tip: t('action.jsonTip') },
-        ],
-      })
+    /* ------------------------------------------------------------------ *
+     * Editor form view: identity, transport and connection fields.       *
+     * ------------------------------------------------------------------ */
 
-      function kvEditor(listKey, label, tip, keyPlaceholder, valuePlaceholder) {
-        return h(
-          'div',
-          null,
-          h(
-            'div',
-            { className: 'mm-label-row' },
-            h(
-              'span',
-              { className: 'mm-field-label' },
-              h('span', null, label),
-              h(HelpDot, { tip: tip }),
-            ),
-            h('button', { type: 'button', className: 'mm-link-btn', onClick: () => addRow(listKey) }, t('action.add')),
-          ),
-          h(
-            'div',
-            { className: 'mm-kv' },
-            draft[listKey].map((entry, index) => h(
-              'div',
-              { className: 'mm-kv-row', key: index },
-              h('input', {
-                className: 'mm-input mm-mono mm-kv-key',
-                value: entry.key,
-                placeholder: keyPlaceholder,
-                spellCheck: false,
-                onChange: (event) => updateRow(listKey, index, 'key', event.target.value),
-              }),
-              h('input', {
-                className: 'mm-input mm-mono mm-kv-val',
-                value: entry.value,
-                placeholder: valuePlaceholder,
-                spellCheck: false,
-                onChange: (event) => updateRow(listKey, index, 'value', event.target.value),
-              }),
-              h(
-                'button',
-                Object.assign({
-                  type: 'button',
-                  className: 'mm-kv-del',
-                  'aria-label': t('action.removeRow'),
-                  onClick: () => removeRow(listKey, index),
-                }, tooltipHandlers(t('action.removeRow'))),
-                h(Svg, { d: ICON_X, size: 14 }),
-              ),
-            )),
-          ),
-        )
+    function EditorInput(props) {
+      const attrs = {
+        className: props.className,
+        value: props.value,
+        placeholder: props.placeholder,
+        onChange: props.onChange,
       }
+      if (props.type !== undefined) attrs.type = props.type
+      if (props.min !== undefined) attrs.min = props.min
+      if (props.max !== undefined) attrs.max = props.max
+      if (props.step !== undefined) attrs.step = props.step
+      if (props.spellCheck === false) attrs.spellCheck = false
+      return h('input', attrs)
+    }
 
-      function toolRow(tool) {
-        const current = policy[tool.name] !== undefined ? policy[tool.name] : 'default'
-        const nameClass = current === 'auto' ? ' mm-tool-name-auto' : current === 'disabled' ? ' mm-tool-name-disabled' : ''
-        return h(
-          'div',
-          { className: 'mm-tool-row', key: tool.name },
-          h(
-            'div',
-            { className: 'mm-tool-info' },
-            h('span', { className: 'mm-tool-name' + nameClass }, tool.name),
-            tool.description !== '' ? h('span', { className: 'mm-tool-desc' }, tool.description) : null,
-          ),
-          h(Segmented, {
-            value: current,
-            onChange: (value) => setToolPolicy(tool.name, value),
-            items: [
-              { value: 'default', label: t('tool.default'), tip: t('tool.defaultTip') },
-              { value: 'auto', label: t('tool.auto'), tip: t('tool.autoTip') },
-              { value: 'disabled', label: t('tool.disabled'), tip: t('tool.disabledTip') },
-            ],
-          }),
-        )
-      }
+    function EditorInputField(props) {
+      return h(
+        Field,
+        {
+          label: props.label,
+          tip: props.tip,
+          small: props.small === true,
+          required: props.required === true,
+          requiredLabel: props.requiredLabel,
+        },
+        h(EditorInput, {
+          className: props.className,
+          value: props.value,
+          placeholder: props.placeholder,
+          type: props.type,
+          min: props.min,
+          max: props.max,
+          step: props.step,
+          spellCheck: props.spellCheck,
+          onChange: props.onChange,
+        }),
+      )
+    }
 
-      const toolsPanel = h(
+    /** Key/value rows (env / headers); the add and remove affordances are link-style controls. */
+    function EditorKvEditor(props) {
+      const t = props.t
+      const rows = Array.isArray(props.rows) ? props.rows : []
+      return h(
         'div',
-        { className: 'mm-tools-panel' },
+        null,
         h(
           'div',
-          { className: 'mm-tools-head' },
+          { className: 'mm-label-row' },
           h(
-            'div',
-            { className: 'mm-tools-title' },
-            h('span', null, t('editor.toolsTitle')),
-            h(HelpDot, { tip: t('editor.toolsTip') }),
-            h('span', { className: 'mm-tools-status' + statusClass }, statusText),
+            'span',
+            { className: 'mm-field-label' },
+            h('span', null, props.label),
+            h(HelpDot, { tip: props.tip }),
           ),
-          h(
-            'button',
-            Object.assign({
-              type: 'button',
-              className: 'mm-btn mm-btn-sm',
-              disabled: probeState.phase === 'probing',
-              onClick: () => runProbe(false),
-            }, tooltipHandlers(t('action.probeTip'))),
-            h(Svg, { d: ICON_REFRESH, size: 12, className: probeState.phase === 'probing' ? 'mm-spin-icon' : '' }),
-            h('span', null, t('action.probe')),
-          ),
+          h(LinkButton, { onClick: () => props.onAdd(props.listKey) }, t('action.add')),
         ),
         h(
           'div',
-          { className: 'mm-tools-toolbar' },
-          h('input', {
-            className: 'mm-tools-filter',
-            value: toolFilter,
-            placeholder: t('editor.filterTools'),
-            spellCheck: false,
-            onChange: (event) => setToolFilter(event.target.value),
-          }),
-          h(
+          { className: 'mm-kv' },
+          rows.map((entry, index) => h(
             'div',
-            { className: 'mm-tools-batch' },
-            h('span', null, t('editor.toolSummary', { auto: autoCount, disabled: disabledCount })),
-            h('span', { className: 'mm-divider', 'aria-hidden': 'true' }),
-            h('button', { type: 'button', className: 'mm-link-btn', onClick: () => {
-              setPolicy((prev) => {
-                const copy = Object.assign({}, prev)
-                for (const tool of probedTools) copy[tool.name] = 'auto'
-                return copy
-              })
-            } }, t('action.allAuto')),
-            h('button', { type: 'button', className: 'mm-link-btn', onClick: () => setPolicy({}) }, t('action.resetDefault')),
-          ),
-        ),
-        h(
-          'div',
-          { className: 'mm-tools-list' },
-          filteredTools.length === 0
-            ? h('div', { className: 'mm-tools-empty' }, t('editor.toolsEmpty'))
-            : filteredTools.map(toolRow),
+            { className: 'mm-kv-row', key: index },
+            h('input', {
+              className: 'mm-input mm-mono mm-kv-key',
+              value: entry.key,
+              placeholder: props.keyPlaceholder,
+              spellCheck: false,
+              onChange: (event) => props.onUpdate(props.listKey, index, 'key', event.target.value),
+            }),
+            h('input', {
+              className: 'mm-input mm-mono mm-kv-val',
+              value: entry.value,
+              placeholder: props.valuePlaceholder,
+              spellCheck: false,
+              onChange: (event) => props.onUpdate(props.listKey, index, 'value', event.target.value),
+            }),
+            h(KvDeleteButton, {
+              label: t('action.removeRow'),
+              onClick: () => props.onRemove(props.listKey, index),
+            }),
+          )),
         ),
       )
+    }
 
-      const stdioPanel = h(
+    function EditorStdioFields(props) {
+      const t = props.t
+      const draft = props.draft
+      return h(
         Fragment,
         null,
         h(
           Field,
           { label: t('editor.command'), tip: t('editor.commandTip'), required: true, requiredLabel: t('editor.required') },
-          h('input', {
+          h(EditorInput, {
             className: 'mm-input mm-mono',
             value: draft.command,
             placeholder: t('editor.commandPlaceholder'),
             spellCheck: false,
-            onChange: (event) => setField('command', event.target.value),
+            onChange: (event) => props.setField('command', event.target.value),
           }),
         ),
         h(
@@ -2060,177 +2119,76 @@ window.__ModuleLoader__.load({
             value: draft.argsText,
             placeholder: t('editor.argsPlaceholder'),
             spellCheck: false,
-            onChange: (event) => setArgsText(event.target.value),
+            onChange: (event) => props.setArgsText(event.target.value),
           }),
         ),
-        kvEditor('envRows', t('editor.env'), t('editor.envTip'), t('editor.kvKeyEnv'), t('editor.kvValEnv')),
+        h(EditorKvEditor, {
+          t: t,
+          listKey: 'envRows',
+          label: t('editor.env'),
+          tip: t('editor.envTip'),
+          keyPlaceholder: t('editor.kvKeyEnv'),
+          valuePlaceholder: t('editor.kvValEnv'),
+          rows: draft.envRows,
+          onAdd: props.addRow,
+          onUpdate: props.updateRow,
+          onRemove: props.removeRow,
+        }),
       )
+    }
 
-      const remotePanel = h(
+    function EditorRemoteFields(props) {
+      const t = props.t
+      const draft = props.draft
+      return h(
         Fragment,
         null,
         h(
           Field,
           { label: t('editor.url'), tip: t('editor.urlTip'), required: true, requiredLabel: t('editor.required') },
-          h('input', {
+          h(EditorInput, {
             className: 'mm-input mm-mono',
             value: draft.url,
             placeholder: t('editor.urlPlaceholder'),
             spellCheck: false,
-            onChange: (event) => setField('url', event.target.value),
+            onChange: (event) => props.setField('url', event.target.value),
           }),
         ),
-        kvEditor('headersRows', t('editor.headers'), t('editor.headersTip'), t('editor.kvKeyHeader'), t('editor.kvValHeader')),
+        h(EditorKvEditor, {
+          t: t,
+          listKey: 'headersRows',
+          label: t('editor.headers'),
+          tip: t('editor.headersTip'),
+          keyPlaceholder: t('editor.kvKeyHeader'),
+          valuePlaceholder: t('editor.kvValHeader'),
+          rows: draft.headersRows,
+          onAdd: props.addRow,
+          onUpdate: props.updateRow,
+          onRemove: props.removeRow,
+        }),
       )
+    }
 
-      const advancedFields = draft.transport === 'stdio'
-        ? h(
-          'div',
-          { className: 'mm-adv-grid' },
-          h(
-            Field,
-            { label: t('editor.cwd'), tip: t('editor.cwdTip'), small: true },
-            h('input', {
-              className: 'mm-input mm-mono',
-              value: draft.cwd,
-              placeholder: t('editor.cwdPlaceholder'),
-              spellCheck: false,
-              onChange: (event) => setField('cwd', event.target.value),
-            }),
-          ),
-          h(
-            Field,
-            { label: t('editor.timeout'), tip: t('editor.timeoutTip'), small: true },
-            h('input', {
-              className: 'mm-input mm-mono',
-              type: 'number',
-              value: draft.timeoutText,
-              placeholder: t('editor.timeoutPlaceholder'),
-              min: 1000,
-              max: 3600000,
-              step: 1000,
-              onChange: (event) => setField('timeoutText', event.target.value),
-            }),
-          ),
-          h(
-            Field,
-            { label: t('editor.retries'), tip: t('editor.retriesTip'), small: true },
-            h('input', {
-              className: 'mm-input mm-mono',
-              type: 'number',
-              value: draft.retriesText,
-              placeholder: t('editor.retriesPlaceholder'),
-              min: 1,
-              max: 1000,
-              step: 1,
-              onChange: (event) => setField('retriesText', event.target.value),
-            }),
-          ),
-        )
-        : h(
-          Fragment,
-          null,
-          h(
-            'div',
-            { className: 'mm-adv-grid mm-adv-grid-2' },
-            h(
-              Field,
-              { label: t('editor.timeout'), tip: t('editor.timeoutTip'), small: true },
-              h('input', {
-                className: 'mm-input mm-mono',
-                type: 'number',
-                value: draft.timeoutText,
-                placeholder: t('editor.timeoutPlaceholder'),
-                min: 1000,
-                max: 3600000,
-                step: 1000,
-                onChange: (event) => setField('timeoutText', event.target.value),
-              }),
-            ),
-            h(
-              Field,
-              { label: t('editor.retries'), tip: t('editor.retriesTip'), small: true },
-              h('input', {
-                className: 'mm-input mm-mono',
-                type: 'number',
-                value: draft.retriesText,
-                placeholder: t('editor.retriesPlaceholder'),
-                min: 1,
-                max: 1000,
-                step: 1,
-                onChange: (event) => setField('retriesText', event.target.value),
-              }),
-            ),
-          ),
-          h(
-            'div',
-            { className: 'mm-adv-grid mm-adv-grid-2' },
-            h(
-              Field,
-              { label: t('editor.oauthClientId'), tip: t('editor.oauthClientIdTip'), small: true },
-              h('input', {
-                className: 'mm-input mm-mono',
-                value: draft.oauthClientId,
-                placeholder: t('editor.oauthClientIdPlaceholder'),
-                spellCheck: false,
-                onChange: (event) => setField('oauthClientId', event.target.value),
-              }),
-            ),
-            h(
-              Field,
-              { label: t('editor.oauthScopes'), tip: t('editor.oauthScopesTip'), small: true },
-              h('input', {
-                className: 'mm-input mm-mono',
-                value: draft.oauthScopes,
-                placeholder: t('editor.oauthScopesPlaceholder'),
-                spellCheck: false,
-                onChange: (event) => setField('oauthScopes', event.target.value),
-              }),
-            ),
-          ),
-        )
-
-      const advanced = h(
-        'div',
-        { className: 'mm-adv' },
-        h(
-          'button',
-          {
-            type: 'button',
-            className: 'mm-adv-toggle',
-            'aria-expanded': advancedOpen === true ? 'true' : 'false',
-            onClick: toggleAdvanced,
-          },
-          h(
-            'span',
-            { className: 'mm-adv-title' },
-            h('span', null, t('editor.advanced')),
-            customized === true ? h('span', { className: 'mm-badge' }, t('editor.customized')) : null,
-          ),
-          h(Svg, { d: ICON_CHEVRON, size: 16, className: 'mm-chevron' + (advancedOpen === true ? ' mm-chevron-open' : '') }),
-        ),
-        advancedOpen === true
-          ? h('div', { className: 'mm-adv-panel' }, advancedFields, toolsPanel)
-          : null,
-      )
-
-      const formPanel = h(
+    function EditorForm(props) {
+      const t = props.t
+      const draft = props.draft
+      return h(
         'div',
         { className: 'mm-form' },
         h(
           'div',
           { className: 'mm-grid-name' },
-          h(
-            Field,
-            { label: t('editor.name'), tip: t('editor.nameTip'), required: true, requiredLabel: t('editor.required') },
-            h('input', {
-              className: 'mm-input mm-mono',
-              value: draft.serverName,
-              placeholder: t('editor.namePlaceholder'),
-              spellCheck: false,
-              onChange: (event) => setField('serverName', event.target.value),
-            }),
-          ),
+          h(EditorInputField, {
+            label: t('editor.name'),
+            tip: t('editor.nameTip'),
+            required: true,
+            requiredLabel: t('editor.required'),
+            className: 'mm-input mm-mono',
+            value: draft.serverName,
+            placeholder: t('editor.namePlaceholder'),
+            spellCheck: false,
+            onChange: (event) => props.setField('serverName', event.target.value),
+          }),
           h(
             Field,
             { label: t('editor.transport'), tip: t('editor.transportTip') },
@@ -2239,7 +2197,7 @@ window.__ModuleLoader__.load({
               {
                 className: 'mm-input mm-mono mm-select',
                 value: draft.transport,
-                onChange: (event) => setField('transport', event.target.value),
+                onChange: (event) => props.setField('transport', event.target.value),
               },
               h('option', { value: 'stdio' }, 'stdio'),
               h('option', { value: 'streamable-http' }, 'streamable-http'),
@@ -2248,11 +2206,296 @@ window.__ModuleLoader__.load({
           ),
         ),
         draft.transport === 'sse' ? h('p', { className: 'mm-hint mm-hint-warn' }, t('editor.sseHint')) : null,
-        draft.transport === 'stdio' ? stdioPanel : remotePanel,
-        advanced,
+        draft.transport === 'stdio'
+          ? h(EditorStdioFields, {
+            t: t,
+            draft: draft,
+            setField: props.setField,
+            setArgsText: props.setArgsText,
+            addRow: props.addRow,
+            updateRow: props.updateRow,
+            removeRow: props.removeRow,
+          })
+          : h(EditorRemoteFields, {
+            t: t,
+            draft: draft,
+            setField: props.setField,
+            addRow: props.addRow,
+            updateRow: props.updateRow,
+            removeRow: props.removeRow,
+          }),
+        props.advanced,
       )
+    }
 
-      const jsonPanel = h(
+    /* ------------------------------------------------------------------ *
+     * Editor advanced view: tuning fields and tool permissions.          *
+     * ------------------------------------------------------------------ */
+
+    function toolStatusOf(t, probeState) {
+      const statusClass = probeState.phase === 'ok'
+        ? ' mm-tools-status-ok'
+        : probeState.phase === 'error'
+          ? ' mm-tools-status-err'
+          : probeState.phase === 'probing' ? ' mm-tools-status-warn' : ''
+      const statusText = probeState.phase === 'probing'
+        ? t('editor.toolsProbing')
+        : probeState.message !== '' ? probeState.message : t('editor.toolsIdle')
+      return { statusClass: statusClass, statusText: statusText }
+    }
+
+    function EditorTimeoutRetries(props) {
+      const t = props.t
+      return h(
+        Fragment,
+        null,
+        h(EditorInputField, {
+          label: t('editor.timeout'),
+          tip: t('editor.timeoutTip'),
+          small: true,
+          className: 'mm-input mm-mono',
+          type: 'number',
+          value: props.draft.timeoutText,
+          placeholder: t('editor.timeoutPlaceholder'),
+          min: 1000,
+          max: 3600000,
+          step: 1000,
+          onChange: (event) => props.setField('timeoutText', event.target.value),
+        }),
+        h(EditorInputField, {
+          label: t('editor.retries'),
+          tip: t('editor.retriesTip'),
+          small: true,
+          className: 'mm-input mm-mono',
+          type: 'number',
+          value: props.draft.retriesText,
+          placeholder: t('editor.retriesPlaceholder'),
+          min: 1,
+          max: 1000,
+          step: 1,
+          onChange: (event) => props.setField('retriesText', event.target.value),
+        }),
+      )
+    }
+
+    function EditorStdioAdvancedFields(props) {
+      const t = props.t
+      return h(
+        'div',
+        { className: 'mm-adv-grid' },
+        h(EditorInputField, {
+          label: t('editor.cwd'),
+          tip: t('editor.cwdTip'),
+          small: true,
+          className: 'mm-input mm-mono',
+          value: props.draft.cwd,
+          placeholder: t('editor.cwdPlaceholder'),
+          spellCheck: false,
+          onChange: (event) => props.setField('cwd', event.target.value),
+        }),
+        h(EditorTimeoutRetries, { t: t, draft: props.draft, setField: props.setField }),
+      )
+    }
+
+    function EditorRemoteAdvancedFields(props) {
+      const t = props.t
+      return h(
+        Fragment,
+        null,
+        h(
+          'div',
+          { className: 'mm-adv-grid mm-adv-grid-2' },
+          h(EditorTimeoutRetries, { t: t, draft: props.draft, setField: props.setField }),
+        ),
+        h(
+          'div',
+          { className: 'mm-adv-grid mm-adv-grid-2' },
+          h(EditorInputField, {
+            label: t('editor.oauthClientId'),
+            tip: t('editor.oauthClientIdTip'),
+            small: true,
+            className: 'mm-input mm-mono',
+            value: props.draft.oauthClientId,
+            placeholder: t('editor.oauthClientIdPlaceholder'),
+            spellCheck: false,
+            onChange: (event) => props.setField('oauthClientId', event.target.value),
+          }),
+          h(EditorInputField, {
+            label: t('editor.oauthScopes'),
+            tip: t('editor.oauthScopesTip'),
+            small: true,
+            className: 'mm-input mm-mono',
+            value: props.draft.oauthScopes,
+            placeholder: t('editor.oauthScopesPlaceholder'),
+            spellCheck: false,
+            onChange: (event) => props.setField('oauthScopes', event.target.value),
+          }),
+        ),
+      )
+    }
+
+    function EditorAdvancedFields(props) {
+      return props.draft.transport === 'stdio'
+        ? h(EditorStdioAdvancedFields, { t: props.t, draft: props.draft, setField: props.setField })
+        : h(EditorRemoteAdvancedFields, { t: props.t, draft: props.draft, setField: props.setField })
+    }
+
+    function EditorToolRow(props) {
+      const t = props.t
+      const current = props.policy[props.tool.name] !== undefined ? props.policy[props.tool.name] : 'default'
+      const nameClass = current === 'auto' ? ' mm-tool-name-auto' : current === 'disabled' ? ' mm-tool-name-disabled' : ''
+      return h(
+        'div',
+        { className: 'mm-tool-row' },
+        h(
+          'div',
+          { className: 'mm-tool-info' },
+          h('span', { className: 'mm-tool-name' + nameClass }, props.tool.name),
+          props.tool.description !== '' ? h('span', { className: 'mm-tool-desc' }, props.tool.description) : null,
+        ),
+        h(Segmented, {
+          value: current,
+          onChange: (value) => props.onPolicyChange(props.tool.name, value),
+          items: [
+            { value: 'default', label: t('tool.default'), tip: t('tool.defaultTip') },
+            { value: 'auto', label: t('tool.auto'), tip: t('tool.autoTip') },
+            { value: 'disabled', label: t('tool.disabled'), tip: t('tool.disabledTip') },
+          ],
+        }),
+      )
+    }
+
+    function EditorToolsHead(props) {
+      const t = props.t
+      const status = toolStatusOf(t, props.probeState)
+      const probing = props.probeState.phase === 'probing'
+      return h(
+        'div',
+        { className: 'mm-tools-head' },
+        h(
+          'div',
+          { className: 'mm-tools-title' },
+          h('span', null, t('editor.toolsTitle')),
+          h(HelpDot, { tip: t('editor.toolsTip') }),
+          h('span', { className: 'mm-tools-status' + status.statusClass }, status.statusText),
+        ),
+        h(
+          'span',
+          tooltipHandlers(t('action.probeTip')),
+          h(
+            Button,
+            { size: 'sm', disabled: probing, onClick: props.onProbe },
+            h(Svg, { d: ICON_REFRESH, size: 12, className: probing ? 'mm-spin-icon' : '' }),
+            h('span', null, t('action.probe')),
+          ),
+        ),
+      )
+    }
+
+    function EditorToolsToolbar(props) {
+      const t = props.t
+      return h(
+        'div',
+        { className: 'mm-tools-toolbar' },
+        h('input', {
+          className: 'mm-tools-filter',
+          value: props.toolFilter,
+          placeholder: t('editor.filterTools'),
+          spellCheck: false,
+          onChange: (event) => props.onFilterChange(event.target.value),
+        }),
+        h(
+          'div',
+          { className: 'mm-tools-batch' },
+          h('span', null, t('editor.toolSummary', { auto: props.autoCount, disabled: props.disabledCount })),
+          h('span', { className: 'mm-divider', 'aria-hidden': 'true' }),
+          h(LinkButton, { onClick: props.onAllAuto }, t('action.allAuto')),
+          h(LinkButton, { onClick: props.onResetDefault }, t('action.resetDefault')),
+        ),
+      )
+    }
+
+    function EditorToolsPanel(props) {
+      const t = props.t
+      const filterQuery = props.toolFilter.trim().toLowerCase()
+      const filteredTools = filterQuery === ''
+        ? props.probedTools
+        : props.probedTools.filter((tool) => tool.name.toLowerCase().includes(filterQuery) || tool.description.toLowerCase().includes(filterQuery))
+      return h(
+        'div',
+        { className: 'mm-tools-panel' },
+        h(EditorToolsHead, { t: t, probeState: props.probeState, onProbe: props.onProbe }),
+        h(EditorToolsToolbar, {
+          t: t,
+          toolFilter: props.toolFilter,
+          onFilterChange: props.onFilterChange,
+          autoCount: props.autoCount,
+          disabledCount: props.disabledCount,
+          onAllAuto: props.onAllAuto,
+          onResetDefault: props.onResetDefault,
+        }),
+        h(
+          'div',
+          { className: 'mm-tools-list' },
+          filteredTools.length === 0
+            ? h('div', { className: 'mm-tools-empty' }, t('editor.toolsEmpty'))
+            : filteredTools.map((tool) => h(EditorToolRow, {
+              key: tool.name,
+              t: t,
+              tool: tool,
+              policy: props.policy,
+              onPolicyChange: props.onPolicyChange,
+            })),
+        ),
+      )
+    }
+
+    function EditorAdvanced(props) {
+      const t = props.t
+      return h(
+        'div',
+        { className: 'mm-adv' },
+        h(
+          DisclosureButton,
+          { open: props.open === true, onClick: props.onToggle },
+          h(
+            'span',
+            { className: 'mm-adv-title' },
+            h('span', null, t('editor.advanced')),
+            props.customized === true ? h('span', { className: 'mm-badge' }, t('editor.customized')) : null,
+          ),
+        ),
+        props.open === true
+          ? h(
+            'div',
+            { className: 'mm-adv-panel' },
+            h(EditorAdvancedFields, { t: t, draft: props.draft, setField: props.setField }),
+            h(EditorToolsPanel, {
+              t: t,
+              probeState: props.probeState,
+              onProbe: props.onProbe,
+              probedTools: props.probedTools,
+              toolFilter: props.toolFilter,
+              onFilterChange: props.onFilterChange,
+              autoCount: props.autoCount,
+              disabledCount: props.disabledCount,
+              onAllAuto: props.onAllAuto,
+              onResetDefault: props.onResetDefault,
+              policy: props.policy,
+              onPolicyChange: props.onPolicyChange,
+            }),
+          )
+          : null,
+      )
+    }
+
+    /* ------------------------------------------------------------------ *
+     * Editor JSON view: paste, sample and copy.                          *
+     * ------------------------------------------------------------------ */
+
+    function EditorJson(props) {
+      const t = props.t
+      return h(
         'div',
         { className: 'mm-json' },
         h(
@@ -2262,22 +2505,106 @@ window.__ModuleLoader__.load({
           h(
             'div',
             { className: 'mm-json-actions' },
-            h(Button, { size: 'sm', onClick: fillSample }, t('action.pasteSample')),
-            h(Button, { size: 'sm', onClick: copyJson }, t('action.copyConfig')),
+            h(Button, { size: 'sm', onClick: props.onFillSample }, t('action.pasteSample')),
+            h(Button, { size: 'sm', onClick: props.onCopy }, t('action.copyConfig')),
           ),
         ),
         h('textarea', {
           className: 'mm-input mm-mono mm-textarea mm-json-area',
-          value: jsonText,
+          value: props.text,
           spellCheck: false,
-          onChange: (event) => handleJsonChange(event.target.value),
+          onChange: (event) => props.onChange(event.target.value),
         }),
-        jsonFeedback.text !== ''
-          ? h('div', { className: 'mm-feedback mm-feedback-' + (jsonFeedback.kind === 'ok' ? 'ok' : 'err') }, jsonFeedback.text)
+        props.feedback.text !== ''
+          ? h('div', { className: 'mm-feedback mm-feedback-' + (props.feedback.kind === 'ok' ? 'ok' : 'err') }, props.feedback.text)
           : null,
       )
+    }
 
-      const footer = h(
+    /* ------------------------------------------------------------------ *
+     * Editor dialog: composes the state hooks with the form/JSON views.  *
+     * ------------------------------------------------------------------ */
+
+    function useEditorController(props) {
+      const t = props.t
+      const mode = props.mode
+      const row = props.row
+      const pushToast = props.pushToast
+
+      const initialTools = mode === 'edit' && isObject(row) ? probedToolsFromRow(row) : []
+      const initialProbe = mode === 'edit' && isObject(row) && isObject(row.lastProbe) ? row.lastProbe : null
+      const initialHasProbe = isObject(initialProbe)
+        && ((Array.isArray(initialProbe.tools) && initialProbe.tools.length > 0)
+          || (Array.isArray(initialProbe.toolNames) && initialProbe.toolNames.length > 0))
+
+      const draftState = useEditorDraft(() => (mode === 'edit' && isObject(row) ? draftFromRow(row) : emptyDraft()))
+      const policyState = useEditorPolicy(() => (mode === 'edit' && isObject(row) ? policyFromRow(row) : {}))
+      const probe = useEditorProbe({
+        t: t,
+        pushToast: pushToast,
+        row: row,
+        draft: draftState.draft,
+        policy: policyState.policy,
+        policyRef: policyState.policyRef,
+        initialTools: initialTools,
+        initialHasProbe: initialHasProbe,
+      })
+      const json = useEditorJson({
+        t: t,
+        pushToast: pushToast,
+        draft: draftState.draft,
+        policy: policyState.policy,
+        setDraft: draftState.setDraft,
+        setPolicy: policyState.setPolicy,
+        setProbedTools: probe.setProbedTools,
+      })
+      const test = useEditorTest(t, probe.runProbe)
+      const save = useEditorSave({
+        t: t,
+        pushToast: pushToast,
+        mode: mode,
+        row: row,
+        tab: json.tab,
+        draft: draftState.draft,
+        policy: policyState.policy,
+        setDraft: draftState.setDraft,
+        setPolicy: policyState.setPolicy,
+        jsonText: json.jsonText,
+        setJsonFeedback: json.setJsonFeedback,
+        onSaved: props.onSaved,
+      })
+      const summary = editorSummaryOf(draftState.draft, policyState.policy)
+
+      function handleAllAuto() {
+        policyState.setPolicy((prev) => {
+          const copy = Object.assign({}, prev)
+          for (const tool of probe.probedTools) copy[tool.name] = 'auto'
+          return copy
+        })
+      }
+
+      function handleResetDefault() {
+        policyState.setPolicy({})
+      }
+
+      return {
+        t: t,
+        mode: mode,
+        draftState: draftState,
+        policyState: policyState,
+        probe: probe,
+        json: json,
+        test: test,
+        save: save,
+        summary: summary,
+        handleAllAuto: handleAllAuto,
+        handleResetDefault: handleResetDefault,
+      }
+    }
+
+    function EditorFooter(props) {
+      const t = props.t
+      return h(
         Fragment,
         null,
         h(
@@ -2285,20 +2612,73 @@ window.__ModuleLoader__.load({
           { className: 'mm-foot-left' },
           h(Button, {
             size: 'sm',
-            disabled: testing === true,
-            onClick: handleTest,
+            disabled: props.testing === true,
+            onClick: props.onTest,
           }, t('action.test')),
-          testResult.text !== ''
-            ? h('span', { className: 'mm-test-result mm-test-' + testResult.kind }, testResult.text)
+          props.testResult.text !== ''
+            ? h('span', { className: 'mm-test-result mm-test-' + props.testResult.kind }, props.testResult.text)
             : null,
         ),
         h(
           'div',
           { className: 'mm-foot-right' },
           h(Button, { variant: 'ghost', onClick: props.onClose }, t('action.cancel')),
-          h(Button, { variant: 'primary', disabled: saving === true, loading: saving === true, onClick: handleSave }, t('action.save')),
+          h(Button, { variant: 'primary', disabled: props.saving === true, loading: props.saving === true, onClick: props.onSave }, t('action.save')),
         ),
       )
+    }
+
+    function EditorDialog(props) {
+      const state = useEditorController(props)
+      const t = state.t
+      const mode = state.mode
+
+      const tabs = h(Tabs, {
+        value: state.json.tab,
+        onChange: state.json.switchTab,
+        items: [
+          { value: 'form', label: t('editor.tabForm') },
+          { value: 'json', label: t('editor.tabJson'), tip: t('action.jsonTip') },
+        ],
+      })
+
+      const formPanel = h(EditorForm, {
+        t: t,
+        draft: state.draftState.draft,
+        setField: state.draftState.setField,
+        setArgsText: state.draftState.setArgsText,
+        addRow: state.draftState.addRow,
+        updateRow: state.draftState.updateRow,
+        removeRow: state.draftState.removeRow,
+        advanced: h(EditorAdvanced, {
+          t: t,
+          open: state.probe.advancedOpen,
+          onToggle: state.probe.toggleAdvanced,
+          customized: state.summary.customized,
+          draft: state.draftState.draft,
+          setField: state.draftState.setField,
+          probeState: state.probe.probeState,
+          probedTools: state.probe.probedTools,
+          toolFilter: state.probe.toolFilter,
+          onFilterChange: state.probe.setToolFilter,
+          autoCount: state.summary.autoCount,
+          disabledCount: state.summary.disabledCount,
+          onProbe: () => state.probe.runProbe(false),
+          policy: state.policyState.policy,
+          onPolicyChange: state.policyState.setToolPolicy,
+          onAllAuto: state.handleAllAuto,
+          onResetDefault: state.handleResetDefault,
+        }),
+      })
+
+      const jsonPanel = h(EditorJson, {
+        t: t,
+        text: state.json.jsonText,
+        feedback: state.json.jsonFeedback,
+        onChange: state.json.handleJsonChange,
+        onFillSample: state.json.fillSample,
+        onCopy: state.json.copyJson,
+      })
 
       return h(
         Dialog,
@@ -2310,9 +2690,17 @@ window.__ModuleLoader__.load({
           closeLabel: t('action.close'),
           closeTooltip: t('action.close'),
           headerExtra: tabs,
-          footer: footer,
+          footer: h(EditorFooter, {
+            t: t,
+            testing: state.test.testing,
+            testResult: state.test.testResult,
+            onTest: state.test.handleTest,
+            saving: state.save.saving,
+            onSave: state.save.handleSave,
+            onClose: props.onClose,
+          }),
         },
-        tab === 'json' ? jsonPanel : formPanel,
+        state.json.tab === 'json' ? jsonPanel : formPanel,
       )
     }
 
@@ -2391,45 +2779,14 @@ window.__ModuleLoader__.load({
           if (isObject(snapshot) && isObject(snapshot.fontSizes)) setFontSize(normalizeHostFontSize(snapshot.fontSizes.text))
         })
         return typeof off === 'function' ? off : undefined
-      }, [])
+      }, [fallback])
       return fontSize
     }
 
-    function SkeletonList(props) {
-      return h(
-        'div',
-        { className: 'mm-list', role: 'status', 'aria-busy': 'true', 'aria-label': props.label },
-        [0, 1, 2].map((index) => h(
-          'div',
-          { key: index, className: 'mm-skeleton-row' },
-          h('span', { className: 'mm-skeleton-line mm-skeleton-name' }),
-          h('span', { className: 'mm-skeleton-line mm-skeleton-summary' }),
-        )),
-      )
-    }
-
-    function McpPage(props) {
-      const bound = props !== null && props !== undefined && typeof props.t === 'function' ? props.t : activeT
-      const t = typeof bound === 'function' ? bound : function fallback(key) { return key }
-      const tRef = useRef(t)
-      tRef.current = t
-
-      const [data, setData] = useState(null)
-      const [loading, setLoading] = useState(true)
-      const [error, setError] = useState(null)
-      const [unauthorized, setUnauthorized] = useState(false)
-      const [query, setQuery] = useState('')
-      const [expanded, setExpanded] = useState({})
-      const [testingIds, setTestingIds] = useState({})
-      const [testingAll, setTestingAll] = useState(false)
-      const [busy, setBusy] = useState(false)
-      const [editor, setEditor] = useState(null)
-      const [deleteTarget, setDeleteTarget] = useState(null)
-      const [deleting, setDeleting] = useState(false)
+    /** Transient toast queue; each entry auto-dismisses after 3s. */
+    function useToasts() {
       const [toasts, setToasts] = useState([])
       const toastSeq = useRef(0)
-      const returnFocus = useRef(null)
-
       const pushToast = useCallback((kind, text) => {
         toastSeq.current += 1
         const id = toastSeq.current
@@ -2438,11 +2795,18 @@ window.__ModuleLoader__.load({
           setToasts((prev) => prev.filter((toast) => toast.id !== id))
         }, 3000)
       }, [])
-
       const dismissToast = useCallback((id) => {
         setToasts((prev) => prev.filter((toast) => toast.id !== id))
       }, [])
+      return { toasts: toasts, pushToast: pushToast, dismissToast: dismissToast }
+    }
 
+    /** Page data: load / poll `state` and derive the list rows plus banners. */
+    function useMcpData(tRef) {
+      const [data, setData] = useState(null)
+      const [loading, setLoading] = useState(true)
+      const [error, setError] = useState(null)
+      const [unauthorized, setUnauthorized] = useState(false)
       const load = useCallback(async () => {
         try {
           const payload = await callApi('state', {})
@@ -2460,7 +2824,6 @@ window.__ModuleLoader__.load({
           setLoading(false)
         }
       }, [])
-
       useEffect(() => {
         load()
         const timer = setInterval(load, POLL_MS)
@@ -2468,24 +2831,15 @@ window.__ModuleLoader__.load({
           clearInterval(timer)
         }
       }, [load])
-
-      // 视图切换（弹窗打开/关闭）时立即收起残留浮层。
-      useEffect(() => {
-        hideTooltip()
-      }, [editor, deleteTarget])
-
       const rows = isObject(data) && Array.isArray(data.rows) ? data.rows : []
       const warnings = isObject(data) && Array.isArray(data.warnings) ? data.warnings.map((entry) => textOf(entry)).filter((entry) => entry !== '') : []
-      const trimmedQuery = query.trim().toLowerCase()
-      const filteredRows = trimmedQuery === ''
-        ? rows
-        : rows.filter((row) => {
-          const config = isObject(row.config) ? row.config : {}
-          const target = textOf(row.target) !== '' ? textOf(row.target) : targetOfConfig(config)
-          const transport = isObject(row.config) ? transportOf(row.config) : textOf(row.transport)
-          const haystack = [textOf(row.serverName), target, textOf(row.id), transport].join(' ').toLowerCase()
-          return haystack.includes(trimmedQuery)
-        })
+      return { data: data, loading: loading, error: error, unauthorized: unauthorized, rows: rows, warnings: warnings, load: load }
+    }
+
+    /** Row-level actions: enable toggle and the toolbar "test all" probe. */
+    function useServerActions(t, rows, pushToast, load) {
+      const [busy, setBusy] = useState(false)
+      const [testingAll, setTestingAll] = useState(false)
 
       async function toggleEnabled(row) {
         if (busy === true) return
@@ -2499,36 +2853,6 @@ window.__ModuleLoader__.load({
           pushToast('err', t('toast.operationFailed', { message: describeError(t, failure) }))
         } finally {
           setBusy(false)
-        }
-      }
-
-      async function testOne(row) {
-        if (testingIds[row.id] === true) return
-        setTestingIds((prev) => {
-          const next = Object.assign({}, prev)
-          next[row.id] = true
-          return next
-        })
-        try {
-          const payload = await callApi('probe', { id: row.id, level: row.level })
-          const result = isObject(payload.result) ? payload.result : {}
-          if (result.ok === true) {
-            const ms = typeof result.durationMs === 'number' && Number.isFinite(result.durationMs) ? Math.round(result.durationMs) : 0
-            const tools = typeof result.toolCount === 'number' ? result.toolCount : (Array.isArray(result.tools) ? result.tools.length : 0)
-            pushToast('ok', t('toast.testOk', { name: row.serverName, ms: ms, tools: tools }))
-          } else {
-            const message = isObject(result.error) && textOf(result.error.message) !== '' ? textOf(result.error.message) : t('common.unknownError')
-            pushToast('err', t('toast.testFail', { name: row.serverName, message: message }))
-          }
-          await load()
-        } catch (failure) {
-          pushToast('err', t('toast.testFail', { name: row.serverName, message: describeError(t, failure) }))
-        } finally {
-          setTestingIds((prev) => {
-            const next = Object.assign({}, prev)
-            delete next[row.id]
-            return next
-          })
         }
       }
 
@@ -2551,6 +2875,21 @@ window.__ModuleLoader__.load({
         }
       }
 
+      return { busy: busy, testingAll: testingAll, toggleEnabled: toggleEnabled, testAll: testAll }
+    }
+
+    /** Editor / delete dialog state, focus return and the close / save / delete handlers. */
+    function useMcpDialogs(t, pushToast, load) {
+      const [editor, setEditor] = useState(null)
+      const [deleteTarget, setDeleteTarget] = useState(null)
+      const [deleting, setDeleting] = useState(false)
+      const returnFocus = useRef(null)
+
+      // 视图切换（弹窗打开/关闭）时立即收起残留浮层。
+      useEffect(() => {
+        hideTooltip()
+      }, [editor, deleteTarget])
+
       function openEditor(mode, row) {
         returnFocus.current = typeof document !== 'undefined' && document !== null ? document.activeElement : null
         setEditor({ mode: mode, row: row })
@@ -2570,6 +2909,10 @@ window.__ModuleLoader__.load({
         setDeleteTarget(row)
       }
 
+      function closeDelete() {
+        setDeleteTarget(null)
+      }
+
       async function confirmDelete() {
         if (deleteTarget === null || deleting === true) return
         setDeleting(true)
@@ -2585,15 +2928,95 @@ window.__ModuleLoader__.load({
         }
       }
 
-      function toggleExpanded(row) {
-        setExpanded((prev) => {
-          const next = Object.assign({}, prev)
-          if (next[row.id] === true) delete next[row.id]
-          else next[row.id] = true
-          return next
-        })
+      return {
+        editor: editor,
+        deleteTarget: deleteTarget,
+        deleting: deleting,
+        returnFocus: returnFocus,
+        openEditor: openEditor,
+        closeEditor: closeEditor,
+        handleSaved: handleSaved,
+        requestDelete: requestDelete,
+        closeDelete: closeDelete,
+        confirmDelete: confirmDelete,
       }
+    }
 
+    function McpPage(props) {
+      const bound = props !== null && props !== undefined && typeof props.t === 'function' ? props.t : activeT
+      const t = typeof bound === 'function' ? bound : function fallback(key) { return key }
+      const tRef = useRef(t)
+      tRef.current = t
+
+      const [query, setQuery] = useState('')
+      const toasts = useToasts()
+      const state = useMcpData(tRef)
+      const actions = useServerActions(t, state.rows, toasts.pushToast, state.load)
+      const dialogs = useMcpDialogs(t, toasts.pushToast, state.load)
+      const fontSize = useHostFontSize(isObject(state.data) && Number.isFinite(state.data.fontSize) ? state.data.fontSize : 14)
+      return h(
+        'div',
+        { className: 'mm-root', style: { '--ds-fs': fontSize + 'px' } },
+        h(TooltipLayer),
+        h(PageHeader, {
+          t: t,
+          query: query,
+          onQueryChange: setQuery,
+          testingAll: actions.testingAll,
+          busy: actions.busy,
+          hasData: state.data !== null,
+          warnings: state.warnings,
+          error: state.error,
+          onTestAll: actions.testAll,
+          onAdd: () => dialogs.openEditor('create', null),
+        }),
+        h(ServerList, {
+          t: t,
+          rows: state.rows,
+          query: query,
+          loading: state.loading,
+          hasData: state.data !== null,
+          error: state.error,
+          unauthorized: state.unauthorized,
+          busy: actions.busy,
+          testingAll: actions.testingAll,
+          onRetry: state.load,
+          onToggleEnabled: actions.toggleEnabled,
+          onEdit: (target) => dialogs.openEditor('edit', target),
+          onDelete: dialogs.requestDelete,
+        }),
+        dialogs.editor !== null
+          ? h(EditorDialog, {
+            key: 'editor:' + dialogs.editor.mode + ':' + (isObject(dialogs.editor.row) ? textOf(dialogs.editor.row.id) : 'new'),
+            t: t,
+            mode: dialogs.editor.mode,
+            row: dialogs.editor.row,
+            returnFocus: dialogs.returnFocus.current,
+            pushToast: toasts.pushToast,
+            onClose: dialogs.closeEditor,
+            onSaved: dialogs.handleSaved,
+          })
+          : null,
+        dialogs.deleteTarget !== null
+          ? h(DeleteDialog, {
+            t: t,
+            row: dialogs.deleteTarget,
+            busy: dialogs.deleting,
+            returnFocus: dialogs.returnFocus.current,
+            onClose: dialogs.closeDelete,
+            onConfirm: dialogs.confirmDelete,
+          })
+          : null,
+        h(ToastHost, { toasts: toasts.toasts, dismissLabel: t('action.close'), onDismiss: toasts.dismissToast }),
+      )
+    }
+    /* ------------------------------------------------------------------ *
+     * Page header: title, search, toolbar, warning / error banners.      *
+     * ------------------------------------------------------------------ */
+
+    function PageHeader(props) {
+      const t = props.t
+      const warnings = Array.isArray(props.warnings) ? props.warnings : []
       const header = h(
         'div',
         { className: 'mm-head' },
@@ -2612,11 +3035,13 @@ window.__ModuleLoader__.load({
             h(Svg, { d: ICON_SEARCH, size: 14, className: 'mm-search-icon' }),
             h('input', {
               className: 'mm-search-input',
-              value: query,
+              value: props.query,
               placeholder: t('page.searchPlaceholder'),
               'aria-label': t('page.searchPlaceholder'),
               spellCheck: false,
-              onChange: (event) => setQuery(event.target.value),
+              onChange: (event) => {
+                if (typeof props.onQueryChange === 'function') props.onQueryChange(event.target.value)
+              },
             }),
           ),
           h(IconButton, {
@@ -2624,18 +3049,17 @@ window.__ModuleLoader__.load({
             label: t('page.testAll'),
             tooltip: t('page.testAll'),
             className: 'mm-toolbar-btn',
-            spin: testingAll === true,
-            disabled: busy === true,
-            onClick: testAll,
+            spin: props.testingAll === true,
+            disabled: props.busy === true,
+            onClick: props.onTestAll,
           }),
           h(
             Button,
-            { variant: 'primary', icon: ICON_PLUS, onClick: () => openEditor('create', null) },
+            { variant: 'primary', icon: ICON_PLUS, onClick: props.onAdd },
             h('span', null, t('page.add')),
           ),
         ),
       )
-
       const warningsBanner = warnings.length > 0
         ? h(
           'div',
@@ -2644,18 +3068,70 @@ window.__ModuleLoader__.load({
           h('span', null, warnings.join(' · ')),
         )
         : null
-
-      const errorBanner = error !== null && data !== null
-        ? h('div', { className: 'mm-error-banner' }, error)
+      const errorBanner = props.error !== null && props.error !== undefined && props.hasData === true
+        ? h('div', { className: 'mm-error-banner' }, props.error)
         : null
+      return h(Fragment, null, header, warningsBanner, errorBanner)
+    }
+    /* ------------------------------------------------------------------ *
+     * Server list: four states + filtered rows.                          *
+     * ------------------------------------------------------------------ */
 
+    function SkeletonList(props) {
+      return h(
+        'div',
+        { className: 'mm-list', role: 'status', 'aria-busy': 'true', 'aria-label': props.label },
+        [0, 1, 2].map((index) => h(
+          'div',
+          { key: index, className: 'mm-skeleton-row' },
+          h('span', { className: 'mm-skeleton-line mm-skeleton-name' }),
+          h('span', { className: 'mm-skeleton-line mm-skeleton-summary' }),
+        )),
+      )
+    }
+
+    function filterRows(rows, query) {
+      const needle = textOf(query).trim().toLowerCase()
+      if (needle === '') return rows
+      return rows.filter((row) => {
+        const config = isObject(row.config) ? row.config : {}
+        const target = textOf(row.target) !== '' ? textOf(row.target) : targetOfConfig(config)
+        const transport = isObject(row.config) ? transportOf(row.config) : textOf(row.transport)
+        const haystack = [textOf(row.serverName), target, textOf(row.id), transport].join(' ').toLowerCase()
+        return haystack.includes(needle)
+      })
+    }
+
+    function ServerList(props) {
+      const t = props.t
+      const rows = Array.isArray(props.rows) ? props.rows : []
+      const filteredRows = filterRows(rows, props.query)
+      const [expanded, setExpanded] = useState({})
+      // 首载骨架 >300ms 才显示，避免快速返回时闪一下（design.md §7.10）。
+      const [skeletonReady, setSkeletonReady] = useState(false)
+      useEffect(() => {
+        if (props.loading !== true || props.hasData === true) {
+          setSkeletonReady(false)
+          return undefined
+        }
+        const timer = setTimeout(() => setSkeletonReady(true), 300)
+        return () => clearTimeout(timer)
+      }, [props.loading, props.hasData])
+      function toggleExpanded(row) {
+        setExpanded((prev) => {
+          const next = Object.assign({}, prev)
+          if (next[row.id] === true) delete next[row.id]
+          else next[row.id] = true
+          return next
+        })
+      }
       let content
-      if (unauthorized === true) {
-        content = h(StatePanel, { title: t('page.unauthorized'), actionLabel: t('page.retry'), onAction: load })
-      } else if (error !== null && data === null) {
-        content = h(StatePanel, { title: t('page.error'), hint: error, actionLabel: t('page.retry'), onAction: load })
-      } else if (loading === true && data === null) {
-        content = h(SkeletonList, { label: t('page.loading') })
+      if (props.unauthorized === true) {
+        content = h(StatePanel, { title: t('page.unauthorized'), actionLabel: t('page.retry'), onAction: props.onRetry })
+      } else if (props.error !== null && props.error !== undefined && props.hasData !== true) {
+        content = h(StatePanel, { title: t('page.error'), hint: props.error, actionLabel: t('page.retry'), onAction: props.onRetry })
+      } else if (props.loading === true && props.hasData !== true) {
+        content = skeletonReady === true ? h(SkeletonList, { label: t('page.loading') }) : null
       } else if (filteredRows.length === 0) {
         content = h(StatePanel, { icon: ICON_PLUG, title: t('list.empty') })
       } else {
@@ -2666,54 +3142,18 @@ window.__ModuleLoader__.load({
             key: textOf(row.level) + ':' + textOf(row.id),
             t: t,
             row: row,
-            busy: busy,
-            testing: testingIds[row.id] === true,
-            testingAll: testingAll,
+            busy: props.busy === true,
+            testingAll: props.testingAll === true,
             expanded: expanded[row.id] === true,
             onToggleExpand: () => toggleExpanded(row),
-            onToggleEnabled: toggleEnabled,
-            onTest: testOne,
-            onEdit: (target) => openEditor('edit', target),
-            onDelete: requestDelete,
+            onToggleEnabled: props.onToggleEnabled,
+            onEdit: props.onEdit,
+            onDelete: props.onDelete,
           })),
         )
       }
-
-      const fontSize = useHostFontSize(isObject(data) && Number.isFinite(data.fontSize) ? data.fontSize : 14)
-      return h(
-        'div',
-        { className: 'mm-root', style: { '--ds-fs': fontSize + 'px' } },
-        h(TooltipLayer),
-        header,
-        warningsBanner,
-        errorBanner,
-        content,
-        editor !== null
-          ? h(EditorDialog, {
-            key: 'editor:' + editor.mode + ':' + (isObject(editor.row) ? textOf(editor.row.id) : 'new'),
-            t: t,
-            mode: editor.mode,
-            row: editor.row,
-            returnFocus: returnFocus.current,
-            pushToast: pushToast,
-            onClose: closeEditor,
-            onSaved: handleSaved,
-          })
-          : null,
-        deleteTarget !== null
-          ? h(DeleteDialog, {
-            t: t,
-            row: deleteTarget,
-            busy: deleting,
-            returnFocus: returnFocus.current,
-            onClose: () => setDeleteTarget(null),
-            onConfirm: confirmDelete,
-          })
-          : null,
-        h(ToastHost, { toasts: toasts, dismissLabel: t('action.close'), onDismiss: dismissToast }),
-      )
+      return content
     }
-
     /* ------------------------------------------------------------------ *
      * Styles.                                                            *
      * ------------------------------------------------------------------ */
@@ -2729,11 +3169,12 @@ window.__ModuleLoader__.load({
       '.mm-title{margin:0;font-size:calc(var(--ds-fs) + 2px);font-weight:500;line-height:1.35;letter-spacing:-0.01em}',
       '.mm-head-actions{display:flex;align-items:center;justify-content:flex-end;gap:8px;flex:1 1 auto;min-width:0}',
       '.mm-head-actions>.mm-btn{flex:none}',
-      '.mm-help{display:inline-flex;align-items:center;justify-content:center;padding:0;border:none;background:transparent;color:var(--dsw-alias-label-tertiary);cursor:pointer;flex:none;transition:color .12s ease}',
+      '.mm-help{display:inline-flex;align-items:center;justify-content:center;padding:0;border:none;background:transparent;color:var(--dsw-alias-label-tertiary);cursor:pointer;flex:none;position:relative;transition:color .12s ease}',
+      '.mm-help::after{content:\'\';position:absolute;inset:-6px;border-radius:var(--dsw-radius-sm)}',
       '.mm-help:hover{color:var(--dsw-alias-label-primary)}',
       '.mm-search{position:relative;flex:1 1 0;min-width:0;max-width:200px}',
       '.mm-search-icon{position:absolute;left:8px;top:50%;transform:translateY(-50%);color:var(--dsw-alias-label-tertiary);pointer-events:none}',
-      '.mm-search-input{width:100%;height:34px;padding:0 12px 0 32px;border-radius:var(--dsw-radius-md);border:.5px solid var(--dsw-alias-border-l4);background:var(--dsw-alias-bg-layer-3);color:var(--dsw-alias-label-primary);font-size:calc(var(--ds-fs) - 1px);font-family:inherit;outline:none;transition:border-color .12s ease}',
+      '.mm-search-input{width:100%;height:34px;padding:0 12px 0 32px;border-radius:var(--dsw-radius-md);border:.5px solid var(--dsw-alias-border-l4);background:var(--dsw-alias-bg-layer-3);color:var(--dsw-alias-label-primary);font-size:calc(var(--ds-fs) - 1px);line-height:20px;font-family:inherit;outline:none;transition:border-color .12s ease}',
       '.mm-search-input::placeholder{color:var(--dsw-alias-label-tertiary)}',
       '.mm-search-input:focus{border-color:var(--dsw-alias-state-business-primary)}',
       '.mm-list{display:flex;flex-direction:column;flex:1 1 auto;min-height:0;overflow-y:auto;padding-right:2px;scrollbar-gutter:stable}',
@@ -2768,16 +3209,20 @@ window.__ModuleLoader__.load({
       '.mm-tool-badge-disabled{background:color-mix(in srgb,var(--dsw-alias-state-error-primary) 12%,transparent);color:var(--dsw-alias-state-error-primary);border-color:color-mix(in srgb,var(--dsw-alias-state-error-primary) 25%,transparent);text-decoration:line-through}',
       '.mm-icon-btn{width:32px;height:32px;padding:0;border-radius:var(--dsw-radius-sm);border:.5px solid transparent;background:transparent;color:var(--dsw-alias-label-tertiary);display:inline-flex;align-items:center;justify-content:center;cursor:pointer;transition:background .12s ease,color .12s ease,border-color .12s ease}',
       '.mm-icon-btn:hover{background:var(--dsw-alias-bg-layer-1);color:var(--dsw-alias-label-primary)}',
+      '.mm-icon-btn:focus-visible{outline:none;background:var(--dsw-alias-bg-layer-1);color:var(--dsw-alias-label-primary)}',
+      '.mm-icon-btn:active{background:var(--dsw-alias-interactive-bg-active)}',
       '.mm-icon-btn:disabled{opacity:.4;cursor:default}',
       '.mm-icon-btn-ok{background:color-mix(in srgb,var(--dsw-alias-state-success-primary) 12%,transparent);border-color:color-mix(in srgb,var(--dsw-alias-state-success-primary) 30%,transparent);color:var(--dsw-alias-state-success-primary)}',
       '.mm-icon-btn-ok:hover{background:color-mix(in srgb,var(--dsw-alias-state-success-primary) 20%,transparent);color:var(--dsw-alias-state-success-primary)}',
       '.mm-icon-btn-warn{color:var(--dsw-alias-state-warn-primary)}',
       '.mm-icon-btn-danger:hover{background:color-mix(in srgb,var(--dsw-alias-state-error-primary) 15%,transparent);border-color:color-mix(in srgb,var(--dsw-alias-state-error-primary) 30%,transparent);color:var(--dsw-alias-state-error-primary)}',
       '.mm-icon-btn-spin .mm-icon{animation:mm-spin .8s linear infinite}',
-      '.mm-toolbar-btn{width:32px;height:32px;flex:none;border-radius:var(--dsw-radius-sm);border:.5px solid var(--dsw-alias-border-l2);background:var(--dsw-alias-bg-layer-1);color:var(--dsw-alias-label-primary)}',
-      '.mm-toolbar-btn:hover{background:var(--dsw-alias-interactive-bg-hover);color:var(--dsw-alias-label-primary)}',
-      '.mm-btn{display:inline-flex;align-items:center;justify-content:center;gap:6px;height:36px;padding:0 14px;border-radius:var(--dsw-radius-md);border:.5px solid var(--dsw-alias-border-l2);background:var(--dsw-alias-bg-layer-1);color:var(--dsw-alias-label-primary);font-size:var(--ds-fs);font-weight:500;font-family:inherit;cursor:pointer;transition:background .12s ease,border-color .12s ease}',
+      '.mm-toolbar-btn{width:32px;height:32px;flex:none;border-radius:var(--dsw-radius-sm);border:.5px solid var(--dsw-alias-border-l2);background:var(--dsw-alias-button-tool-bar-fill,var(--dsw-alias-bg-layer-1));color:var(--dsw-alias-label-primary)}',
+      '.mm-toolbar-btn:hover{background:var(--dsw-alias-button-tool-bar-hover,var(--dsw-alias-interactive-bg-hover));color:var(--dsw-alias-label-primary)}',
+      '.mm-btn{display:inline-flex;align-items:center;justify-content:center;gap:6px;height:36px;padding:0 14px;border-radius:var(--dsw-radius-md);border:.5px solid var(--dsw-alias-border-l2);background:var(--dsw-alias-bg-layer-1);color:var(--dsw-alias-label-primary);font-size:var(--ds-fs);line-height:22px;font-weight:500;font-family:inherit;cursor:pointer;transition:background .12s ease,border-color .12s ease}',
       '.mm-btn:hover{background:var(--dsw-alias-interactive-bg-hover)}',
+      '.mm-btn:focus-visible{outline:none;background:var(--dsw-alias-interactive-bg-hover);color:var(--dsw-alias-label-primary)}',
+      '.mm-btn:active{background:var(--dsw-alias-interactive-bg-active)}',
       '.mm-btn:disabled{opacity:.4;cursor:not-allowed}',
       '.mm-btn-primary{background:var(--dsw-alias-button-primary-fill);border-color:var(--dsw-alias-button-primary-fill);color:var(--dsw-alias-label-primary-foreground)}',
       '.mm-btn-primary:hover{background:var(--dsw-alias-button-primary-hover);border-color:var(--dsw-alias-button-primary-hover)}',
@@ -2785,23 +3230,23 @@ window.__ModuleLoader__.load({
       '.mm-btn-danger:hover{background:color-mix(in srgb,var(--dsw-alias-state-error-primary) 85%,transparent)}',
       '.mm-btn-ghost{background:transparent;border-color:transparent;color:var(--dsw-alias-label-secondary)}',
       '.mm-btn-ghost:hover{background:var(--dsw-alias-interactive-bg-hover);color:var(--dsw-alias-label-primary)}',
-      '.mm-btn-sm{height:28px;padding:0 10px;border-radius:var(--dsw-radius-sm);font-size:calc(var(--ds-fs) - 2px)}',
-      '.mm-btn-md{height:32px;padding:0 12px;border-radius:var(--dsw-radius-md);font-size:calc(var(--ds-fs) - 1px)}',
+      '.mm-btn-sm{height:28px;padding:0 10px;border-radius:var(--dsw-radius-sm);font-size:calc(var(--ds-fs) - 2px);line-height:18px}',
+      '.mm-btn-md{height:32px;padding:0 12px;border-radius:var(--dsw-radius-md);font-size:calc(var(--ds-fs) - 1px);line-height:20px}',
       '.mm-empty{padding:48px 0;text-align:center;font-size:var(--ds-fs);color:var(--dsw-alias-label-tertiary)}',
       '.mm-loading{padding:32px 0;text-align:center;font-size:var(--ds-fs);color:var(--dsw-alias-label-tertiary)}',
       '.mm-skeleton-row{padding:16px 0;border-bottom:.5px solid var(--dsw-alias-border-l1);display:flex;flex-direction:column;gap:8px}',
       '.mm-skeleton-line{display:block;height:12px;border-radius:var(--dsw-radius-xs);background:color-mix(in srgb,var(--dsw-alias-label-tertiary) 14%,transparent);animation:mm-pulse 1.4s ease-in-out infinite}',
       '.mm-skeleton-name{width:40%}',
       '.mm-skeleton-summary{width:65%;height:10px}',
-      '.mm-warn-banner{margin-top:12px;padding:8px 12px;border-radius:var(--dsw-radius-sm);border:.5px solid color-mix(in srgb,var(--dsw-alias-state-warn-primary) 35%,transparent);background:color-mix(in srgb,var(--dsw-alias-state-warn-primary) 12%,transparent);color:var(--dsw-alias-state-warn-primary);font-size:calc(var(--ds-fs) - 2px);line-height:18px;display:flex;gap:8px;flex-wrap:wrap}',
+      '.mm-warn-banner{margin-top:12px;padding:8px 12px;border-radius:var(--dsw-radius-sm);border:.5px solid color-mix(in srgb,var(--dsw-alias-state-warn-primary) 35%,transparent);background:color-mix(in srgb,var(--dsw-alias-state-warn-primary) 12%,transparent);color:var(--dsw-alias-state-warn-primary);font-size:calc(var(--ds-fs) - 2px);line-height:1.5;display:flex;gap:8px;flex-wrap:wrap}',
       '.mm-warn-label{font-weight:600}',
-      '.mm-error-banner{margin-top:12px;padding:8px 12px;border-radius:var(--dsw-radius-sm);border:.5px solid color-mix(in srgb,var(--dsw-alias-state-error-primary) 35%,transparent);background:color-mix(in srgb,var(--dsw-alias-state-error-primary) 12%,transparent);color:var(--dsw-alias-state-error-primary);font-size:calc(var(--ds-fs) - 2px);line-height:18px}',
-      '.mm-state{padding:40px 20px;display:flex;flex-direction:column;align-items:center;gap:8px;text-align:center}',
+      '.mm-error-banner{margin-top:12px;padding:8px 12px;border-radius:var(--dsw-radius-sm);border:.5px solid color-mix(in srgb,var(--dsw-alias-state-error-primary) 35%,transparent);background:color-mix(in srgb,var(--dsw-alias-state-error-primary) 12%,transparent);color:var(--dsw-alias-state-error-primary);font-size:calc(var(--ds-fs) - 2px);line-height:1.5}',
+      '.mm-state{padding:32px 20px;display:flex;flex-direction:column;align-items:center;gap:8px;text-align:center}',
       '.mm-state-title{margin:0;font-size:var(--ds-fs);color:var(--dsw-alias-label-secondary)}',
       '.mm-state-hint{margin:0;font-size:calc(var(--ds-fs) - 2px);color:var(--dsw-alias-label-tertiary)}',
       '.mm-state-icon{color:var(--dsw-alias-label-tertiary)}',
       '.mm-backdrop{position:fixed;inset:0;z-index:1200;display:flex;align-items:center;justify-content:center;padding:16px;background:transparent}',
-      '.mm-dialog{width:100%;max-width:min(640px,calc(100vw - 32px));max-height:calc(100vh - 96px);display:flex;flex-direction:column;font-size:var(--ds-fs);background:var(--dsw-static-neutral-bluish-850,var(--dsw-alias-bg-layer-1));border:.5px solid var(--dsw-alias-border-l2);border-radius:var(--dsw-radius-lg);box-shadow:none;overflow:hidden}',
+      '.mm-dialog{width:100%;max-width:min(640px,calc(100vw - 32px));max-height:calc(100vh - 96px);display:flex;flex-direction:column;font-size:var(--ds-fs);background:var(--dsw-alias-bg-layer-2);border:.5px solid var(--dsw-alias-border-l2);border-radius:var(--dsw-radius-lg);box-shadow:none;overflow:hidden}',
       '.mm-dialog-confirm{max-width:min(480px,calc(100vw - 32px));max-height:calc(100vh - 96px);border-radius:var(--dsw-radius-xl)}',
       '.mm-dialog-head{display:flex;align-items:center;justify-content:space-between;gap:12px;padding:16px 24px;border-bottom:.5px solid var(--dsw-alias-border-l1);flex:none}',
       '.mm-dialog-title{margin:0;font-size:calc(var(--ds-fs) + 1px);line-height:1.35;font-weight:600}',
@@ -2811,12 +3256,14 @@ window.__ModuleLoader__.load({
       '.mm-foot-left{display:flex;align-items:center;gap:8px;min-width:0;flex:1 1 auto}',
       '.mm-foot-right{display:flex;align-items:center;gap:8px;flex:none}',
       '.mm-tabs{display:inline-flex;padding:4px;border-radius:var(--dsw-radius-lg);background:var(--dsw-alias-bg-module-platform)}',
-      '.mm-tab{height:34px;padding:0 12px;border-radius:var(--dsw-radius-md);border:.5px solid transparent;background:transparent;color:var(--dsw-alias-label-tertiary);font-size:var(--ds-fs);font-weight:500;font-family:inherit;cursor:pointer;transition:background .12s ease,color .12s ease}',
+      '.mm-tab{height:34px;padding:0 12px;border-radius:var(--dsw-radius-md);border:.5px solid transparent;background:transparent;color:var(--dsw-alias-label-tertiary);font-size:var(--ds-fs);line-height:22px;font-weight:500;font-family:inherit;cursor:pointer;transition:background .12s ease,color .12s ease}',
       '.mm-tab-active{background:var(--dsw-alias-bg-layer-3);border-color:var(--dsw-alias-border-l3);color:var(--dsw-alias-label-primary);font-weight:600}',
+      '.mm-tab:focus-visible{outline:none;background:var(--dsw-alias-interactive-bg-hover);color:var(--dsw-alias-label-primary)}',
+      '.mm-tab:active{background:var(--dsw-alias-interactive-bg-active)}',
       '.mm-form{display:flex;flex-direction:column;gap:16px}',
       '.mm-grid-name{display:grid;grid-template-columns:minmax(0,2fr) minmax(0,1fr);gap:12px}',
       '.mm-field{display:flex;flex-direction:column;gap:6px;min-width:0}',
-      '.mm-field-label{display:flex;align-items:center;gap:6px;font-size:var(--ds-fs);color:var(--dsw-alias-label-secondary);line-height:20px}',
+      '.mm-field-label{display:flex;align-items:center;gap:6px;font-size:var(--ds-fs);color:var(--dsw-alias-label-secondary);line-height:1.5}',
       '.mm-field-sm .mm-field-label{font-size:calc(var(--ds-fs) - 1px)}',
       '.mm-required{color:var(--dsw-alias-state-error-primary);font-size:calc(var(--ds-fs) - 2px);cursor:help}',
       '.mm-input{width:100%;height:34px;padding:0 12px;border-radius:var(--dsw-radius-md);border:.5px solid var(--dsw-alias-border-l4);background:var(--dsw-alias-bg-layer-3);color:var(--dsw-alias-label-primary);font-size:calc(var(--ds-fs) - 1px);font-family:inherit;outline:none;transition:border-color .12s ease}',
@@ -2836,7 +3283,7 @@ window.__ModuleLoader__.load({
       '.mm-kv-val{flex:1 1 auto}',
       '.mm-kv-del{width:32px;height:32px;border:none;background:transparent;color:var(--dsw-alias-label-tertiary);cursor:pointer;display:inline-flex;align-items:center;justify-content:center;border-radius:var(--dsw-radius-sm);flex:none}',
       '.mm-kv-del:hover{color:var(--dsw-alias-state-error-primary);background:color-mix(in srgb,var(--dsw-alias-state-error-primary) 12%,transparent)}',
-      '.mm-hint{margin:0;font-size:calc(var(--ds-fs) - 2px);line-height:18px;color:var(--dsw-alias-label-tertiary)}',
+      '.mm-hint{margin:0;font-size:calc(var(--ds-fs) - 2px);line-height:1.5;color:var(--dsw-alias-label-tertiary)}',
       '.mm-hint-warn{color:var(--dsw-alias-state-warn-primary)}',
       '.mm-adv{border-top:.5px solid var(--dsw-alias-border-l1);padding-top:8px}',
       '.mm-adv-toggle{width:100%;display:flex;align-items:center;justify-content:space-between;gap:8px;padding:6px 0;border:none;background:transparent;color:var(--dsw-alias-label-secondary);font-size:calc(var(--ds-fs) - 1px);font-family:inherit;cursor:pointer}',
@@ -2870,16 +3317,17 @@ window.__ModuleLoader__.load({
       '.mm-tool-desc{font-size:calc(var(--ds-fs) - 2px);color:var(--dsw-alias-label-secondary);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;min-width:0}',
       '.mm-tools-empty{padding:24px 12px;text-align:center;font-size:calc(var(--ds-fs) - 2px);color:var(--dsw-alias-label-tertiary)}',
       '.mm-seg{display:inline-flex;gap:2px;flex:none}',
-      '.mm-seg-btn{height:28px;padding:0 10px;border-radius:9999px;border:none;background:transparent;color:var(--dsw-alias-label-tertiary);font-size:calc(var(--ds-fs) - 2px);font-family:inherit;cursor:pointer;white-space:nowrap;transition:background .12s ease,color .12s ease}',
+      '.mm-seg-btn{height:28px;padding:0 10px;border-radius:9999px;border:none;background:transparent;color:var(--dsw-alias-label-tertiary);font-size:calc(var(--ds-fs) - 2px);line-height:18px;font-family:inherit;cursor:pointer;white-space:nowrap;transition:background .12s ease,color .12s ease}',
       '.mm-seg-btn:hover{background:var(--dsw-alias-interactive-bg-hover);color:var(--dsw-alias-label-primary)}',
       '.mm-seg-btn-active{background:var(--dsw-alias-interactive-bg-hover);color:var(--dsw-alias-label-primary);font-weight:500}',
+      '.mm-seg-btn:active{background:var(--dsw-alias-interactive-bg-active)}',
       '.mm-seg-btn-auto.mm-seg-btn-active{background:color-mix(in srgb,var(--dsw-alias-state-success-primary) 20%,transparent);border-color:color-mix(in srgb,var(--dsw-alias-state-success-primary) 35%,transparent);color:var(--dsw-alias-state-success-primary)}',
       '.mm-seg-btn-disabled.mm-seg-btn-active{background:color-mix(in srgb,var(--dsw-alias-state-error-primary) 20%,transparent);border-color:color-mix(in srgb,var(--dsw-alias-state-error-primary) 35%,transparent);color:var(--dsw-alias-state-error-primary)}',
       '.mm-json{display:flex;flex-direction:column;gap:12px}',
       '.mm-json-toolbar{display:flex;align-items:center;justify-content:space-between;gap:8px;font-size:calc(var(--ds-fs) - 2px);color:var(--dsw-alias-label-secondary);flex-wrap:wrap}',
       '.mm-json-actions{display:flex;align-items:center;gap:8px;flex-wrap:wrap}',
       '.mm-json-area{min-height:320px}',
-      '.mm-feedback{font-size:calc(var(--ds-fs) - 2px);line-height:18px}',
+      '.mm-feedback{font-size:calc(var(--ds-fs) - 2px);line-height:1.5}',
       '.mm-feedback-ok{color:var(--dsw-alias-state-success-primary)}',
       '.mm-feedback-err{color:var(--dsw-alias-state-error-primary)}',
       '.mm-test-result{font-size:calc(var(--ds-fs) - 2px);min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:var(--dsw-alias-label-secondary)}',
@@ -2889,10 +3337,10 @@ window.__ModuleLoader__.load({
       '.mm-delete-desc{margin:0;font-size:calc(var(--ds-fs) - 1px);line-height:1.7;color:var(--dsw-alias-label-secondary)}',
       '.mm-delete-name{color:var(--dsw-alias-label-primary)}',
       '.mm-tooltip-host{position:fixed;left:0;top:0;width:0;height:0;z-index:2000;pointer-events:none;--ds-fs:var(--dsh-content-font-size,14px)}',
-      '.mm-tooltip{position:fixed;z-index:2000;max-width:min(40vw,290px);padding:3px 7px;border-radius:var(--dsw-radius-sm);background:var(--dsw-alias-tooltip-bg);color:var(--dsw-static-neutral-bluish-00);font-size:calc(var(--ds-fs) - 2px);line-height:16px;box-shadow:none;pointer-events:none;opacity:0;transform:translateY(2px);transition:opacity .12s ease,transform .12s ease;white-space:normal}',
+      '.mm-tooltip{position:fixed;box-sizing:border-box;z-index:2000;max-width:min(40vw,290px);padding:3px 7px;border-radius:var(--dsw-radius-sm);background:var(--dsw-alias-tooltip-bg);color:var(--dsw-static-neutral-bluish-00);font-size:calc(var(--ds-fs) - 2px);line-height:1.35;box-shadow:none;pointer-events:none;opacity:0;transform:translateY(2px);transition:opacity .12s ease,transform .12s ease;white-space:normal}',
       '.mm-tooltip-show{opacity:1;transform:translateY(0)}',
       '.mm-toasts{position:fixed;left:50%;bottom:28px;transform:translateX(-50%);z-index:2100;display:flex;flex-direction:column;gap:8px;pointer-events:none;width:min(420px,calc(100vw - 32px))}',
-      '.mm-toast{display:flex;align-items:flex-start;gap:8px;padding:12px 16px;border-radius:var(--dsw-radius-md);border:.5px solid var(--dsw-alias-border-l2);background:var(--dsw-alias-bg-layer-3);color:var(--dsw-alias-label-primary);font-size:calc(var(--ds-fs) - 1px);line-height:18px;box-shadow:none;animation:mm-toast-in .18s ease;pointer-events:auto}',
+      '.mm-toast{display:flex;align-items:flex-start;gap:8px;padding:12px 16px;border-radius:var(--dsw-radius-md);border:.5px solid var(--dsw-alias-border-l2);background:var(--dsw-alias-bg-layer-3);color:var(--dsw-alias-label-primary);font-size:calc(var(--ds-fs) - 1px);line-height:1.5;box-shadow:none;animation:mm-toast-in .18s ease;pointer-events:auto}',
       '.mm-toast-dot{width:6px;height:6px;border-radius:50%;margin-top:6px;flex:none;background:var(--dsw-alias-brand-primary)}',
       '.mm-toast-ok{border-color:color-mix(in srgb,var(--dsw-alias-state-success-primary) 40%,transparent)}',
       '.mm-toast-ok .mm-toast-dot{background:var(--dsw-alias-state-success-primary)}',
@@ -2900,7 +3348,7 @@ window.__ModuleLoader__.load({
       '.mm-toast-err .mm-toast-dot{background:var(--dsw-alias-state-error-primary)}',
       '.mm-toast-info .mm-toast-dot{background:var(--dsw-alias-brand-primary)}',
       '.mm-toast-text{min-width:0;word-break:break-word}',
-      '.mm-toast-close{display:inline-flex;align-items:center;justify-content:center;width:24px;height:24px;padding:0;border:none;background:transparent;color:var(--dsw-alias-label-tertiary);cursor:pointer;border-radius:var(--dsw-radius-xs);flex:none}',
+      '.mm-toast-close{display:inline-flex;align-items:center;justify-content:center;width:28px;height:28px;padding:0;border:none;background:transparent;color:var(--dsw-alias-label-tertiary);cursor:pointer;border-radius:var(--dsw-radius-xs);flex:none}',
       '.mm-toast-close:hover{color:var(--dsw-alias-label-primary)}',
       '.mm-spin-icon{animation:mm-spin .8s linear infinite}',
       '@keyframes mm-spin{from{transform:rotate(0deg)}to{transform:rotate(360deg)}}',

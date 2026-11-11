@@ -320,6 +320,7 @@ handler; wrap every op in try/catch.
   "rows": [Row],
   "library": [LibraryEntry],
   "warnings": ["global: home patch is not readable: …"],
+  "fontSize": 16,                    // fallback only; the client prefers ctx.theme.getTheme().fontSizes.text
   "generatedAt": 1793698687874
 }
 ```
@@ -501,7 +502,7 @@ window.__ModuleLoader__.load({
     const h = React.createElement
     // … inline `const zh = { … }` and `const en = { … }` dictionaries (single quotes,
     //    one key per line, each key referenced outside the dictionaries via t('key')) …
-    return { inject: ['slots', 'locale'], apply(ctx) { /* … */ } }
+    return { inject: ['slots', 'locale', 'theme'], apply(ctx) { /* … */ } }
   },
 })
 ```
@@ -523,63 +524,50 @@ Data flow: `fetch('mcp-manager/api', { method: 'POST', headers: { 'content-type'
 the localized unauthorized state. Poll `state` every 4 s while the section is mounted (the live
 phase changes when HMR applies a patch), and refetch immediately after every mutation.
 
-Page layout (tokens only — no literal colors):
+### 8.1 Theme and font size
 
-1. Header, one non-wrapping row: `MCP 服务` title, an ellipsized subtitle, the last-updated
-   text, then two icon buttons — refresh and test-all — each an inline SVG with a native `title`
-   and an `aria-label` (`刷新列表` / `测试所有启用的服务器`). No text buttons here.
-2. Toolbar: scope filter (`全部` / `全局` / `工作区`) as a segmented control, a search input
-   (matches serverName, target, id), and a `新增服务器` button.
-3. Row list, grouped by scope when the filter is `全部` (a `全局（home 层）` group and a
-   `工作区（当前 profile）` group), otherwise one flat list. Each row card shows: `serverName`, a
-   transport chip (`stdio` / `streamable-http`), a scope chip, the enable switch, the live phase
-   (`已加载` / `未加载` / `加载失败`) with the tool count, the one-line target, the workspace
-   attachment chips (titles of `row.workspaces`), the last probe result (`未测试` / `连通 · 12 工具 ·
-   230 ms` / `失败 · <error message>`), and the actions `编辑`, `JSON`, `测试`, `删除`.
-4. Empty states per filter, plus a warning banner for `warnings`. The results area is compact
-   when empty (`height: auto`; no reserved blank space) and scrolls internally up to 360px when
-   rows exist; a change between empty and non-empty may change the page height (the user chose
-   this trade-off over a fixed blank area).
-5. `导入 / 导出` section: a `导出 JSON` button (copies `format: 'mcpServers'`), and an import
-   textarea + target-scope select + `导入` button that calls `import` and reports
-   added/updated/skipped.
-6. `服务器库` section: every library entry with its origins (`全局`, `工作区: desktop`), and an
-   `添加到…` action that opens a dialog choosing the target scope (and an optional name override)
-   and calls `libraryApply`.
-7. Editor dialog (create/edit). Its **settings row sits above the tab row**: the `作用域`
-   segmented choice (`全局` / `工作区`) on the left, and — only while the scope is `工作区` — the
-   `工作目录` multi-select on the right (a button opening a checkbox list built from
-   `state.workspaces`, showing each workspace `title`, with select-all/clear; chosen paths render
-   as removable chips on one non-wrapping, horizontally scrolling line). Below it the tab row
-   (`结构化` / `JSON`) follows. New servers default to `全局`; an edit shows and locks the row's
-   actual scope. The dialog writes `workspaces: [...]` on create/update (`[]` for `全局`).
-   The editor, JSON-view and library-add dialogs take the exact bounds of the Settings panel they
-   open inside (measured once on open, re-measured on window resize) so they fully cover it;
-   confirmation dialogs stay small (`min(440px, calc(100vw - 48px))`).
-   - **结构化**: serverName, transport select, then transport-specific fields — command, args
-     (one per line), env (one `key=value` per line), cwd for stdio; url, headers (one
-     `key=value` per line) for streamable-http — plus an `高级` block with `toolCallTimeoutMs`,
-     `maxInstructionBytes`, `failOnStartupError` and the four `reconnect` fields. A
-     `测试连接` button probes the draft (`op: 'probe'` with `config`).
-   - **JSON**: a textarea holding the server's JSON (the same shape as one `mcpServers` entry),
-     a `从表单生成` and a `解析到表单` button, plus inline validation errors. `粘贴整份
-     mcpServers JSON` is available in the import section, not here.
-   - There is **no** "enable this server" checkbox: a new server is enabled by default and an
-     edit keeps the row's current `disabled` state (the switch on the card is the only control).
-   - The backdrop is **transparent** (`position: fixed; inset: 0; background: transparent`): it
-     captures outside clicks and closes the dialog, but it must not dim the Settings panel behind
-     it. The dialog itself keeps its own surface, border and shadow.
-   The dialog closes on Escape, on backdrop click, and restores focus to the invoking button.
+- `inject` must include `theme`. The client reads the live font size from
+  `ctx.theme.getTheme().fontSizes.text` (rounded, clamped to 10–24, default 14).
+- While the page is mounted, subscribe with `ctx.on('theme/change', (snapshot) => …)` and update
+  the page when `snapshot.fontSizes.text` changes; dispose the subscription on unmount. A font
+  change must apply without reopening the page.
+- The Host `state.fontSize` (read from the `ui-theme` patch row) is a **fallback only**: use it
+  when the theme service or `fontSizes.text` is unavailable.
+- The page root sets `--ds-fs: <fontSize>px`. Every font size in the plugin derives from
+  `--ds-fs` via the seven-step scale in design.md §3.3; `--dsh-content-font-size` may only appear
+  as the fallback in the `--ds-fs` definition.
+- Detached layers (the tooltip layer and any future overlay) copy the current `--ds-fs` when
+  created and keep following the plugin's current font size while visible (design.md §3.7).
 
-Rules: every visible string goes through `t()`; the dictionaries must have identical zh/en key
-sets and no unreferenced keys; use only `--dsw-alias-*` tokens (`--dsw-alias-bg-base`,
-`--dsw-alias-bg-layer-1`, `--dsw-alias-bg-layer-2`, `--dsw-alias-border-l1`,
-`--dsw-alias-border-l2`, `--dsw-alias-brand-primary`, `--dsw-alias-label-primary`,
-`--dsw-alias-label-secondary`, `--dsw-alias-label-tertiary`, `--dsw-alias-state-success-primary`,
-`--dsw-alias-state-warn-primary`, `--dsw-alias-state-error-primary`,
-`--dsw-alias-interactive-bg-hover`, `--dsw-radius-sm`, `--dsw-font-family`). Prefix every class
-with `mm-`. Inject one `<style>` element inside `apply` and remove it in the disposer. Keep the
-component free of side effects outside its own state and the API calls.
+### 8.2 UI surfaces
+
+- Page: settings-embedded content column (design.md §4.4). Header = title + help + search +
+  "test all" icon button + "add" primary button; warning/error banners; list; toasts.
+- The page is **single-profile**: no scope filter, workspace binding, server library, or
+  import/export UI.
+- Row: status dot, `serverName`, transport chip, optional read-only chip, optional latency, tool
+  count, one-line target, and exactly **3** inline icon buttons: enable/disable, edit, delete.
+  There is **no** per-row test button; testing is available from the editor's "test connectivity"
+  button and the header's "test all".
+- Editor dialog (create/edit): form and JSON tabs; fields, validation, clean-config and tool
+  permission rules live in DESIGN.md §1.3 / §2.5. It uses the settings-page-embedded dialog tier:
+  **640px** max width, clamped to the viewport.
+- Delete confirmation: confirm dialog tier: **480px** max width, clamped to the viewport.
+- Tooltip: one page-wide instance; hover or keyboard focus, **300ms** delay; hidden on
+  leave/press/scroll/view switch. Visual specs: design.md §7.7.
+- Dialog stacking, Escape and focus return: design.md §7.6 / §9.3.
+
+Visual specs (colors, radii, spacing, icon sizes, hover/pressed states) are **not** part of this
+contract: see design.md §2, §7, §9 and DESIGN.md for the business mapping.
+
+### 8.3 Shared rules
+
+- Every visible string goes through `t()`; the inline `zh` / `en` dictionaries must have
+  identical key sets and no unreferenced keys. The authoritative copy mapping is DESIGN.md §3.
+- Prefix every class with `mm-`; inject one `<style>` element inside `apply` and remove it in the
+  disposer.
+- Use only `--dsw-*` tokens for color, border and radius; no literal color values.
+- Keep the component free of side effects outside its own state and the API calls.
 
 ---
 

@@ -24,11 +24,51 @@ DSH 的「设置 → 通用设置 → 字号大小」**不是 CSS 全局变量**
 ```
 
 而 `--dsh-content-font-size` 只在**会话内容区**生效，设置面板里读不到（整条祖先链上都没有该变量）。
-所以插件**无法靠 CSS 继承**拿到字号，必须自己从配置读取。
+所以插件**无法靠 CSS 继承**拿到字号，必须从宿主 theme service 读取（Host 读 patch 仅作降级兜底）。
 
-### 1.2 正确做法：Host 读 → state 带出 → 根节点设变量 → 阶梯计算
+### 1.2 正确做法：客户端读 theme service → 根节点设 `--ds-fs` → 阶梯计算
 
-**Host 侧**（`index.js`）：从 patch 层读 `ui-theme.fontSize`，profile 层优先、home 层兜底。
+**首选：客户端从 theme service 读当前生效字号。** 浏览器半边 `inject` 里声明 `theme`，用
+`ctx.theme.getTheme().fontSizes.text` 取当前快照；再用 `ctx.on('theme/change')` 订阅变化，
+页面不重开也要持续跟随。
+
+```js
+return {
+  inject: ['slots', 'locale', 'theme'],
+  apply(ctx) {
+    function clampFontSize(value) {
+      const size = typeof value === 'number' && Number.isFinite(value) ? Math.round(value) : 14
+      return Math.min(24, Math.max(10, size))
+    }
+
+    // 1) 读当前快照：fontSizes.text 就是宿主「设置 → 通用设置 → 字号大小」
+    function readFontSize(fallback) {
+      try {
+        const snapshot = ctx.theme.getTheme()
+        if (snapshot !== null && snapshot !== undefined && snapshot.fontSizes !== undefined) {
+          return clampFontSize(snapshot.fontSizes.text)
+        }
+      } catch (error) {
+        /* 降级到 Host 带出的 state.fontSize */
+      }
+      return clampFontSize(fallback)
+    }
+
+    // 2) 订阅主题变化，挂载期间持续跟随；卸载时释放
+    const off = ctx.on('theme/change', (snapshot) => {
+      if (snapshot !== null && snapshot !== undefined && snapshot.fontSizes !== undefined) {
+        setFontSize(clampFontSize(snapshot.fontSizes.text))
+      }
+    })
+    ctx.effect(() => () => {
+      if (typeof off === 'function') off()
+    })
+  },
+}
+```
+
+**降级：Host 读 patch → `state.fontSize` 带出。** 仅在 theme service 不可用、或
+`fontSizes.text` 缺失/无效时使用，不能反过来当首选来源：
 
 ```js
 async function themeFontSize() {
@@ -40,45 +80,47 @@ async function themeFontSize() {
     const match = /(?:^|\n)\s*-\s+id:\s*['"]?ui-theme['"]?[\s\S]{0,800}?\bfontSize:\s*(\d{1,2})/u.exec(content)
     if (match !== null) {
       const size = Number(match[1])
-      if (Number.isFinite(size) && size >= 10 && size <= 40) return Math.round(size)
+      if (Number.isFinite(size) && size >= 10 && size <= 24) return Math.round(size)
     }
   }
   return null
 }
 ```
 
-然后 `state` 返回 `{ ..., fontSize }`。
+然后 `state` 返回 `{ ..., fontSize }`，客户端把它作为 `readFontSize(state.fontSize)` 的兜底传入。
 
 **客户端**：页面根节点注入 CSS 变量。
 
 ```js
 h('div', {
   className: 'mm-root',
-  style: fontSize === null ? undefined : { '--mm-fs': fontSize + 'px' },
+  style: { '--ds-fs': fontSize + 'px' },
 }, ...)
 ```
 
-**样式层**：所有字号都写成基于 `--mm-fs` 的阶梯，不写死像素。
+**样式层**：所有字号都写成基于 `--ds-fs` 的阶梯，不写死像素。
 
 ```css
-.mm-root { --mm-fs: var(--dsh-content-font-size, 14px); font-size: calc(var(--mm-fs) - 1px); }
+.mm-root { --ds-fs: var(--dsh-content-font-size, 14px); font-size: var(--ds-fs); }
 
-/* 阶梯表（基准 14px，实际取值随设置变化） */
-.font-16 { font-size: calc(var(--mm-fs) + 2px); }   /* 大标题 */
-.font-15 { font-size: calc(var(--mm-fs) + 1px); }   /* 弹窗标题 */
-.font-14 { font-size: var(--mm-fs); }               /* 弹窗正文、输入框、标签 */
-.font-13 { font-size: calc(var(--mm-fs) - 1px); }   /* 列表页正文 */
-.font-12 { font-size: calc(var(--mm-fs) - 2px); }   /* 次要信息、徽章 */
-.font-11 { font-size: calc(var(--mm-fs) - 3px); }   /* 弱化说明 */
+/* 阶梯表（基准 14px，实际取值随设置变化；完整七档见 design.md §3.3） */
+.font-20 { font-size: calc(var(--ds-fs) + 6px); }   /* 页面主标题 */
+.font-16 { font-size: calc(var(--ds-fs) + 2px); }   /* 区块标题 */
+.font-15 { font-size: calc(var(--ds-fs) + 1px); }   /* 弹窗标题 */
+.font-14 { font-size: var(--ds-fs); }               /* 正文、大号按钮、Tab、标签 */
+.font-13 { font-size: calc(var(--ds-fs) - 1px); }   /* 次要、输入框、菜单项 */
+.font-12 { font-size: calc(var(--ds-fs) - 2px); }   /* 辅助、徽章、时间、Tooltip */
+.font-11 { font-size: calc(var(--ds-fs) - 3px); }   /* 弱化、图表轴标签 */
 ```
 
 改造时可用脚本批量替换（本项目 44 处一次性改完）：
 
 ```python
 import re
-steps = {'16px': 'calc(var(--mm-fs) + 2px)', '15px': 'calc(var(--mm-fs) + 1px)',
-         '14px': 'var(--mm-fs)', '13px': 'calc(var(--mm-fs) - 1px)',
-         '12px': 'calc(var(--mm-fs) - 2px)', '11px': 'calc(var(--mm-fs) - 3px)'}
+steps = {'20px': 'calc(var(--ds-fs) + 6px)', '16px': 'calc(var(--ds-fs) + 2px)',
+         '15px': 'calc(var(--ds-fs) + 1px)', '14px': 'var(--ds-fs)',
+         '13px': 'calc(var(--ds-fs) - 1px)', '12px': 'calc(var(--ds-fs) - 2px)',
+         '11px': 'calc(var(--ds-fs) - 3px)'}
 text = re.sub(r'font-size:([0-9.]+px)', lambda m: 'font-size:' + steps[m.group(1)], text)
 ```
 
@@ -88,39 +130,47 @@ text = re.sub(r'font-size:([0-9.]+px)', lambda m: 'font-size:' + steps[m.group(1
 patch 文件里可能有 `{{SECRET_xxx}}` 这类 flow 写法，自研的 YAML 子集解析器会整体抛错。
 → 用**文本正则**定位目标配置段，不要解析整个文件。
 
-**坑 2：`--mm-fs` 传不到 body 上的节点。**
+**坑 2：`--ds-fs` 传不到 body 上的节点。**
 Tooltip 是挂在 `<body>` 末尾的（不能放在页面容器内，否则被 `overflow:hidden` 裁掉），
-而 `--mm-fs` 定义在 `.mm-root` 上 → tooltip 拿不到变量，字号不生效。
+而 `--ds-fs` 定义在 `.mm-root` 上 → tooltip 拿不到变量，字号不生效。
 
-→ 创建节点时把当前比例复制过去：
+→ 每次显示前把当前比例同步过去，不要只在创建节点时复制一次（否则字号快照会过期，见 design.md §3.7）：
 
 ```js
-const root = document.querySelector('.mm-root')
-if (root !== null) {
-  const scale = getComputedStyle(root).getPropertyValue('--mm-fs').trim()
-  if (scale !== '') node.style.setProperty('--mm-fs', scale)
+function syncFontSize(node) {
+  const root = document.querySelector('.mm-root')
+  if (root === null) return
+  const scale = getComputedStyle(root).getPropertyValue('--ds-fs').trim()
+  if (scale !== '') node.style.setProperty('--ds-fs', scale)
 }
 ```
 
+显示 Tooltip 时调用 `syncFontSize(node)`；宿主字号变化后也重新同步。
+
 **坑 3：`calc()` 里的变量必须有 fallback。**
-插件不保证在设置面板内渲染，`var(--mm-fs)` 可能为空。
-→ 定义时给默认值：`--mm-fs: var(--dsh-content-font-size, 14px);`
+插件不保证在设置面板内渲染，`var(--ds-fs)` 可能为空。
+→ 定义时给默认值：`--ds-fs: var(--dsh-content-font-size, 14px);`
 
-### 1.4 字号层级的设计建议
+### 1.4 字号层级：与 design.md §3.3 的七档对齐
 
-不要所有文字一个尺寸。推荐四层，相邻层差 1~2px：
+不要所有文字一个尺寸，也不要自建四层/五层体系。层级固定为 design.md §3.3 的七档，
+不允许半像素：
 
-| 层级 | 用途 | 相对基准 |
-|---|---|---|
-| 页面标题 | 面板主标题（可选，宿主可能已有） | +2px |
-| 弹窗标题 | 编辑器/确认框标题 | +1px |
-| 正文 | 列表正文、弹窗字段、输入框 | 基准 |
-| 次要 | 徽章、时间、URL 摘要 | −2px |
-| 弱化 | tooltip、占位提示 | −4px |
+| 档位 | 计算 | 基准 14px 时 | 用途 |
+| --- | --- | --- | --- |
+| 页面主标题 | `fs + 6px` | 20px | 独立页面顶栏标题 |
+| 区块标题 | `fs + 2px` | 16px | 卡片大标题、面板主标题 |
+| 弹窗标题 | `fs + 1px` | 15px | 弹窗/抽屉标题 |
+| 正文 | `fs` | 14px | 页面正文、大号按钮、Tab、表单 Label |
+| 次要 | `fs - 1px` | 13px | 列表副标题、输入框、菜单项、中号按钮 |
+| 辅助 | `fs - 2px` | 12px | 徽章、时间、URL 摘要、小号按钮、**Tooltip** |
+| 弱化 | `fs - 3px` | 11px | 图表轴标签、极弱提示 |
+
+**Tooltip 用辅助档 `fs - 2px`**，不是 `fs - 4px`；字号只影响文本，不缩放控件（design.md §3.6）。
 
 ---
 
-## 二、Tooltip（帮助框）：小 2px + 颜色浅一档
+## 二、Tooltip（帮助框）：小 2px + 深底浅字
 
 ### 2.1 视觉规范
 
@@ -128,14 +178,13 @@ Tooltip 是**辅助信息**，不是正文。它必须看起来"轻"，否则会
 
 ```css
 .mm-tooltip {
-  font-size: calc(var(--mm-fs) - 4px);              /* 比正文小 2~4px */
-  color: var(--dsw-alias-label-secondary);          /* 次级文字色，不用主文字色 */
-  background: var(--dsw-alias-bg-layer-2);
-  border: 1px solid var(--dsw-alias-border-l2);
+  font-size: calc(var(--ds-fs) - 2px);              /* 辅助档：比正文小 2px */
+  color: var(--dsw-static-neutral-bluish-00);       /* 深底上的浅色文字 */
+  background: var(--dsw-alias-tooltip-bg);          /* 两种主题都是深底 */
   box-shadow: none;                                  /* 不要发光！见 3.1 */
-  border-radius: 7px;
-  padding: 6px 10px;
-  max-width: 290px;
+  border-radius: var(--dsw-radius-sm);
+  padding: 3px 7px;
+  max-width: min(40vw, 290px);
   line-height: 1.35;
   pointer-events: none;                              /* 永不拦截鼠标 */
 }
@@ -145,15 +194,14 @@ Tooltip 是**辅助信息**，不是正文。它必须看起来"轻"，否则会
 
 | 元素 | 字号 | 颜色 |
 |---|---|---|
-| 正文 | `var(--mm-fs)` | `--dsw-alias-label-primary` |
-| 次要信息（URL 摘要、时间） | `calc(var(--mm-fs) - 2px)` | `--dsw-alias-label-tertiary` 或 secondary |
-| Tooltip | `calc(var(--mm-fs) - 4px)` | `--dsw-alias-label-secondary` |
+| 正文 | `var(--ds-fs)` | `--dsw-alias-label-primary` |
+| 次要信息（URL 摘要、时间） | `calc(var(--ds-fs) - 2px)` | `--dsw-alias-label-tertiary` 或 secondary |
+| Tooltip | `calc(var(--ds-fs) - 2px)` | `--dsw-static-neutral-bluish-00` |
 
 ### 2.2 交互规范
 
-- **触发**：悬停 **300ms** 后显示（1000ms 太慢，用户会以为没反应）；移出/按下立即隐藏。
-- **只悬停**：不要加点击触发——点击通常有自己的动作（打开弹窗、切换状态），叠一个浮层会互相打断。
-  - 若确实要"点击看解释"，必须用 `onClickCapture`（见 4.2）。
+- **触发**：悬停或键盘聚焦 **300ms** 后显示（1000ms 太慢，用户会以为没反应）；移出/按下/滚动/切换视图立即隐藏。
+- **不加点击触发**：点击通常有自己的动作（打开弹窗、切换状态），叠一个浮层会互相打断；点击引起的聚焦也不得重新触发，键盘聚焦仍须可用（design.md §7.7）。
 - **单个实例**：全页面只有一个 tooltip 节点，切换目标时复用。
 - **边缘处理**：靠近视口边缘时翻转/夹紧，不能超出屏幕。
 - **层级**：`z-index` 要高于弹窗（本项目用 2000，弹窗 1200）。
@@ -176,54 +224,44 @@ rgba(255,255,255,0.2) 0 0 0 0.5px, rgba(0,0,0,0.04) 0 3px 8px, rgba(0,0,0,0.05) 
 style: { boxShadow: 'none' }
 ```
 
-同时 tooltip 也不要阴影——整体保持"平面 + 1px 边框"的语言。
+同时 tooltip 也不要阴影、不要边框——整体保持"平面 + .5px 边框"的语言（design.md §2.4 / §7.7）。
 
-### 3.2 尺寸要跟宿主面板一致
+### 3.2 尺寸用固定档位
 
-不要写死 `max-width: 640px`。先用 `useLayoutEffect` 测量宿主面板尺寸，再应用到弹窗：
+弹窗尺寸按 design.md §7.6 的四档固定值，宽度统一夹到视口内：
 
-```js
-const [hostBox, setHostBox] = useState(null)
-useLayoutEffect(() => {
-  const measure = () => {
-    const node = boxRef.current
-    const host = node?.parentElement?.closest('[role="dialog"]')   // 宿主设置面板
-    if (!host) return
-    const rect = host.getBoundingClientRect()
-    setHostBox({
-      width: Math.min(Math.round(rect.width), window.innerWidth - 32),
-      height: Math.min(Math.round(rect.height), window.innerHeight - 32),
-    })
-  }
-  measure()
-  window.addEventListener('resize', measure)
-  return () => window.removeEventListener('resize', measure)
-}, [])
-```
+| 档位 | 宽度 | 圆角 | 用途 |
+| --- | --- | --- | --- |
+| 确认 | `min(480px, 100vw - 32px)` | `radius-xl` | 删除/覆盖确认 |
+| 表单 | `min(488px, 100vw - 32px)` 或 `min(560px, 100vw - 32px)` | `radius-panel` | 新建/编辑 |
+| 大内容 | `min(720px, 100vw - 32px)` | `radius-panel` | 多源、代码预览 |
+| 设置页内嵌 | `min(640px, 100vw - 32px)` | `radius-lg` | 嵌在设置面板内 |
 
-嵌套弹窗（编辑器里再开确认框）要优先匹配**最近的** `.mm-dialog`，而不是页面根：
+高度上限 `max-height: calc(100vh - 96px)`；尺寸固定，不随内容变化。内容区是唯一滚动容器，短视口下用 `min-height: 0` 防止底部按钮被裁。
 
-```js
-const host = node.parentElement.closest('.mm-dialog')
-  ?? node.parentElement.closest('.mm-root')
-  ?? node.parentElement.closest('[role="dialog"]')
-```
+### 3.3 背景与遮罩按入口区分
 
-### 3.3 背景色要跟宿主面板同色
-
-插件弹窗默认用 `--dsw-alias-bg-base`，比设置面板**深一档**，看起来像"另一个应用"。
-
-设置面板实际用的是 `--dsw-static-neutral-bluish-850`（#2c2c2e）：
+插件弹窗的默认背景是 `--dsw-alias-bg-layer-2`：它随主题自适应，独立页面下与宿主面板同色，不会看起来像"另一个应用"。
 
 ```css
-.mm-dialog { background: var(--dsw-static-neutral-bluish-850, var(--dsw-alias-bg-layer-1)); }
+.mm-dialog { background: var(--dsw-alias-bg-layer-2); }
 ```
+
+**不要用 `--dsw-static-neutral-bluish-850` 作为弹窗的固定背景。** 它是固定深色（#2c2c2e），浅色主题下会变成深底深字（对比度约 1.36:1），无法阅读。设置页内嵌弹窗同样用 `--dsw-alias-bg-layer-2`：深色主题下它等于面板色 `#2c2c2e`，浅色主题下等于白色面板色，两种主题都保持「与面板同色」。这是对 design.md §7.6「设置页内嵌用 850」的必要修正——该规则只在设置面板确实为固定深色时成立，而当前宿主浅色主题的设置面板是白色。
+
+```css
+.mm-dialog-embedded { background: var(--dsw-alias-bg-layer-2); }
+```
+
+遮罩按入口区分：
+- 设置页内嵌弹窗：`background: transparent`，不要压暗下面的设置面板；
+- 独立页面弹窗：`background: var(--dsw-alias-bg-mask-1)`。
 
 > 注意：`--dsw-hovercard-bg` 在主题里**未定义**（取值为空），别拿它当兜底。
 
-### 3.4 遮罩透明、Escape 分层
+### 3.4 遮罩按入口、Escape 分层
 
-- 遮罩 `background: transparent`（不要压暗下面的设置面板）。
+- 遮罩按入口区分：设置页内嵌 `background: transparent`（不要压暗下面的设置面板）；独立页面用 `var(--dsw-alias-bg-mask-1)`。
 - 多弹窗叠加时，Escape / 遮罩点击只关**最上层**：维护 `dialogStack`，捕获阶段 `stopImmediatePropagation`。
 - 弹窗固定尺寸，内容区滚动；短视口下正文要 `min-height: 0`，否则底部按钮被裁。
 
@@ -265,14 +303,14 @@ const host = node.parentElement.closest('.mm-dialog')
 ### 4.2 `Object.assign` 合并 handlers：用 Capture 变体
 
 ```js
-Object.assign({ onClick: 动作 }, tooltipHandlers(tip))
+Object.assign({ onClick: 动作 }, extraHandlers())
 //                                   ↑ 若返回 onClick，会覆盖掉"动作"
 ```
 
 后来者胜出 → **所有按钮动作失效**。要追加行为就用独立属性：
 
 ```js
-onClickCapture: (e) => { /* 显示提示 */ }   // 与 onClick 互不影响
+onClickCapture: (e) => { /* 追加行为，如埋点 */ }   // 与 onClick 互不影响
 ```
 
 ### 4.3 事件冒泡：弹窗渲染在触发者的 DOM 子树里
@@ -341,12 +379,16 @@ const [argsDirty, setArgsDirty] = useState(false)
 
 | 用途 | token |
 |---|---|
-| 弹窗/面板背景（与设置面板同色） | `--dsw-static-neutral-bluish-850` |
-| 卡片、输入框背景 | `--dsw-alias-bg-layer-1` / `--dsw-alias-bg-layer-2` |
+| 弹窗/抽屉/菜单背景（独立页面） | `--dsw-alias-bg-layer-2` |
+| 设置页内嵌弹窗背景（与设置面板同色） | `--dsw-alias-bg-layer-2`（主题自适应；不要用固定 `850`） |
+| 遮罩（独立页面） | `--dsw-alias-bg-mask-1` |
+| 卡片、输入框背景 | `--dsw-alias-bg-layer-1` / `--dsw-alias-bg-layer-3` |
 | 边框、分割线 | `--dsw-alias-border-l1` / `--dsw-alias-border-l2` |
 | 主文字 | `--dsw-alias-label-primary` |
-| 次文字（tooltip 用这个） | `--dsw-alias-label-secondary` |
+| 次文字（说明、hover 中的图标） | `--dsw-alias-label-secondary` |
 | 弱化文字 | `--dsw-alias-label-tertiary` |
+| Tooltip 文字 | `--dsw-static-neutral-bluish-00` |
+| Tooltip 背景 | `--dsw-alias-tooltip-bg` |
 | 成功 / 警告 / 错误 | `--dsw-alias-state-success-primary` / `--dsw-alias-state-warn-primary` / `--dsw-alias-state-error-primary` |
 | 品牌色 | `--dsw-alias-brand-primary` |
 | hover 背景 | `--dsw-alias-interactive-bg-hover` |
@@ -360,12 +402,12 @@ const [argsDirty, setArgsDirty] = useState(false)
 
 新建带 UI 的 DSH 插件时，逐条确认：
 
-- [ ] 字号接入 `--mm-fs` 阶梯，不写死 px；Host 从 `ui-theme.fontSize` 读取
-- [ ] Tooltip：300ms 延迟、仅悬停、比正文小 2px、用次级文字色、无阴影
-- [ ] 弹窗：测量宿主面板尺寸、背景与面板同色、`box-shadow: none`、遮罩透明
+- [ ] 字号接入 `--ds-fs` 阶梯，不写死 px；客户端优先读 `ctx.theme.getTheme().fontSizes.text` 并订阅 `theme/change`，`state.fontSize` 仅作兜底
+- [ ] Tooltip：300ms 延迟、悬停或键盘聚焦、比正文小 2px（辅助档）、`--dsw-static-neutral-bluish-00` 文字色、无阴影
+- [ ] 弹窗：固定档位（确认 480 / 表单 488 或 560 / 大内容 720 / 设置页内嵌 640）、背景 `--dsw-alias-bg-layer-2`（主题自适应，不用固定 `850`）、`box-shadow: none`、遮罩按入口区分（设置页内嵌透明，独立页面 `bg-mask-1`）
 - [ ] Escape / 遮罩点击只关最上层；短视口正文可收缩
-- [ ] 图标按钮：1000ms 内必要提示、内联 SVG、统一 16×16（或宿主槽位尺寸）
-- [ ] 点击行为不与提示冲突（用 `onClickCapture`，不要覆盖 `onClick`）
+- [ ] 图标按钮：内联 SVG、统一 16×16（或宿主槽位尺寸）
+- [ ] 追加行为用独立属性（`onClickCapture`），不要用 `Object.assign` 覆盖 `onClick`
 - [ ] 事件：弹窗内点击完全放行，不要 stopPropagation 打断 React 合成事件
 - [ ] 配置写入遵守 Clean Config（空值/默认值不写），并声明合法例外
 - [ ] 文本域字段加脏标记，避免输入/换行被破坏

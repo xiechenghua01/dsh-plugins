@@ -150,6 +150,14 @@ async function checkPlugin(plugin, config, report) {
     }
   }
 
+  const buildScript = join(dir, 'scripts', 'build-client.mjs')
+  if (await exists(buildScript)) {
+    const checked = spawnSync(process.execPath, [buildScript, '--check'], { cwd: dir, encoding: 'utf8' })
+    if (checked.status !== 0) {
+      report(`client.js is out of date with src/client: ${checked.stderr.trim()}`)
+    }
+  }
+
   const localeDir = join(dir, 'locale')
   if (await exists(localeDir)) {
     const files = (await readdir(localeDir)).filter((name) => name.endsWith('.json')).sort()

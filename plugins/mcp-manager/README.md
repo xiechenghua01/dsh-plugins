@@ -102,6 +102,8 @@ plugin_manager action=install_bundle target=/absolute/path/to/dsh-plugins/plugin
 ## 开发 / Development
 
 ```bash
+node scripts/build-client.mjs        # src/client/*.js -> client.js（client.js 是生成产物，不要手改）
+node scripts/build-client.mjs --check
 node --check index.js
 node --check client.js
 node --check lib/patch.mjs
@@ -109,5 +111,8 @@ node --check lib/probe.mjs
 node --check lib/library.mjs
 pnpm test          # 仓库检查 + 本插件 selftest
 ```
+
+浏览器半边按职责拆在 `src/client/*.js`，由构建脚本按文件名顺序拼接为 `client.js`；
+DSH 模块加载器只提供一个文件，片段之间共享同一 factory 作用域。
 
 实现契约与 wire 形状见 [CONTRACT.md](CONTRACT.md)。

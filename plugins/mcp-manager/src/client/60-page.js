@@ -32,45 +32,14 @@
           if (isObject(snapshot) && isObject(snapshot.fontSizes)) setFontSize(normalizeHostFontSize(snapshot.fontSizes.text))
         })
         return typeof off === 'function' ? off : undefined
-      }, [])
+      }, [fallback])
       return fontSize
     }
 
-    function SkeletonList(props) {
-      return h(
-        'div',
-        { className: 'mm-list', role: 'status', 'aria-busy': 'true', 'aria-label': props.label },
-        [0, 1, 2].map((index) => h(
-          'div',
-          { key: index, className: 'mm-skeleton-row' },
-          h('span', { className: 'mm-skeleton-line mm-skeleton-name' }),
-          h('span', { className: 'mm-skeleton-line mm-skeleton-summary' }),
-        )),
-      )
-    }
-
-    function McpPage(props) {
-      const bound = props !== null && props !== undefined && typeof props.t === 'function' ? props.t : activeT
-      const t = typeof bound === 'function' ? bound : function fallback(key) { return key }
-      const tRef = useRef(t)
-      tRef.current = t
-
-      const [data, setData] = useState(null)
-      const [loading, setLoading] = useState(true)
-      const [error, setError] = useState(null)
-      const [unauthorized, setUnauthorized] = useState(false)
-      const [query, setQuery] = useState('')
-      const [expanded, setExpanded] = useState({})
-      const [testingIds, setTestingIds] = useState({})
-      const [testingAll, setTestingAll] = useState(false)
-      const [busy, setBusy] = useState(false)
-      const [editor, setEditor] = useState(null)
-      const [deleteTarget, setDeleteTarget] = useState(null)
-      const [deleting, setDeleting] = useState(false)
+    /** Transient toast queue; each entry auto-dismisses after 3s. */
+    function useToasts() {
       const [toasts, setToasts] = useState([])
       const toastSeq = useRef(0)
-      const returnFocus = useRef(null)
-
       const pushToast = useCallback((kind, text) => {
         toastSeq.current += 1
         const id = toastSeq.current
@@ -79,11 +48,18 @@
           setToasts((prev) => prev.filter((toast) => toast.id !== id))
         }, 3000)
       }, [])
-
       const dismissToast = useCallback((id) => {
         setToasts((prev) => prev.filter((toast) => toast.id !== id))
       }, [])
+      return { toasts: toasts, pushToast: pushToast, dismissToast: dismissToast }
+    }
 
+    /** Page data: load / poll `state` and derive the list rows plus banners. */
+    function useMcpData(tRef) {
+      const [data, setData] = useState(null)
+      const [loading, setLoading] = useState(true)
+      const [error, setError] = useState(null)
+      const [unauthorized, setUnauthorized] = useState(false)
       const load = useCallback(async () => {
         try {
           const payload = await callApi('state', {})
@@ -101,7 +77,6 @@
           setLoading(false)
         }
       }, [])
-
       useEffect(() => {
         load()
         const timer = setInterval(load, POLL_MS)
@@ -109,24 +84,15 @@
           clearInterval(timer)
         }
       }, [load])
-
-      // 视图切换（弹窗打开/关闭）时立即收起残留浮层。
-      useEffect(() => {
-        hideTooltip()
-      }, [editor, deleteTarget])
-
       const rows = isObject(data) && Array.isArray(data.rows) ? data.rows : []
       const warnings = isObject(data) && Array.isArray(data.warnings) ? data.warnings.map((entry) => textOf(entry)).filter((entry) => entry !== '') : []
-      const trimmedQuery = query.trim().toLowerCase()
-      const filteredRows = trimmedQuery === ''
-        ? rows
-        : rows.filter((row) => {
-          const config = isObject(row.config) ? row.config : {}
-          const target = textOf(row.target) !== '' ? textOf(row.target) : targetOfConfig(config)
-          const transport = isObject(row.config) ? transportOf(row.config) : textOf(row.transport)
-          const haystack = [textOf(row.serverName), target, textOf(row.id), transport].join(' ').toLowerCase()
-          return haystack.includes(trimmedQuery)
-        })
+      return { data: data, loading: loading, error: error, unauthorized: unauthorized, rows: rows, warnings: warnings, load: load }
+    }
+
+    /** Row-level actions: enable toggle and the toolbar "test all" probe. */
+    function useServerActions(t, rows, pushToast, load) {
+      const [busy, setBusy] = useState(false)
+      const [testingAll, setTestingAll] = useState(false)
 
       async function toggleEnabled(row) {
         if (busy === true) return
@@ -140,36 +106,6 @@
           pushToast('err', t('toast.operationFailed', { message: describeError(t, failure) }))
         } finally {
           setBusy(false)
-        }
-      }
-
-      async function testOne(row) {
-        if (testingIds[row.id] === true) return
-        setTestingIds((prev) => {
-          const next = Object.assign({}, prev)
-          next[row.id] = true
-          return next
-        })
-        try {
-          const payload = await callApi('probe', { id: row.id, level: row.level })
-          const result = isObject(payload.result) ? payload.result : {}
-          if (result.ok === true) {
-            const ms = typeof result.durationMs === 'number' && Number.isFinite(result.durationMs) ? Math.round(result.durationMs) : 0
-            const tools = typeof result.toolCount === 'number' ? result.toolCount : (Array.isArray(result.tools) ? result.tools.length : 0)
-            pushToast('ok', t('toast.testOk', { name: row.serverName, ms: ms, tools: tools }))
-          } else {
-            const message = isObject(result.error) && textOf(result.error.message) !== '' ? textOf(result.error.message) : t('common.unknownError')
-            pushToast('err', t('toast.testFail', { name: row.serverName, message: message }))
-          }
-          await load()
-        } catch (failure) {
-          pushToast('err', t('toast.testFail', { name: row.serverName, message: describeError(t, failure) }))
-        } finally {
-          setTestingIds((prev) => {
-            const next = Object.assign({}, prev)
-            delete next[row.id]
-            return next
-          })
         }
       }
 
@@ -192,6 +128,21 @@
         }
       }
 
+      return { busy: busy, testingAll: testingAll, toggleEnabled: toggleEnabled, testAll: testAll }
+    }
+
+    /** Editor / delete dialog state, focus return and the close / save / delete handlers. */
+    function useMcpDialogs(t, pushToast, load) {
+      const [editor, setEditor] = useState(null)
+      const [deleteTarget, setDeleteTarget] = useState(null)
+      const [deleting, setDeleting] = useState(false)
+      const returnFocus = useRef(null)
+
+      // 视图切换（弹窗打开/关闭）时立即收起残留浮层。
+      useEffect(() => {
+        hideTooltip()
+      }, [editor, deleteTarget])
+
       function openEditor(mode, row) {
         returnFocus.current = typeof document !== 'undefined' && document !== null ? document.activeElement : null
         setEditor({ mode: mode, row: row })
@@ -211,6 +162,10 @@
         setDeleteTarget(row)
       }
 
+      function closeDelete() {
+        setDeleteTarget(null)
+      }
+
       async function confirmDelete() {
         if (deleteTarget === null || deleting === true) return
         setDeleting(true)
@@ -226,132 +181,85 @@
         }
       }
 
-      function toggleExpanded(row) {
-        setExpanded((prev) => {
-          const next = Object.assign({}, prev)
-          if (next[row.id] === true) delete next[row.id]
-          else next[row.id] = true
-          return next
-        })
+      return {
+        editor: editor,
+        deleteTarget: deleteTarget,
+        deleting: deleting,
+        returnFocus: returnFocus,
+        openEditor: openEditor,
+        closeEditor: closeEditor,
+        handleSaved: handleSaved,
+        requestDelete: requestDelete,
+        closeDelete: closeDelete,
+        confirmDelete: confirmDelete,
       }
+    }
 
-      const header = h(
-        'div',
-        { className: 'mm-head' },
-        h(
-          'div',
-          { className: 'mm-head-left' },
-          h('h2', { className: 'mm-title' }, t('page.title')),
-          h(HelpDot, { tip: t('page.help') }),
-        ),
-        h(
-          'div',
-          { className: 'mm-head-actions' },
-          h(
-            'div',
-            { className: 'mm-search' },
-            h(Svg, { d: ICON_SEARCH, size: 14, className: 'mm-search-icon' }),
-            h('input', {
-              className: 'mm-search-input',
-              value: query,
-              placeholder: t('page.searchPlaceholder'),
-              'aria-label': t('page.searchPlaceholder'),
-              spellCheck: false,
-              onChange: (event) => setQuery(event.target.value),
-            }),
-          ),
-          h(IconButton, {
-            icon: ICON_ZAP,
-            label: t('page.testAll'),
-            tooltip: t('page.testAll'),
-            className: 'mm-toolbar-btn',
-            spin: testingAll === true,
-            disabled: busy === true,
-            onClick: testAll,
-          }),
-          h(
-            Button,
-            { variant: 'primary', icon: ICON_PLUS, onClick: () => openEditor('create', null) },
-            h('span', null, t('page.add')),
-          ),
-        ),
-      )
+    function McpPage(props) {
+      const bound = props !== null && props !== undefined && typeof props.t === 'function' ? props.t : activeT
+      const t = typeof bound === 'function' ? bound : function fallback(key) { return key }
+      const tRef = useRef(t)
+      tRef.current = t
 
-      const warningsBanner = warnings.length > 0
-        ? h(
-          'div',
-          { className: 'mm-warn-banner' },
-          h('span', { className: 'mm-warn-label' }, t('page.warnings')),
-          h('span', null, warnings.join(' · ')),
-        )
-        : null
-
-      const errorBanner = error !== null && data !== null
-        ? h('div', { className: 'mm-error-banner' }, error)
-        : null
-
-      let content
-      if (unauthorized === true) {
-        content = h(StatePanel, { title: t('page.unauthorized'), actionLabel: t('page.retry'), onAction: load })
-      } else if (error !== null && data === null) {
-        content = h(StatePanel, { title: t('page.error'), hint: error, actionLabel: t('page.retry'), onAction: load })
-      } else if (loading === true && data === null) {
-        content = h(SkeletonList, { label: t('page.loading') })
-      } else if (filteredRows.length === 0) {
-        content = h(StatePanel, { icon: ICON_PLUG, title: t('list.empty') })
-      } else {
-        content = h(
-          'div',
-          { className: 'mm-list' },
-          filteredRows.map((row) => h(ServerRow, {
-            key: textOf(row.level) + ':' + textOf(row.id),
-            t: t,
-            row: row,
-            busy: busy,
-            testing: testingIds[row.id] === true,
-            testingAll: testingAll,
-            expanded: expanded[row.id] === true,
-            onToggleExpand: () => toggleExpanded(row),
-            onToggleEnabled: toggleEnabled,
-            onTest: testOne,
-            onEdit: (target) => openEditor('edit', target),
-            onDelete: requestDelete,
-          })),
-        )
-      }
-
-      const fontSize = useHostFontSize(isObject(data) && Number.isFinite(data.fontSize) ? data.fontSize : 14)
+      const [query, setQuery] = useState('')
+      const toasts = useToasts()
+      const state = useMcpData(tRef)
+      const actions = useServerActions(t, state.rows, toasts.pushToast, state.load)
+      const dialogs = useMcpDialogs(t, toasts.pushToast, state.load)
+      const fontSize = useHostFontSize(isObject(state.data) && Number.isFinite(state.data.fontSize) ? state.data.fontSize : 14)
       return h(
         'div',
         { className: 'mm-root', style: { '--ds-fs': fontSize + 'px' } },
         h(TooltipLayer),
-        header,
-        warningsBanner,
-        errorBanner,
-        content,
-        editor !== null
+        h(PageHeader, {
+          t: t,
+          query: query,
+          onQueryChange: setQuery,
+          testingAll: actions.testingAll,
+          busy: actions.busy,
+          hasData: state.data !== null,
+          warnings: state.warnings,
+          error: state.error,
+          onTestAll: actions.testAll,
+          onAdd: () => dialogs.openEditor('create', null),
+        }),
+        h(ServerList, {
+          t: t,
+          rows: state.rows,
+          query: query,
+          loading: state.loading,
+          hasData: state.data !== null,
+          error: state.error,
+          unauthorized: state.unauthorized,
+          busy: actions.busy,
+          testingAll: actions.testingAll,
+          onRetry: state.load,
+          onToggleEnabled: actions.toggleEnabled,
+          onEdit: (target) => dialogs.openEditor('edit', target),
+          onDelete: dialogs.requestDelete,
+        }),
+        dialogs.editor !== null
           ? h(EditorDialog, {
-            key: 'editor:' + editor.mode + ':' + (isObject(editor.row) ? textOf(editor.row.id) : 'new'),
+            key: 'editor:' + dialogs.editor.mode + ':' + (isObject(dialogs.editor.row) ? textOf(dialogs.editor.row.id) : 'new'),
             t: t,
-            mode: editor.mode,
-            row: editor.row,
-            returnFocus: returnFocus.current,
-            pushToast: pushToast,
-            onClose: closeEditor,
-            onSaved: handleSaved,
+            mode: dialogs.editor.mode,
+            row: dialogs.editor.row,
+            returnFocus: dialogs.returnFocus.current,
+            pushToast: toasts.pushToast,
+            onClose: dialogs.closeEditor,
+            onSaved: dialogs.handleSaved,
           })
           : null,
-        deleteTarget !== null
+        dialogs.deleteTarget !== null
           ? h(DeleteDialog, {
             t: t,
-            row: deleteTarget,
-            busy: deleting,
-            returnFocus: returnFocus.current,
-            onClose: () => setDeleteTarget(null),
-            onConfirm: confirmDelete,
+            row: dialogs.deleteTarget,
+            busy: dialogs.deleting,
+            returnFocus: dialogs.returnFocus.current,
+            onClose: dialogs.closeDelete,
+            onConfirm: dialogs.confirmDelete,
           })
           : null,
-        h(ToastHost, { toasts: toasts, dismissLabel: t('action.close'), onDismiss: dismissToast }),
+        h(ToastHost, { toasts: toasts.toasts, dismissLabel: t('action.close'), onDismiss: toasts.dismissToast }),
       )
     }
-

@@ -60,52 +60,28 @@
                 ? h('span', { className: 'mm-latency' }, t('list.latency', { ms: latency }))
                 : null,
               h(
-                'button',
-                Object.assign({
-                  type: 'button',
+                LinkButton,
+                {
                   className: 'mm-tools-btn',
-                  'aria-expanded': props.expanded === true ? 'true' : 'false',
+                  expanded: props.expanded === true,
+                  tip: t('list.toolsTip'),
                   onClick: props.onToggleExpand,
-                }, tooltipHandlers(t('list.toolsTip'))),
+                },
                 h('span', null, t('list.tools', { count: count === null ? DASH : String(count) })),
                 h(Svg, { d: ICON_CHEVRON, size: 12, className: 'mm-chevron' + (props.expanded === true ? ' mm-chevron-open' : '') }),
               ),
             ),
             h('div', { className: 'mm-summary' }, target !== '' ? target : DASH),
           ),
-          h(
-            'div',
-            { className: 'mm-actions' },
-            h(IconButton, {
-              icon: ICON_POWER,
-              label: enabled === true ? t('action.toggleDisable') : t('action.toggleEnable'),
-              tooltip: enabled === true ? t('action.toggleDisable') : t('action.toggleEnable'),
-              tone: enabled === true ? 'ok' : '',
-              disabled: blocked,
-              onClick: () => {
-                if (typeof props.onToggleEnabled === 'function') props.onToggleEnabled(row)
-              },
-            }),
-            h(IconButton, {
-              icon: ICON_EDIT,
-              label: t('action.edit'),
-              tooltip: t('action.edit'),
-              disabled: blocked,
-              onClick: () => {
-                if (typeof props.onEdit === 'function') props.onEdit(row)
-              },
-            }),
-            h(IconButton, {
-              icon: ICON_TRASH,
-              label: t('action.delete'),
-              tooltip: t('action.delete'),
-              tone: 'danger',
-              disabled: blocked,
-              onClick: () => {
-                if (typeof props.onDelete === 'function') props.onDelete(row)
-              },
-            }),
-          ),
+          h(RowActions, {
+            t: t,
+            row: row,
+            enabled: enabled,
+            disabled: blocked,
+            onToggleEnabled: props.onToggleEnabled,
+            onEdit: props.onEdit,
+            onDelete: props.onDelete,
+          }),
         ),
         props.expanded === true
           ? h(
@@ -130,4 +106,3 @@
           : null,
       )
     }
-
