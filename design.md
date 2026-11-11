@@ -1,9 +1,9 @@
 # design.md — DSH 插件设计与交互统一规范
 
-> **定位**：本仓库所有 UI 插件（已发布与后续新增）的唯一视觉样式、交互行为与图标设计权威源。
-> **权威性**：当各插件自身的 `DESIGN.md`、`CONTRACT.md`、原型稿或交互说明与本文档冲突时，**一律以本文档为准**。插件自身的文档仅用于描述特定业务数据流与功能边界，严禁重复或自创视觉与交互规范。
+> **定位**：本仓库所有 UI 插件（已发布与后续新增）的唯一视觉样式、交互行为、图标与工程抽象约定权威源。
+> **权威性**：当各插件自身的 `DESIGN.md`、`CONTRACT.md`、原型稿或交互说明与本文档冲突时，**一律以本文档为准**。三份文档的职责切分与冲突裁决流程见 §1.3；任何无法消除的偏离必须登记 §13.2。
 > **数据基础**：DSH 原生客户端核心包（`dsh-web-frontend`、`dsh-client-ui-plugin-manager`、`dsh-client-ui-settings`、`dsh-client-ui-theme`、`dsh-client-ui-schedule` 等）从 `app.asar` 提取的真实实测 CSS + 三个插件完整开发会话的全部真实返工经验 + 成熟插件生态（VS Code / Figma / Obsidian / Grafana）设计系统调研。
-> **版本**：v2.0（2026-11 完善终版）。
+> **版本**：v2.1（2026-11）。文档职责边界、冲突裁决与工程抽象约定见 §1.3、§10。
 
 ---
 
@@ -12,7 +12,7 @@
 1. **原生优先（Native Parity First）**：开发任何插件 UI 前，必须先在宿主中量出原生控件（Tab、按钮、列表、弹窗、Tooltip、搜索框）的真实尺寸与 Token。插件必须看起来像 DSH 的原生自带功能，严禁设计成“另一个风格独立的应用”。
 2. **零字面色值（Zero Literal Colors）**：全样式只允许使用 `--dsw-*` Token 或基于 Token 的 `color-mix()` 计算色。绝对禁止出现 `#hex`、`rgb()`、`rgba()`、`hsl()` 等字面颜色（唯一例外：§3.9 数据可视化多模型折线系列色）。
 3. **字号阶梯联动（Font Scale Sync）**：严禁硬编码字号像素值（如 `font-size: 14px`）。全界面字号必须通过四步机制接入设置项中的 `ui-theme.fontSize`，并基于 `--ds-fs` 进行阶梯计算。
-4. **共享控件唯一实现（No Reinventing Wheels）**：按钮、图标按钮、分段/筛选 Tab、输入框、下拉菜单、拆分按钮、弹窗、Tooltip 全仓库仅有一套标准 HTML 结构与 CSS 规则。禁止为单个插件编写私有按钮或自绘气泡。
+4. **共享控件唯一实现（No Reinventing Wheels）**：按钮、图标按钮、分段/筛选 Tab、输入框、下拉菜单、拆分按钮、弹窗、Tooltip 全仓库仅有一套标准 HTML 结构与 CSS 规则。禁止为单个插件编写私有按钮或自绘气泡；`.ds-*` 规则由本文件独占定义，插件内不得覆盖。业务视图禁止直接拼装裸 `<button>` / 裸遮罩 `<div>` / 手写 Esc 栈，必须通过插件内 primitives 组装（§10.3）。
 5. **同一背景表达状态（Shared Background Token）**：控件（Tab、卡片、菜单项、图标按钮）的 `hover` 与 `selected/active` 必须使用同一个背景 Token（`--dsw-alias-interactive-bg-hover`），仅靠文字色从 `tertiary` 提到 `primary` 区分状态；`hover` 时严禁发生位移、缩放、加边框或跳动。
 6. **弹窗固定三档、遮罩分场景、全局零发光**：弹窗宽度严格执行确认 `480px`、标准表单 `488px/560px`、大内容 `720px`（设置页内嵌固定 `640px`）；独立页遮罩必须真实变灰（`bg-mask-1`），设置页内嵌遮罩必须透明；全界面浮层 `box-shadow: none`，消除发光光晕。
 7. **Tooltip 300ms 纯悬停深色气泡**：统一采用原生 `--dsw-alias-tooltip-bg` 深底白字，悬停 300ms 触发，移出/按下/视图切换立即销毁，单实例复用，禁止点击触发。
@@ -52,6 +52,32 @@
 
 这证明：**如果不确立一份统一、穷举且具有强制力的设计规范，每一个新插件都会重新发明一遍轮子，并踩中完全相同的一批坑。**
 
+### 1.3 文档边界与冲突裁决
+
+仓库里同时存在三份文档，职责必须切开，否则会互相打架：
+
+| 文档 | 只写什么 | 禁止写什么 |
+| --- | --- | --- |
+| `design.md`（本文件） | 设计 Token、字号阶梯、页面骨架、组件结构与 CSS、图标、交互态、文案语气、工程抽象约定 | 单个插件的业务字段、路由、数据流 |
+| `plugins/<slug>/CONTRACT.md` | 运行时契约：slots / routes / locale 键 / 持久化 payload / 错误码 | 颜色、尺寸、圆角、图标、交互反馈 |
+| `plugins/<slug>/DESIGN.md` | 该插件特有的信息架构、业务状态机、文案逐条映射 | 与 §3–§8 重复的视觉规格（应直接引用本文件章节号） |
+
+**冲突裁决顺序**（自上而下，命中即停）：
+
+1. 用户在当前会话中的明确指令（可临时偏离，但必须同轮登记到 §13.2）。
+2. 本文件 `design.md`。
+3. 插件 `CONTRACT.md` / `DESIGN.md`。
+4. 原型稿、历史截图、旧代码。
+
+**存量冲突处理步骤**：
+
+1. **判定**：凡视觉 / 交互类冲突，一律以本文件为准，不做「折中」。
+2. **删文档**：把插件 `DESIGN.md` 里重复的视觉规格删掉，改为一句「视觉与交互见 [`design.md`](../../design.md) §x」。
+3. **改代码**：按 §13 收敛计划整改；不得在新功能里继续叠加偏离实现。
+4. **补登记**：确需保留的偏离，登记 §13.2，写明原因与收敛条件。
+
+> **不扩大范围**：修 bug 时若旧样式「不影响本次行为」，只登记 §13.2，不在同一提交里重构；禁止「顺手大规模重构」。反之，本次改动本身就要触碰的控件，必须一并改成规范实现。
+
 ---
 
 ## 2. 核心设计原则
@@ -62,6 +88,8 @@ DSH 本身已经具备经过精细打磨的桌面端 UI 体系（基于深浅两
 
 ### 2.2 单一来源（Single Source of Truth）
 全仓库对于每一个基础控件（Button, Input, Tab, Dialog, Tooltip, Dropdown, Toast）**仅允许存在一份标准 CSS 规格**。后续插件禁止另起炉灶或覆盖规则。如需调整，必须先更新本文件并经过全插件回归。
+
+「单一来源」不是口号：运行时无法共享组件（§10.1），所以必须靠共享源 + 注入 + 校验来落实，机制与当前状态见 §10.5。
 
 ### 2.3 克制沉静（Quiet & Calm）
 - **零视觉噪音**：不使用彩色投影、不使用发光光晕（Glow）、不使用复杂渐变底色、不使用不必要的毛玻璃模糊（Blur）。
@@ -241,17 +269,33 @@ h('div', {
 }, ...)
 ```
 
-### 4.3 权威六档字号阶梯表
+### 4.3 权威七档字号阶梯表
 
 | 档位 | CSS 阶梯计算公式 | 基准 14px 时 | 适用场景 |
 | --- | --- | --- | --- |
-| **页面主标题** | `calc(var(--ds-fs) + 6px)` 或 `20px` | 20px | 页面独立顶栏主标题（原生 `pageTitle` 实测值） |
+| **页面主标题** | `calc(var(--ds-fs) + 6px)` | 20px | 页面独立顶栏主标题（原生 `pageTitle` 实测值） |
 | **区块标题** | `calc(var(--ds-fs) + 2px)` | 16px | 卡片大标题、向导页标题 |
 | **弹窗标题** | `calc(var(--ds-fs) + 1px)` | 15px | 弹窗头部标题、抽屉头部标题 |
 | **页面正文** | `var(--ds-fs)` | 14px | 页面正文、标准按钮（md）、一级 Tab 标签、表单 Label |
 | **次要信息** | `calc(var(--ds-fs) - 1px)` | 13px | 列表副标题、输入框文字、下拉菜单项、代码块正文 |
 | **辅助说明** | `calc(var(--ds-fs) - 2px)` | 12px | 状态徽章、时间戳、摘要信息、小按钮（sm）、**Tooltip** |
 | **极弱标注** | `calc(var(--ds-fs) - 3px)` | 11px | 图表坐标轴 Label、版本次级弱化文字 |
+
+#### 阶梯的落地方式：固化为 class
+
+为避免业务代码里到处拼 `calc(var(--ds-fs) …)`，把七档固化为工具类，业务只写 class（§10.8 反模式的正解）：
+
+```css
+.ds-text-page     { font-size: calc(var(--ds-fs) + 6px); }   /* 基准 14px → 20px */
+.ds-text-title    { font-size: calc(var(--ds-fs) + 2px); }
+.ds-text-dialog   { font-size: calc(var(--ds-fs) + 1px); }
+.ds-text-body     { font-size: var(--ds-fs); }
+.ds-text-sub      { font-size: calc(var(--ds-fs) - 1px); }
+.ds-text-caption  { font-size: calc(var(--ds-fs) - 2px); }
+.ds-text-weak     { font-size: calc(var(--ds-fs) - 3px); }
+```
+
+> 页面主标题用 `.ds-text-page`：`calc(var(--ds-fs) + 6px)`。基准 14px 时正好等于原生 `pageTitle` 的 20px，同时保留字号联动；**不要**写成 `font-size: 20px`。
 
 > **关键教训**：在 `skill-manager` 早期版本中，页面正文错误地书写成了 `calc(var(--sm-fs) - 1px)`（13px），用户在多轮会话中指出“技能页字体明显偏小，请和原生页一致”。**页面正文必须直接使用 `var(--ds-fs)`**，切勿默认再减 1px。
 
@@ -362,7 +406,7 @@ font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
 
 .ds-page-title {
   margin: 0;
-  font-size: 20px;
+  font-size: calc(var(--ds-fs) + 6px); /* 基准 14px → 20px，与原生 pageTitle 一致 */
   font-weight: 500;
   line-height: 28px;
   color: var(--dsw-alias-label-primary);
@@ -411,6 +455,29 @@ font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
 ## 6. 标准组件规格与实现
 
 所有通用组件样式均使用统一的 `.ds-*` 前缀。插件内部专用业务样式可使用 `<prefix>-` 前缀（如 `.sm-`、`.mm-`），但在容器内引用的基础组件必须完全复用下列标准规则。
+
+### 6.0 组件归属与 Props 约定（先判定，再动手）
+
+写任何 UI 之前先判断它属于哪一类，避免「什么都抽象」或「什么都裸写」两个极端：
+
+| 情况 | 做法 |
+| --- | --- |
+| 原生已有等价控件（按钮、Tab、输入、弹窗、菜单、Tooltip、开关） | 必须用本文件 §6 的标准类名与结构，不得自创 |
+| 本插件内跨 ≥2 个视图复用、且不属于原生控件（图表、卡片网格、代码块、文件树） | 抽成插件内 primitives 函数组件，CSS 用插件前缀（`<prefix>-`） |
+| 跨 ≥2 个插件都需要、且不属于原生控件 | 先用插件前缀实现并登记 §13.2；确认长期共用后再提为 `ds-` 并写入本文件 |
+| 只用一次、且不承载通用语义 | 允许就地写，但仍须遵守 §3 Token、§3.10 间距刻度与 §10.4 行内样式红线 |
+
+**Props 最小契约**（只约束命名，不约束内部实现；目的是防止三个插件各叫一套）：
+
+- 变体一律叫 `variant`（`primary` / `secondary` / `ghost` / `danger`），不叫 `type` / `kind` / `theme`。
+- 尺寸一律叫 `size`（`lg` / `md` / `sm`），不叫 `big` / `small`。
+- 禁用一律叫 `disabled`；加载态用 `loading`。
+- 关闭回调一律叫 `onClose`，不叫 `dismiss` / `close` / `hide`。
+- 纯图标按钮必须传 `label`，由组件内部同时生成 `aria-label` 与 300ms Tooltip；**禁止调用方各自手写提示**。
+- 不向外暴露 `style` 与自由 `className`；需要定位时用 `data-*` 或预设 `variant` 表达。
+
+> 本节不提供完整组件目录：组件清单以 §6 各小节为准，代码以现有插件实现为准，避免文档与代码双写腐化。
+
 
 ### 6.1 按钮（Button）
 
@@ -1198,24 +1265,135 @@ function SvgIcon({ name, size = 16, className = '' }) {
 
 ---
 
-## 10. 工程约束与代码结构
+## 10. 工程约束、代码结构与抽象
 
 ### 10.1 纯 React 运行边界
 插件客户端半边只允许通过 `require('react')` 获取 React 运行时，严禁 import `@deepseek-ai/*` 或任何第三方 NPM UI 依赖库。全量界面基于原生 DOM + CSS 变量完成构建。
 
+> 由此推出一个容易踩空的结论：**本仓库无法提供「运行时共享组件库」**。每个插件独立发布、独立安装，只能各自内联实现。所以「单一源」只能靠 §10.6 的共享源 + 注入 + 校验来保证，不能靠 npm 依赖。
+
 ### 10.2 样式作用域隔离
-为了防止多插件共存时相互污染，所有插件样式必须完全封装在自身根容器下：
+所有插件样式必须封装在自身根容器下，避免多插件共存时相互污染：
+
 ```css
-/* 严禁任何全局裸选择器，如 button { ... } 或 :focus { ... } */
-[data-plugin="my-plugin-slug"] .ds-btn { ... }
-[data-plugin="my-plugin-slug"] .ds-input { ... }
+/* 根节点：class 固定 ds-root，data-plugin 标识归属 */
+.ds-root[data-plugin="my-plugin"] { ... }
+
+/* 组件规则挂在根节点下；严禁全局裸选择器 */
+.ds-root[data-plugin="my-plugin"] .ds-btn { ... }
 ```
 
-### 10.3 静态校验清单（`pnpm test`）
-仓库 CI 强制拦截以下违规行为：
-- 源码中严禁包含任何形如 `/Users/...` 或 `/home/...` 的本机绝对路径。
-- 严禁在浏览器端代码中引用未声明的外部包。
-- 字典键集对称性与引用校验必须通过。
+- 禁止全局裸选择器：`button { }`、`* { }`、`:focus { }`、`body { }`。
+- `.ds-*` 规则本身由本文件独占定义（§0 第 4 条），插件只允许在自己的根节点作用域内**引用**，不允许改写。
+- 样式注入只写一次，随根组件挂载/卸载；不要在每个子组件里重复注入同一段 CSS。
+
+### 10.3 分层与抽象（硬约束）
+
+**硬约束只有一条：业务视图层禁止直接拼装裸控件。**
+
+```text
+views（业务视图）
+  └─ 只做：数据绑定、布局组合、条件渲染
+  └─ 禁止：裸 <button> / 裸全屏遮罩 <div> / 手写 dialogStack 与 Esc 监听 / 手写 Tooltip 计时器
+
+templates（容器模板）
+  └─ 弹窗骨架、行列表骨架、双栏详情骨架、空/加载/错误骨架
+  └─ 统一封装：遮罩样式、焦点回收、滚动锁定、层级与 Escape 栈
+
+primitives（原子控件）
+  └─ 对应 §6 的标准类名：Button / IconButton / Input / Tooltip / Badge / Icon / Menu / Tabs
+  └─ 统一封装：aria-label、disabled、loading、Tooltip 绑定
+```
+
+- **不强制目录结构**：三个插件的现有组织（单文件 / `src/client/*.js` 分片）都可继续用，只要求**逻辑分层在代码里看得见**（函数命名一致、不混写）。
+- **不强制每个插件都建三层**：小插件可以只有 primitives + views；出现第二个弹窗或第二类行卡片时才提 templates。
+- **判据**：如果一个业务函数里出现了 `className: 'ds-dialog-backdrop'` 或 `addEventListener('keydown', ...)` 处理 Escape，说明该抽未抽。
+
+### 10.4 行内样式红线（Inline Style）
+
+| 允许 | 说明 |
+| --- | --- |
+| 根节点注入 `--ds-fs` | 唯一合法的字号变量注入点（§4.2） |
+| 图表坐标与比例 | 折线 `d`、柱高百分比、`top/left` 定位、`width/height` 的百分比 |
+| 拖拽过程态 | 拖动幽灵的 `translate`、插入指示线的位置 |
+| 必要时覆盖宿主默认 | `style={{ boxShadow: 'none' }}`（§3.8），且必须带注释说明原因 |
+
+| 禁止 | 原因 |
+| --- | --- |
+| `style={{ color: ... }}` / `fontSize` / `padding` / `borderRadius` | 绕过 Token 与阶梯，暗色模式与字号联动全部失效 |
+| `style={{ background: 'var(--dsw-...)' }}` | 能写进 style 就能写进 class；class 才可被统一校验 |
+| 用 `style` 传动态主题色 | 主题切换时无法响应，必须走 `[data-ds-dark-theme]` 或 Token |
+
+> 一句话：**样式进 class，数据进 style。** 值来自 Token 的进 class；值来自运行时计算的（坐标、比例、状态）进 style。
+
+### 10.5 共享源与落地的现实状态
+
+「单一源」如果没有机制，复制必然分叉（`0f52dea` 那次图标对齐就是证据）。目标形态：
+
+```text
+design/ds.css            唯一组件样式源（§6 的标准规则）
+design/icons.mjs         唯一图标字典源（§7.3）
+scripts/sync-design.mjs  把上面两份注入各插件 client.js（或校验已一致）
+scripts/check-plugins.mjs 增加三条静态校验（§10.6）
+```
+
+**当前状态（必须如实告知后续 agent）**：以上机制**尚未接入**。现阶段的事实是：
+
+- `design/ds.css` 与 `design/icons.mjs` **不存在**；共享源就是本文档。
+- 各插件仍各自内联样式与图标字典，靠 §10.6 的三条校验（也未接入）与人工评审保持一致。
+- 因此**不得在代码中 `import` 任何 `design/` 路径**，也不要假设它存在。
+
+**接入顺序**（缺一不可，避免先改代码后补文档）：
+
+1. 先完成 §13 P1 存量收敛（否则校验必然红灯）。
+2. 抽 `design/ds.css` / `design/icons.mjs`，内容与本文档逐条一致。
+3. 改各插件的构建入口（如 `plugins/skill-manager/scripts/build-client.mjs`）与单文件插件的样式常量，从源文件注入。
+4. 加 `scripts/sync-design.mjs`（校验 hash）与 `check-plugins.mjs` 三条规则。
+5. 全绿后，本文档 §6/§7 改为「源在 `design/`，本文件只留规则摘要」，消除双写。
+
+### 10.6 机器可查的三条最小校验
+
+这三条能挡住 80% 的分叉，优先级高于任何文档条款：
+
+1. **禁字面色值**：`client.js` 中出现 `#` + 3/6 位 hex、`rgb(`、`hsl(` 直接失败（`--ss-series-*` 与 `icon.svg` 除外）。
+2. **禁硬编码字号**：`font-size:` 后出现裸 `px` 数值失败，必须是 `calc(var(--*-fs) …)` 或 `var(--*-fs)`。
+3. **禁发光**：`box-shadow` 只允许 `none` 或 `none !important`；`filter` / `backdrop-filter` / `linear-gradient` 出现即失败。
+
+**接入前置条件**：`session-stats` 有 49 处硬编码字号、`mcp-manager` 与 `skill-manager` 有少量 `box-shadow` 过渡期写法；必须在 §13 P1 收敛完成后才能接入，否则 CI 直接红灯。
+
+### 10.7 本规范的变更规程
+
+文档腐化是真实风险，改规范本身也要有流程：
+
+1. **改规则先改文档**：先更新本文档对应章节，再改三个插件，最后才允许提交代码。禁止「代码先跑起来，文档以后补」。
+2. **版本与破坏性变更**：新增规则 = minor（v2.1）；改变已有尺寸/Token 对应关系 = major（v3.0），必须给出迁移指引与受影响章节清单。
+3. **灰度**：影响面大的新规则可先在一个插件试点，但必须在本文档标注「试点中（插件名）」，试点通过后去掉标注。
+4. **偏离必须有出口**：任何偏离登记 §13.2，写明原因与收敛条件；没有登记表的偏离视为违规。
+5. **同一提交不混两件事**：规范修订与插件整改分开提交，便于独立回滚。
+
+### 10.8 反模式清单（见到就退回）
+
+| 反模式 | 为什么错 | 正解 |
+| --- | --- | --- |
+| 列表里手写 5 个图标按钮的完整 DOM 与 hover 样式 | 每个列表都复制一遍，改规则要改 N 处 | 声明式 `actions` 数组 + 统一 ActionRow 渲染 |
+| 每个弹窗各写一套遮罩、Esc 监听、`stopPropagation` | Escape 分层与焦点回收必然出错 | 统一 DialogShell / DialogTemplate |
+| 业务代码里拼 `calc(var(--ds-fs) - 1px)` | 字号逻辑散落，无法统一调整 | 用 `.ds-text-sub` 之类 class |
+| 用 `style={{ color }}` 传状态色 | 主题切换失效、无法校验 | 用 `data-tone` + class 映射 Token |
+| 在插件内重写 `.ds-btn` 覆盖宿主规则 | 会连带改变其他插件与后续插件 | 改本文件 §6.1，再同步三插件 |
+| 为「看起来更好」私自调整尺寸/圆角 | 与原生不一致，用户会要求改回 | 先量原生，再决定；确需偏离登记 §13.2 |
+
+### 10.9 阅读与执行顺序
+
+后续 agent 改任何 UI 前，按此顺序读，冲突按 §1.3 裁决：
+
+```text
+design.md（本文件，视觉与交互的唯一源）
+  → plugins/<slug>/CONTRACT.md（运行时契约：slots / routes / locale / payload）
+  → plugins/<slug>/DESIGN.md（业务信息架构；不应有视觉规格）
+  → 现有实现（与本文不一致时，以本文为准并登记 §13.2）
+```
+
+拿到需求后的固定动作：**先量原生 → 再查本文件对应章节 → 再判断是否需要新组件（§6.0）→ 最后写代码**。
 
 ---
 
@@ -1251,7 +1429,9 @@ function SvgIcon({ name, size = 16, className = '' }) {
 
 ---
 
-## 13. 现有插件收敛路线与计划
+## 13. 存量收敛计划与偏离白名单
+
+### 13.1 三个插件现状对照
 
 | 检查维度 | `mcp-manager` | `skill-manager` | `session-stats` | 规范目标 |
 | --- | --- | --- | --- | --- |
@@ -1262,6 +1442,43 @@ function SvgIcon({ name, size = 16, className = '' }) {
 | **Tooltip 外观** | 深底发丝线 | 浅底反色 | 无 | 统一原生深色气泡（--dsw-alias-tooltip-bg） |
 | **弹窗遮罩** | 透明（符合设置页）| 变灰（符合独立页） | — | 独立页变灰，设置页透明 |
 | **内容列宽** | 640px（设置页） | 960px | 1040px | 独立页 960px，设置页 640px |
+
+### 13.2 偏离白名单（已登记）
+
+任何与本文档不一致的实现，都必须在此登记；未登记的偏离视为违规。
+
+| 插件 | 偏离项 | 原因 | 状态 / 收敛条件 |
+| --- | --- | --- | --- |
+| `session-stats` | `--ss-series-1..8` 字面系列色 | 宿主 Token 无法提供 8 种可辨识色，图表必需 | **长期保留**（§3.9 合法例外） |
+| `mcp-manager` | 设置页弹窗宽度 640px | 需与设置面板同宽才能「盖住」上层 | **长期保留**（§6.7 第 4 档） |
+| `mcp-manager` | 弹窗遮罩 `transparent` | 设置页内嵌，变灰会涂黑面板 | **长期保留**（§6.7 场景 B） |
+| `session-stats` | 49 处硬编码字号 | 早期实现 | 待收敛：P1 接入 `--ds-fs` |
+| `session-stats` | 内容列 1040px | 早期实现 | 待收敛：改为 960px |
+| `skill-manager` | 顶部 inset 硬编码 76px | macOS 单一平台实测值 | 待收敛：改 `calc(28px + clearance)` |
+| `mcp-manager` / `skill-manager` | Tooltip 非原生气泡 | 历史实现（深底带边框 / 浅底反色） | 待收敛：改 `--dsw-alias-tooltip-bg` |
+
+> 登记格式：插件 · 偏离项 · 为什么必须偏离 · 何时消除。新增一行即视为「已备案」，优先消除行标 **待收敛**，长期保留行必须有正当理由。
+
+### 13.3 收敛优先级
+
+**P0（挡住新代码分叉，成本最低）**
+
+1. 新插件一律用 `--ds-fs` 与 §4.3 阶梯，禁止硬编码字号。
+2. 新插件按钮 / 图标按钮 / Tab / 弹窗 / Tooltip / 菜单直接复制 §6 实现，不再自创。
+3. 任何新增偏离必须在 §13.2 登记后才允许提交。
+
+**P1（存量对齐，需改代码 + 回归）**
+
+4. `session-stats` 接入字号联动（49 处硬编码）、内容列 1040 → 960、焦点改原生表达。
+5. `mcp-manager` 弹窗宽收敛到 480/488/560/720 档、Tooltip 改原生气泡。
+6. `skill-manager` Tooltip 改原生深色气泡、顶部 inset 改 `calc(28px + clearance)`。
+7. 三插件统一 `--ds-fs` 变量名与 `.ds-*` 类名（保留插件的 `<prefix>-` 专属样式）。
+
+**P2（机制落地，依赖 P1 完成）**
+
+8. 抽 `design/ds.css` 与 `design/icons.mjs`，接入 `scripts/sync-design.mjs`（§10.5）。
+9. `check-plugins.mjs` 接入 §10.6 三条最小校验。
+10. `tools/preview.mjs` 扩展为多插件明暗视觉回归基线。
 
 ---
 
@@ -1288,8 +1505,16 @@ function SvgIcon({ name, size = 16, className = '' }) {
 - [ ] 危险删除操作具备二次确认弹窗，并清晰说明不可逆后果。
 - [ ] 多行文本域配置脏标记保护，防止换行和空行被过滤。
 
-### 阶段四：发布交付前
+### 阶段四：抽象与共享源自查（最易漏）
+- [ ] 业务视图里没有裸 `<button>`、裸全屏遮罩 `<div>`、手写 Esc 栈（§10.3）。
+- [ ] 行内 `style` 只用于 `--ds-fs` 注入、图表坐标/比例、拖拽过程态（§10.4）。
+- [ ] 一旦触碰旧控件，已按 §6 标准实现改写，未继续叠加偏离。
+- [ ] 新增的偏离已登记 §13.2，写清原因与收敛条件。
+- [ ] 未在任何代码里 `import` `design/`（该目录尚未落地，§10.5）。
+
+### 阶段五：发布交付前
 - [ ] 运行 `node --check` 语法检查。
 - [ ] 运行 `pnpm test` 确认插件校验与索引校验全绿。
 - [ ] 检查 `locale/en.json` 与 `locale/zh.json` 键集 100% 对齐。
 - [ ] 在真实 DSH 客户端中与原生插件页并排截屏走查，明暗两套主题均测试无错漏。
+- [ ] 对照 §10.6 三条最小校验人工过一遍（CI 尚未接入，见 §10.5）。
