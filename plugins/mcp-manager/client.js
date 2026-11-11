@@ -41,6 +41,7 @@ window.__ModuleLoader__.load({
     const ICON_TRASH = 'M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16'
     const ICON_CHEVRON = 'M19 9l-7 7-7-7'
     const ICON_X = 'M6 18L18 6M6 6l12 12'
+    const ICON_PLUG = 'M9 7V4m6 3V4M7 7h10v3a5 5 0 01-10 0V7Zm5 8v5'
 
     /** Sample shared JSON; deliberately free of machine-specific paths. */
     const JSON_SAMPLE = {
@@ -356,6 +357,10 @@ window.__ModuleLoader__.load({
     /** Bound translator, assigned by `apply`; used when the slot passes no `t`. */
     let activeT = null
 
+    /** Plugin context and the host theme service, assigned by `apply`. */
+    let pluginCtx = null
+    let themeService = null
+
     /* ------------------------------------------------------------------ *
      * Small helpers.                                                     *
      * ------------------------------------------------------------------ */
@@ -539,29 +544,58 @@ window.__ModuleLoader__.load({
     }
 
     /* ------------------------------------------------------------------ *
-     * 300ms delayed tooltip engine, also available on click.                                     *
+     * Tooltip：全页面单例，300ms，悬停/键盘聚焦触发（§7.7）。            *
      * ------------------------------------------------------------------ */
 
-    const tooltip = { timer: null, target: null, label: '', node: null }
+    const TOOLTIP_DELAY_MS = 300
+    const TOOLTIP_GAP = 8
+    const TOOLTIP_MARGIN = 8
+
+    const tooltip = {
+      timer: null,
+      target: null,
+      label: '',
+      node: null,
+      host: null,
+      root: null,
+      observer: null,
+      suppressFocusUntil: 0,
+    }
+
+    function tooltipFontSize() {
+      const root = tooltip.root
+      if (root !== null && root !== undefined && typeof getComputedStyle === 'function') {
+        const value = getComputedStyle(root).getPropertyValue('--ds-fs').trim()
+        if (value !== '') return value
+      }
+      return '14px'
+    }
+
+    /** 每次显示前同步字号；显示期间由 MutationObserver 继续同步（§3.7）。 */
+    function syncTooltipFontSize() {
+      if (tooltip.host === null || tooltip.host === undefined) return
+      tooltip.host.style.setProperty('--ds-fs', tooltipFontSize())
+    }
 
     function ensureTooltipNode() {
       if (typeof document === 'undefined' || document === null) return null
-      if (tooltip.node !== null && document.body.contains(tooltip.node)) return tooltip.node
+      if (tooltip.host !== null && document.body.contains(tooltip.host)) return tooltip.node
+      const host = document.createElement('div')
+      host.className = 'mm-tooltip-host'
+      host.setAttribute('data-plugin', 'mcp-manager')
       const node = document.createElement('div')
       node.className = 'mm-tooltip'
       node.setAttribute('role', 'tooltip')
-      node.style.left = '0px'
-      node.style.top = '0px'
-      node.style.visibility = 'hidden'
-      // The tooltip lives on <body>, outside the page's --mm-fs scope; copy the current scale
-      // so its size keeps stepping with the Settings font size.
-      const root = document.querySelector('.mm-root')
-      if (root !== null) {
-        const scale = getComputedStyle(root).getPropertyValue('--mm-fs').trim()
-        if (scale !== '') node.style.setProperty('--mm-fs', scale)
-      }
-      document.body.appendChild(node)
+      host.appendChild(node)
+      document.body.appendChild(host)
+      tooltip.host = host
       tooltip.node = node
+      tooltip.root = document.querySelector('.mm-root')
+      if (tooltip.root !== null && typeof MutationObserver === 'function') {
+        tooltip.observer = new MutationObserver(syncTooltipFontSize)
+        tooltip.observer.observe(tooltip.root, { attributes: true, attributeFilter: ['style'] })
+      }
+      syncTooltipFontSize()
       return node
     }
 
@@ -572,10 +606,43 @@ window.__ModuleLoader__.load({
       }
       tooltip.target = null
       tooltip.label = ''
-      if (tooltip.node !== null) {
+      if (tooltip.node !== null && tooltip.node !== undefined) {
         tooltip.node.classList.remove('mm-tooltip-show')
         tooltip.node.style.visibility = 'hidden'
       }
+    }
+
+    function tooltipClamp(value, min, max) {
+      if (max < min) return min
+      if (value < min) return min
+      if (value > max) return max
+      return value
+    }
+
+    function tooltipCandidate(side, anchor, tip, viewWidth, viewHeight) {
+      let left
+      let top
+      if (side === 'top' || side === 'bottom') {
+        left = tooltipClamp(anchor.left + anchor.width / 2 - tip.width / 2, TOOLTIP_MARGIN, viewWidth - tip.width - TOOLTIP_MARGIN)
+        top = side === 'top' ? anchor.top - tip.height - TOOLTIP_GAP : anchor.bottom + TOOLTIP_GAP
+      } else {
+        top = tooltipClamp(anchor.top + anchor.height / 2 - tip.height / 2, TOOLTIP_MARGIN, viewHeight - tip.height - TOOLTIP_MARGIN)
+        left = side === 'right' ? anchor.right + TOOLTIP_GAP : anchor.left - tip.width - TOOLTIP_GAP
+      }
+      return { left: left, top: top }
+    }
+
+    function tooltipFits(candidate, tip, viewWidth, viewHeight) {
+      return candidate.left >= TOOLTIP_MARGIN
+        && candidate.top >= TOOLTIP_MARGIN
+        && candidate.left + tip.width <= viewWidth - TOOLTIP_MARGIN
+        && candidate.top + tip.height <= viewHeight - TOOLTIP_MARGIN
+    }
+
+    function tooltipVisibleArea(candidate, tip, viewWidth, viewHeight) {
+      const width = Math.max(0, Math.min(candidate.left + tip.width, viewWidth) - Math.max(candidate.left, 0))
+      const height = Math.max(0, Math.min(candidate.top + tip.height, viewHeight) - Math.max(candidate.top, 0))
+      return width * height
     }
 
     function placeTooltip() {
@@ -590,23 +657,44 @@ window.__ModuleLoader__.load({
       }
       const node = ensureTooltipNode()
       if (node === null) return
+      syncTooltipFontSize()
       node.textContent = tooltip.label
       node.style.visibility = 'hidden'
       node.classList.add('mm-tooltip-show')
       const rect = target.getBoundingClientRect()
       const tipRect = node.getBoundingClientRect()
       const viewWidth = typeof window !== 'undefined' && window !== null ? window.innerWidth : 0
-      let left = rect.left + rect.width / 2 - tipRect.width / 2
-      let top = rect.top - tipRect.height - 8
-      if (left < 8) left = 8
-      if (viewWidth > 0 && left + tipRect.width > viewWidth - 8) left = viewWidth - tipRect.width - 8
-      if (top < 8) top = rect.bottom + 8
-      node.style.left = Math.round(left) + 'px'
-      node.style.top = Math.round(top) + 'px'
+      const viewHeight = typeof window !== 'undefined' && window !== null ? window.innerHeight : 0
+      if (viewWidth <= 0 || viewHeight <= 0) {
+        node.style.left = Math.round(rect.left + rect.width / 2 - tipRect.width / 2) + 'px'
+        node.style.top = Math.round(rect.top - tipRect.height - TOOLTIP_GAP) + 'px'
+        node.style.visibility = 'visible'
+        return
+      }
+      const sides = ['top', 'bottom', 'right', 'left']
+      let chosen = null
+      for (let index = 0; index < sides.length; index += 1) {
+        const candidate = tooltipCandidate(sides[index], rect, tipRect, viewWidth, viewHeight)
+        if (tooltipFits(candidate, tipRect, viewWidth, viewHeight)) {
+          chosen = candidate
+          break
+        }
+      }
+      if (chosen === null) {
+        let bestArea = -1
+        for (let index = 0; index < sides.length; index += 1) {
+          const candidate = tooltipCandidate(sides[index], rect, tipRect, viewWidth, viewHeight)
+          const area = tooltipVisibleArea(candidate, tipRect, viewWidth, viewHeight)
+          if (area > bestArea) {
+            bestArea = area
+            chosen = candidate
+          }
+        }
+      }
+      node.style.left = Math.round(chosen.left) + 'px'
+      node.style.top = Math.round(chosen.top) + 'px'
       node.style.visibility = 'visible'
     }
-
-    const TOOLTIP_DELAY_MS = 300
 
     function scheduleTooltip(label, target, delay) {
       hideTooltip()
@@ -620,6 +708,7 @@ window.__ModuleLoader__.load({
       }, typeof delay === 'number' ? delay : TOOLTIP_DELAY_MS)
     }
 
+    /** 点击带来的 focus 不重新触发；键盘聚焦仍按 300ms 显示。 */
     function tooltipHandlers(label) {
       const text = textOf(label)
       if (text === '') return {}
@@ -631,11 +720,48 @@ window.__ModuleLoader__.load({
           hideTooltip()
         },
         onMouseDown: () => {
+          tooltip.suppressFocusUntil = Date.now() + 400
+          hideTooltip()
+        },
+        onFocus: (event) => {
+          if (Date.now() < tooltip.suppressFocusUntil) return
+          scheduleTooltip(text, event.currentTarget)
+        },
+        onBlur: () => {
           hideTooltip()
         },
       }
     }
 
+    /** 目标被卸载时 mouseout 不会触发：渲染提交后核对一次。 */
+    function hideTooltipIfTargetGone() {
+      const target = tooltip.target
+      if (target === null || target === undefined) return
+      if (typeof document === 'undefined' || document === null) {
+        hideTooltip()
+        return
+      }
+      if (document.body.contains(target)) return
+      hideTooltip()
+    }
+
+    /** 滚动、视图切换和卸载时的统一清理。 */
+    function TooltipLayer() {
+      useEffect(() => {
+        const onScroll = () => {
+          hideTooltip()
+        }
+        window.addEventListener('scroll', onScroll, true)
+        return () => {
+          window.removeEventListener('scroll', onScroll, true)
+          hideTooltip()
+        }
+      }, [])
+      useEffect(() => {
+        hideTooltipIfTargetGone()
+      })
+      return null
+    }
     /* ------------------------------------------------------------------ *
      * HTTP API.                                                          *
      * ------------------------------------------------------------------ */
@@ -978,11 +1104,12 @@ window.__ModuleLoader__.load({
      * ------------------------------------------------------------------ */
 
     function Svg(props) {
+      const size = props.size === 20 ? 20 : 16
       return h('svg', {
         className: 'mm-icon' + (props.className !== undefined && props.className !== '' ? ' ' + props.className : ''),
         viewBox: '0 0 24 24',
-        width: props.size !== undefined ? props.size : 16,
-        height: props.size !== undefined ? props.size : 16,
+        width: size,
+        height: size,
         fill: 'none',
         stroke: 'currentColor',
         strokeWidth: props.strokeWidth !== undefined ? props.strokeWidth : 1.8,
@@ -993,11 +1120,79 @@ window.__ModuleLoader__.load({
       }, h('path', { d: props.d }))
     }
 
+    const BUTTON_VARIANTS = { primary: true, secondary: true, ghost: true, danger: true }
+    const BUTTON_SIZES = { lg: true, md: true, sm: true }
+
+    function Button(props) {
+      const variant = BUTTON_VARIANTS[props.variant] === true ? props.variant : 'secondary'
+      const size = BUTTON_SIZES[props.size] === true ? props.size : 'lg'
+      const className = 'mm-btn'
+        + (variant !== 'secondary' ? ' mm-btn-' + variant : '')
+        + (size !== 'lg' ? ' mm-btn-' + size : '')
+        + (props.className !== undefined && props.className !== '' ? ' ' + props.className : '')
+      return h(
+        'button',
+        {
+          type: 'button',
+          className: className,
+          disabled: props.disabled === true,
+          'aria-busy': props.loading === true ? 'true' : undefined,
+          onClick: props.onClick,
+          ref: props.buttonRef,
+        },
+        props.icon !== undefined && props.icon !== null ? h(Svg, { d: props.icon, size: 16 }) : null,
+        props.children,
+      )
+    }
+
+    function Tabs(props) {
+      const items = Array.isArray(props.items) ? props.items : []
+      return h(
+        'div',
+        { className: 'mm-tabs', role: 'group' },
+        items.map((item) => h(
+          'button',
+          Object.assign({
+            key: item.value,
+            type: 'button',
+            className: 'mm-tab' + (props.value === item.value ? ' mm-tab-active' : ''),
+            'aria-pressed': props.value === item.value ? 'true' : 'false',
+            onClick: () => {
+              if (typeof props.onChange === 'function') props.onChange(item.value)
+            },
+          }, tooltipHandlers(item.tip)),
+          item.label,
+        )),
+      )
+    }
+
+    function Segmented(props) {
+      const items = Array.isArray(props.items) ? props.items : []
+      return h(
+        'div',
+        { className: 'mm-seg', role: 'group' },
+        items.map((item) => h(
+          'button',
+          Object.assign({
+            key: item.value,
+            type: 'button',
+            className: 'mm-seg-btn mm-seg-btn-' + item.value + (props.value === item.value ? ' mm-seg-btn-active' : ''),
+            'aria-pressed': props.value === item.value ? 'true' : 'false',
+            onClick: () => {
+              if (typeof props.onChange === 'function') props.onChange(item.value)
+            },
+          }, tooltipHandlers(item.tip)),
+          item.label,
+        )),
+      )
+    }
+
     function IconButton(props) {
       const className = 'mm-icon-btn'
         + (props.tone !== undefined && props.tone !== '' ? ' mm-icon-btn-' + props.tone : '')
         + (props.spin === true ? ' mm-icon-btn-spin' : '')
         + (props.className !== undefined && props.className !== '' ? ' ' + props.className : '')
+      const tip = props.tooltip !== undefined && props.tooltip !== null ? props.tooltip : props.label
       return h(
         'button',
         Object.assign({
@@ -1006,20 +1201,20 @@ window.__ModuleLoader__.load({
           disabled: props.disabled === true,
           onClick: props.onClick,
           'aria-label': props.label,
-        }, tooltipHandlers(props.tooltip)),
-        h(Svg, { d: props.icon, size: props.size !== undefined ? props.size : 16, strokeWidth: props.strokeWidth }),
+        }, tooltipHandlers(tip)),
+        h(Svg, { d: props.icon, size: props.size, strokeWidth: props.strokeWidth }),
       )
     }
 
     function HelpDot(props) {
       return h(
-        'span',
+        'button',
         Object.assign({
+          type: 'button',
           className: 'mm-help',
-          role: 'img',
           'aria-label': props.tip,
         }, tooltipHandlers(props.tip)),
-        h(Svg, { d: ICON_HELP, size: 14 }),
+        h(Svg, { d: ICON_HELP, size: 16 }),
       )
     }
 
@@ -1035,6 +1230,9 @@ window.__ModuleLoader__.load({
           props.required === true ? h('span', { className: 'mm-required', title: props.requiredLabel }, '*') : null,
         ),
         props.children,
+        props.error !== undefined && props.error !== null && props.error !== ''
+          ? h('p', { className: 'mm-hint mm-feedback-err' }, props.error)
+          : null,
       )
     }
 
@@ -1049,6 +1247,14 @@ window.__ModuleLoader__.load({
           { key: toast.id, className: 'mm-toast mm-toast-' + toast.kind },
           h('span', { className: 'mm-toast-dot' }),
           h('span', { className: 'mm-toast-text' }, toast.text),
+          h('button', {
+            type: 'button',
+            className: 'mm-toast-close',
+            'aria-label': props.dismissLabel,
+            onClick: () => {
+              if (typeof props.onDismiss === 'function') props.onDismiss(toast.id)
+            },
+          }, h(Svg, { d: ICON_X, size: 16 })),
         )),
       )
     }
@@ -1057,16 +1263,36 @@ window.__ModuleLoader__.load({
       return h(
         'div',
         { className: 'mm-state' },
+        props.icon !== undefined && props.icon !== null ? h(Svg, { d: props.icon, size: 20, className: 'mm-state-icon' }) : null,
         h('p', { className: 'mm-state-title' }, props.title),
         props.hint !== undefined && props.hint !== null && props.hint !== '' ? h('p', { className: 'mm-state-hint' }, props.hint) : null,
         props.actionLabel !== undefined && props.actionLabel !== null
-          ? h('button', { type: 'button', className: 'mm-btn', onClick: props.onAction }, props.actionLabel)
+          ? h(Button, { variant: 'secondary', onClick: props.onAction }, props.actionLabel)
           : null,
       )
     }
 
     /** Open dialogs stack in mount order; only the topmost reacts to Escape / backdrop clicks. */
     const dialogStack = []
+
+    /** Body scroll lock shared by the whole dialog stack. */
+    let bodyScrollLocks = 0
+    let savedBodyOverflow = ''
+
+    function lockBodyScroll() {
+      if (typeof document === 'undefined' || document === null) return
+      if (bodyScrollLocks === 0) {
+        savedBodyOverflow = document.body.style.overflow
+        document.body.style.overflow = 'hidden'
+      }
+      bodyScrollLocks += 1
+    }
+
+    function unlockBodyScroll() {
+      if (typeof document === 'undefined' || document === null) return
+      bodyScrollLocks = Math.max(0, bodyScrollLocks - 1)
+      if (bodyScrollLocks === 0) document.body.style.overflow = savedBodyOverflow
+    }
 
     function focusQuietly(node) {
       if (node === null || node === undefined || typeof node.focus !== 'function') return
@@ -1081,9 +1307,15 @@ window.__ModuleLoader__.load({
       }
     }
 
+    function focusableIn(node) {
+      if (node === null || node === undefined || typeof node.querySelectorAll !== 'function') return []
+      const list = node.querySelectorAll('button:not([disabled]), input:not([disabled]), select:not([disabled]), textarea:not([disabled]), a[href], [tabindex]:not([tabindex="-1"])')
+      return Array.prototype.slice.call(list).filter((item) => item.getAttribute('aria-hidden') !== 'true')
+    }
+
     /**
-     * Fixed-size modal with a transparent backdrop. The body scrolls; the frame never changes
-     * size. Escape, the close icon and a backdrop click all dismiss the topmost dialog.
+     * Fixed-size modal (§7.6). Width comes from the size tier, never from the host panel.
+     * The body is the only scroll region; Escape and the backdrop dismiss the topmost dialog.
      */
     function Dialog(props) {
       const boxRef = useRef(null)
@@ -1094,18 +1326,39 @@ window.__ModuleLoader__.load({
       useEffect(() => {
         const token = stackToken.current
         dialogStack.push(token)
+        lockBodyScroll()
         const onKeyDown = (event) => {
-          if (event.key !== 'Escape') return
           if (dialogStack[dialogStack.length - 1] !== token) return
-          event.preventDefault()
-          event.stopPropagation()
-          hideTooltip()
-          const close = onCloseRef.current
-          if (typeof close === 'function') close()
+          if (event.key === 'Escape') {
+            event.preventDefault()
+            event.stopImmediatePropagation()
+            hideTooltip()
+            const close = onCloseRef.current
+            if (typeof close === 'function') close()
+            return
+          }
+          if (event.key !== 'Tab') return
+          const node = boxRef.current
+          const list = focusableIn(node)
+          if (list.length === 0) {
+            event.preventDefault()
+            return
+          }
+          const first = list[0]
+          const last = list[list.length - 1]
+          const active = document.activeElement
+          if (event.shiftKey && (active === first || node.contains(active) !== true)) {
+            event.preventDefault()
+            focusQuietly(last)
+          } else if (!event.shiftKey && (active === last || node.contains(active) !== true)) {
+            event.preventDefault()
+            focusQuietly(first)
+          }
         }
         document.addEventListener('keydown', onKeyDown, true)
         return () => {
           document.removeEventListener('keydown', onKeyDown, true)
+          unlockBodyScroll()
           hideTooltip()
           const index = dialogStack.indexOf(token)
           if (index !== -1) dialogStack.splice(index, 1)
@@ -1114,33 +1367,16 @@ window.__ModuleLoader__.load({
 
       useEffect(() => {
         const node = boxRef.current
-        if (node !== null && typeof node.querySelector === 'function') {
-          focusQuietly(node.querySelector('input, select, textarea') || node.querySelector('button'))
-        }
+        if (node === null || typeof node.querySelector !== 'function') return undefined
+        const requested = props.initialFocus
+        let next = null
+        if (requested !== null && requested !== undefined && typeof requested === 'object' && requested.current !== undefined) next = requested.current
+        else if (typeof requested === 'string') next = node.querySelector(requested)
+        if (next === null || next === undefined) next = node.querySelector('input, select, textarea') || node.querySelector('button')
+        focusQuietly(next)
         const returnFocus = props.returnFocus
         return () => {
           focusQuietly(returnFocus)
-        }
-      }, [])
-
-      // The prototype dialog covers the layer beneath: size it to the enclosing settings panel.
-      const [hostBox, setHostBox] = useState(null)
-      useLayoutEffect(() => {
-        if (props.size === 'confirm') return undefined
-        const measure = () => {
-          const node = boxRef.current
-          if (node === null || node.parentElement === null) return
-          const host = node.parentElement.closest('[role="dialog"]')
-          if (host === null) return
-          const rect = host.getBoundingClientRect()
-          const width = Math.round(Math.min(rect.width, window.innerWidth - 32))
-          const height = Math.round(Math.min(rect.height, window.innerHeight - 32))
-          if (width > 0 && height > 0) setHostBox({ width: width, height: height })
-        }
-        measure()
-        window.addEventListener('resize', measure)
-        return () => {
-          window.removeEventListener('resize', measure)
         }
       }, [])
 
@@ -1163,10 +1399,9 @@ window.__ModuleLoader__.load({
             role: 'dialog',
             'aria-modal': 'true',
             'aria-label': props.title,
+            tabIndex: -1,
             ref: boxRef,
-            style: hostBox === null
-              ? { boxShadow: 'none' }
-              : { width: hostBox.width + 'px', height: hostBox.height + 'px', maxWidth: 'none', maxHeight: 'none', boxShadow: 'none' },
+            style: { boxShadow: 'none' },
           },
           h(
             'div',
@@ -1195,7 +1430,6 @@ window.__ModuleLoader__.load({
         ),
       )
     }
-
     /* ------------------------------------------------------------------ *
      * Server row.                                                        *
      * ------------------------------------------------------------------ */
@@ -1282,17 +1516,6 @@ window.__ModuleLoader__.load({
               disabled: blocked,
               onClick: () => {
                 if (typeof props.onToggleEnabled === 'function') props.onToggleEnabled(row)
-              },
-            }),
-            h(IconButton, {
-              icon: ICON_REFRESH,
-              label: t('action.test'),
-              tooltip: t('action.test'),
-              tone: testing === true ? 'warn' : '',
-              spin: testing === true,
-              disabled: blocked,
-              onClick: () => {
-                if (typeof props.onTest === 'function') props.onTest(row)
               },
             }),
             h(IconButton, {
@@ -1672,26 +1895,14 @@ window.__ModuleLoader__.load({
         ? t('editor.toolsProbing')
         : probeState.message !== '' ? probeState.message : t('editor.toolsIdle')
 
-      const tabs = h(
-        'div',
-        { className: 'mm-tabs', role: 'group' },
-        h('button', {
-          type: 'button',
-          className: 'mm-tab' + (tab === 'form' ? ' mm-tab-active' : ''),
-          'aria-pressed': tab === 'form' ? 'true' : 'false',
-          onClick: () => switchTab('form'),
-        }, t('editor.tabForm')),
-        h(
-          'button',
-          Object.assign({
-            type: 'button',
-            className: 'mm-tab' + (tab === 'json' ? ' mm-tab-active' : ''),
-            'aria-pressed': tab === 'json' ? 'true' : 'false',
-            onClick: () => switchTab('json'),
-          }, tooltipHandlers(t('action.jsonTip'))),
-          t('editor.tabJson'),
-        ),
-      )
+      const tabs = h(Tabs, {
+        value: tab,
+        onChange: switchTab,
+        items: [
+          { value: 'form', label: t('editor.tabForm') },
+          { value: 'json', label: t('editor.tabJson'), tip: t('action.jsonTip') },
+        ],
+      })
 
       function kvEditor(listKey, label, tip, keyPlaceholder, valuePlaceholder) {
         return h(
@@ -1746,16 +1957,6 @@ window.__ModuleLoader__.load({
       function toolRow(tool) {
         const current = policy[tool.name] !== undefined ? policy[tool.name] : 'default'
         const nameClass = current === 'auto' ? ' mm-tool-name-auto' : current === 'disabled' ? ' mm-tool-name-disabled' : ''
-        const seg = (value, label, tip) => h(
-          'button',
-          Object.assign({
-            type: 'button',
-            className: 'mm-seg-btn mm-seg-btn-' + value + (current === value ? ' mm-seg-btn-active' : ''),
-            'aria-pressed': current === value ? 'true' : 'false',
-            onClick: () => setToolPolicy(tool.name, value),
-          }, tooltipHandlers(tip)),
-          label,
-        )
         return h(
           'div',
           { className: 'mm-tool-row', key: tool.name },
@@ -1765,13 +1966,15 @@ window.__ModuleLoader__.load({
             h('span', { className: 'mm-tool-name' + nameClass }, tool.name),
             tool.description !== '' ? h('span', { className: 'mm-tool-desc' }, tool.description) : null,
           ),
-          h(
-            'div',
-            { className: 'mm-seg' },
-            seg('default', t('tool.default'), t('tool.defaultTip')),
-            seg('auto', t('tool.auto'), t('tool.autoTip')),
-            seg('disabled', t('tool.disabled'), t('tool.disabledTip')),
-          ),
+          h(Segmented, {
+            value: current,
+            onChange: (value) => setToolPolicy(tool.name, value),
+            items: [
+              { value: 'default', label: t('tool.default'), tip: t('tool.defaultTip') },
+              { value: 'auto', label: t('tool.auto'), tip: t('tool.autoTip') },
+              { value: 'disabled', label: t('tool.disabled'), tip: t('tool.disabledTip') },
+            ],
+          }),
         )
       }
 
@@ -2059,8 +2262,8 @@ window.__ModuleLoader__.load({
           h(
             'div',
             { className: 'mm-json-actions' },
-            h('button', { type: 'button', className: 'mm-btn mm-btn-sm', onClick: fillSample }, t('action.pasteSample')),
-            h('button', { type: 'button', className: 'mm-btn mm-btn-sm', onClick: copyJson }, t('action.copyConfig')),
+            h(Button, { size: 'sm', onClick: fillSample }, t('action.pasteSample')),
+            h(Button, { size: 'sm', onClick: copyJson }, t('action.copyConfig')),
           ),
         ),
         h('textarea', {
@@ -2080,9 +2283,8 @@ window.__ModuleLoader__.load({
         h(
           'div',
           { className: 'mm-foot-left' },
-          h('button', {
-            type: 'button',
-            className: 'mm-btn mm-btn-sm mm-test-btn',
+          h(Button, {
+            size: 'sm',
             disabled: testing === true,
             onClick: handleTest,
           }, t('action.test')),
@@ -2093,8 +2295,8 @@ window.__ModuleLoader__.load({
         h(
           'div',
           { className: 'mm-foot-right' },
-          h('button', { type: 'button', className: 'mm-btn mm-btn-ghost', onClick: props.onClose }, t('action.cancel')),
-          h('button', { type: 'button', className: 'mm-btn mm-btn-primary', disabled: saving === true, onClick: handleSave }, t('action.save')),
+          h(Button, { variant: 'ghost', onClick: props.onClose }, t('action.cancel')),
+          h(Button, { variant: 'primary', disabled: saving === true, loading: saving === true, onClick: handleSave }, t('action.save')),
         ),
       )
 
@@ -2121,6 +2323,7 @@ window.__ModuleLoader__.load({
     function DeleteDialog(props) {
       const t = props.t
       const row = props.row
+      const cancelRef = useRef(null)
       const footer = h(
         Fragment,
         null,
@@ -2128,8 +2331,8 @@ window.__ModuleLoader__.load({
         h(
           'div',
           { className: 'mm-foot-right' },
-          h('button', { type: 'button', className: 'mm-btn mm-btn-ghost', onClick: props.onClose }, t('delete.cancel')),
-          h('button', { type: 'button', className: 'mm-btn mm-btn-danger', disabled: props.busy === true, onClick: props.onConfirm }, t('delete.confirm')),
+          h(Button, { variant: 'ghost', buttonRef: cancelRef, onClick: props.onClose }, t('delete.cancel')),
+          h(Button, { variant: 'danger', disabled: props.busy === true, loading: props.busy === true, onClick: props.onConfirm }, t('delete.confirm')),
         ),
       )
       return h(
@@ -2138,6 +2341,7 @@ window.__ModuleLoader__.load({
           title: t('delete.title'),
           size: 'confirm',
           onClose: props.onClose,
+          initialFocus: cancelRef,
           returnFocus: props.returnFocus,
           closeLabel: t('action.close'),
           closeTooltip: t('action.close'),
@@ -2156,6 +2360,53 @@ window.__ModuleLoader__.load({
     /* ------------------------------------------------------------------ *
      * Settings page.                                                     *
      * ------------------------------------------------------------------ */
+
+    /** The user's Settings font size (`ui-theme.fontSize`), clamped to the supported 10–24 range. */
+    function normalizeHostFontSize(value) {
+      const size = typeof value === 'number' && Number.isFinite(value) ? Math.round(value) : 14
+      return Math.min(24, Math.max(10, size))
+    }
+
+    /** Read the live font size from the host theme service; fall back to the Host payload. */
+    function readHostFontSize(fallback) {
+      const theme = themeService
+      if (theme !== null && theme !== undefined && typeof theme.getTheme === 'function') {
+        try {
+          const snapshot = theme.getTheme()
+          if (isObject(snapshot) && isObject(snapshot.fontSizes)) return normalizeHostFontSize(snapshot.fontSizes.text)
+        } catch (error) {
+          /* fall through to the Host-provided value */
+        }
+      }
+      return normalizeHostFontSize(fallback)
+    }
+
+    /** Track `ui-theme` font changes while the page is mounted (§3.1 / §3.2). */
+    function useHostFontSize(fallback) {
+      const [fontSize, setFontSize] = useState(() => readHostFontSize(fallback))
+      useEffect(() => {
+        setFontSize(readHostFontSize(fallback))
+        if (pluginCtx === null || pluginCtx === undefined || typeof pluginCtx.on !== 'function') return undefined
+        const off = pluginCtx.on('theme/change', (snapshot) => {
+          if (isObject(snapshot) && isObject(snapshot.fontSizes)) setFontSize(normalizeHostFontSize(snapshot.fontSizes.text))
+        })
+        return typeof off === 'function' ? off : undefined
+      }, [])
+      return fontSize
+    }
+
+    function SkeletonList(props) {
+      return h(
+        'div',
+        { className: 'mm-list', role: 'status', 'aria-busy': 'true', 'aria-label': props.label },
+        [0, 1, 2].map((index) => h(
+          'div',
+          { key: index, className: 'mm-skeleton-row' },
+          h('span', { className: 'mm-skeleton-line mm-skeleton-name' }),
+          h('span', { className: 'mm-skeleton-line mm-skeleton-summary' }),
+        )),
+      )
+    }
 
     function McpPage(props) {
       const bound = props !== null && props !== undefined && typeof props.t === 'function' ? props.t : activeT
@@ -2185,7 +2436,11 @@ window.__ModuleLoader__.load({
         setToasts((prev) => prev.concat([{ id: id, kind: kind, text: text }]))
         setTimeout(() => {
           setToasts((prev) => prev.filter((toast) => toast.id !== id))
-        }, 2600)
+        }, 3000)
+      }, [])
+
+      const dismissToast = useCallback((id) => {
+        setToasts((prev) => prev.filter((toast) => toast.id !== id))
       }, [])
 
       const load = useCallback(async () => {
@@ -2213,6 +2468,11 @@ window.__ModuleLoader__.load({
           clearInterval(timer)
         }
       }, [load])
+
+      // 视图切换（弹窗打开/关闭）时立即收起残留浮层。
+      useEffect(() => {
+        hideTooltip()
+      }, [editor, deleteTarget])
 
       const rows = isObject(data) && Array.isArray(data.rows) ? data.rows : []
       const warnings = isObject(data) && Array.isArray(data.warnings) ? data.warnings.map((entry) => textOf(entry)).filter((entry) => entry !== '') : []
@@ -2369,9 +2629,8 @@ window.__ModuleLoader__.load({
             onClick: testAll,
           }),
           h(
-            'button',
-            { type: 'button', className: 'mm-btn mm-btn-primary', onClick: () => openEditor('create', null) },
-            h(Svg, { d: ICON_PLUS, size: 15, strokeWidth: 2 }),
+            Button,
+            { variant: 'primary', icon: ICON_PLUS, onClick: () => openEditor('create', null) },
             h('span', null, t('page.add')),
           ),
         ),
@@ -2396,9 +2655,9 @@ window.__ModuleLoader__.load({
       } else if (error !== null && data === null) {
         content = h(StatePanel, { title: t('page.error'), hint: error, actionLabel: t('page.retry'), onAction: load })
       } else if (loading === true && data === null) {
-        content = h('div', { className: 'mm-loading' }, t('page.loading'))
+        content = h(SkeletonList, { label: t('page.loading') })
       } else if (filteredRows.length === 0) {
-        content = h('div', { className: 'mm-empty' }, t('list.empty'))
+        content = h(StatePanel, { icon: ICON_PLUG, title: t('list.empty') })
       } else {
         content = h(
           'div',
@@ -2420,10 +2679,11 @@ window.__ModuleLoader__.load({
         )
       }
 
-      const fontSize = isObject(data) && Number.isFinite(data.fontSize) ? data.fontSize : null
+      const fontSize = useHostFontSize(isObject(data) && Number.isFinite(data.fontSize) ? data.fontSize : 14)
       return h(
         'div',
-        { className: 'mm-root', style: fontSize === null ? undefined : { '--mm-fs': fontSize + 'px' } },
+        { className: 'mm-root', style: { '--ds-fs': fontSize + 'px' } },
+        h(TooltipLayer),
         header,
         warningsBanner,
         errorBanner,
@@ -2450,7 +2710,7 @@ window.__ModuleLoader__.load({
             onConfirm: confirmDelete,
           })
           : null,
-        h(ToastHost, { toasts: toasts }),
+        h(ToastHost, { toasts: toasts, dismissLabel: t('action.close'), onDismiss: dismissToast }),
       )
     }
 
@@ -2460,172 +2720,179 @@ window.__ModuleLoader__.load({
 
     const CSS = [
       '.mm-root,.mm-root *,.mm-root *::before,.mm-root *::after{box-sizing:border-box}',
-      '.mm-root{display:flex;flex-direction:column;width:100%;height:100%;min-height:0;--mm-fs:var(--dsh-content-font-size,14px);color:var(--dsw-alias-label-primary);font-family:var(--dsw-font-family,-apple-system,BlinkMacSystemFont,"PingFang SC","Microsoft YaHei",sans-serif);font-size:calc(var(--mm-fs) - 1px);line-height:20px}',
+      '.mm-root{display:flex;flex-direction:column;width:100%;max-width:640px;height:100%;min-height:0;margin:0 auto;padding:16px 20px 48px;--ds-fs:var(--dsh-content-font-size,14px);color:var(--dsw-alias-label-primary);font-family:var(--dsw-font-family,-apple-system,BlinkMacSystemFont,"PingFang SC","Microsoft YaHei",sans-serif);font-size:var(--ds-fs);line-height:1.5}',
       '.mm-mono{font-family:ui-monospace,SFMono-Regular,Menlo,monospace}',
       '.mm-muted{color:var(--dsw-alias-label-tertiary)}',
       '.mm-icon{display:block;flex:none}',
-      '.mm-head{display:flex;align-items:center;justify-content:space-between;gap:16px;padding-bottom:18px;border-bottom:1px solid var(--dsw-alias-border-l1);flex:none}',
+      '.mm-head{display:flex;align-items:center;justify-content:space-between;gap:16px;padding-bottom:16px;border-bottom:.5px solid var(--dsw-alias-border-l1);flex:none}',
       '.mm-head-left{display:flex;align-items:center;gap:8px;min-width:0}',
-      '.mm-title{margin:0;font-size:calc(var(--mm-fs) + 2px);font-weight:500;letter-spacing:-0.01em}',
-      '.mm-head-actions{display:flex;align-items:center;justify-content:flex-end;gap:10px;flex:1 1 auto;min-width:0}',
+      '.mm-title{margin:0;font-size:calc(var(--ds-fs) + 2px);font-weight:500;line-height:1.35;letter-spacing:-0.01em}',
+      '.mm-head-actions{display:flex;align-items:center;justify-content:flex-end;gap:8px;flex:1 1 auto;min-width:0}',
       '.mm-head-actions>.mm-btn{flex:none}',
-      '.mm-help{display:inline-flex;align-items:center;justify-content:center;color:var(--dsw-alias-label-tertiary);cursor:help;flex:none;transition:color .15s ease}',
+      '.mm-help{display:inline-flex;align-items:center;justify-content:center;padding:0;border:none;background:transparent;color:var(--dsw-alias-label-tertiary);cursor:pointer;flex:none;transition:color .12s ease}',
       '.mm-help:hover{color:var(--dsw-alias-label-primary)}',
       '.mm-search{position:relative;flex:1 1 0;min-width:0;max-width:200px}',
-      '.mm-search-icon{position:absolute;left:10px;top:50%;transform:translateY(-50%);color:var(--dsw-alias-label-tertiary);pointer-events:none}',
-      '.mm-search-input{width:100%;height:36px;padding:0 12px 0 30px;border-radius:9px;border:1px solid transparent;background:var(--dsw-alias-bg-layer-1);color:var(--dsw-alias-label-primary);font-size:calc(var(--mm-fs) - 1px);font-family:inherit;outline:none;transition:border-color .15s ease}',
+      '.mm-search-icon{position:absolute;left:8px;top:50%;transform:translateY(-50%);color:var(--dsw-alias-label-tertiary);pointer-events:none}',
+      '.mm-search-input{width:100%;height:34px;padding:0 12px 0 32px;border-radius:var(--dsw-radius-md);border:.5px solid var(--dsw-alias-border-l4);background:var(--dsw-alias-bg-layer-3);color:var(--dsw-alias-label-primary);font-size:calc(var(--ds-fs) - 1px);font-family:inherit;outline:none;transition:border-color .12s ease}',
       '.mm-search-input::placeholder{color:var(--dsw-alias-label-tertiary)}',
-      '.mm-search-input:focus{border-color:var(--dsw-alias-border-l2)}',
-      '.mm-list{display:flex;flex-direction:column;flex:1 1 auto;min-height:0;overflow-y:auto;padding-right:2px}',
-      '.mm-list::-webkit-scrollbar,.mm-tools-list::-webkit-scrollbar,.mm-dialog-body::-webkit-scrollbar{width:5px;height:5px}',
+      '.mm-search-input:focus{border-color:var(--dsw-alias-state-business-primary)}',
+      '.mm-list{display:flex;flex-direction:column;flex:1 1 auto;min-height:0;overflow-y:auto;padding-right:2px;scrollbar-gutter:stable}',
+      '.mm-list::-webkit-scrollbar,.mm-tools-list::-webkit-scrollbar,.mm-dialog-body::-webkit-scrollbar{width:6px;height:6px}',
       '.mm-list::-webkit-scrollbar-thumb,.mm-tools-list::-webkit-scrollbar-thumb,.mm-dialog-body::-webkit-scrollbar-thumb{background:color-mix(in srgb,var(--dsw-alias-label-tertiary) 45%,transparent);border-radius:9999px}',
-      '.mm-row{padding:16px 0;border-bottom:1px solid var(--dsw-alias-border-l1);display:flex;flex-direction:column;gap:8px}',
+      '.mm-row{padding:16px 0;border-bottom:.5px solid var(--dsw-alias-border-l1);display:flex;flex-direction:column;gap:8px}',
       '.mm-row:last-child{border-bottom:none}',
       '.mm-row-main{display:flex;align-items:center;justify-content:space-between;gap:16px;min-width:0}',
       '.mm-row-left{min-width:0;flex:1 1 auto}',
-      '.mm-row-line1{display:flex;align-items:center;gap:10px;min-width:0}',
+      '.mm-row-line1{display:flex;align-items:center;gap:8px;min-width:0}',
       '.mm-dot{width:8px;height:8px;border-radius:50%;flex:none;background:var(--dsw-alias-label-tertiary);cursor:help}',
       '.mm-dot-ok{background:var(--dsw-alias-state-success-primary)}',
       '.mm-dot-warn{background:var(--dsw-alias-state-warn-primary)}',
       '.mm-dot-err{background:var(--dsw-alias-state-error-primary)}',
       '.mm-dot-muted{background:color-mix(in srgb,var(--dsw-alias-label-tertiary) 55%,transparent)}',
       '.mm-dot-pulse{animation:mm-pulse 1.4s ease-in-out infinite}',
-      '.mm-name{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:calc(var(--mm-fs) + 0.5px);font-weight:500;color:var(--dsw-alias-label-primary);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;min-width:0}',
+      '.mm-name{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:var(--ds-fs);font-weight:500;color:var(--dsw-alias-label-primary);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;min-width:0}',
       '.mm-name-dim{color:var(--dsw-alias-label-tertiary)}',
-      '.mm-chip{display:inline-flex;align-items:center;gap:4px;padding:1px 6px;border-radius:4px;font-size:calc(var(--mm-fs) - 3px);line-height:16px;white-space:nowrap;border:1px solid transparent;flex:none}',
+      '.mm-chip{display:inline-flex;align-items:center;gap:4px;height:20px;padding:0 6px;border-radius:var(--dsw-radius-xs);font-size:calc(var(--ds-fs) - 2px);line-height:19px;white-space:nowrap;border:.5px solid transparent;flex:none}',
       '.mm-chip-mono{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;background:var(--dsw-alias-bg-layer-1);color:var(--dsw-alias-label-secondary);border-color:var(--dsw-alias-border-l1)}',
       '.mm-chip-warn{background:color-mix(in srgb,var(--dsw-alias-state-warn-primary) 12%,transparent);color:var(--dsw-alias-state-warn-primary);border-color:color-mix(in srgb,var(--dsw-alias-state-warn-primary) 28%,transparent)}',
-      '.mm-latency{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:calc(var(--mm-fs) - 2.5px);color:var(--dsw-alias-label-tertiary);white-space:nowrap}',
-      '.mm-tools-btn{display:inline-flex;align-items:center;gap:2px;padding:0;border:none;background:transparent;color:var(--dsw-alias-label-secondary);font-size:calc(var(--mm-fs) - 2.5px);font-family:inherit;cursor:pointer;white-space:nowrap}',
+      '.mm-latency{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:calc(var(--ds-fs) - 2px);color:var(--dsw-alias-label-tertiary);white-space:nowrap}',
+      '.mm-tools-btn{display:inline-flex;align-items:center;gap:2px;padding:0;border:none;background:transparent;color:var(--dsw-alias-label-secondary);font-size:calc(var(--ds-fs) - 2px);font-family:inherit;cursor:pointer;white-space:nowrap}',
       '.mm-tools-btn:hover{color:var(--dsw-alias-label-primary)}',
       '.mm-chevron{transition:transform .18s ease}',
       '.mm-chevron-open{transform:rotate(180deg)}',
-      '.mm-summary{margin-top:4px;padding-left:18px;font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:calc(var(--mm-fs) - 2px);color:var(--dsw-alias-label-tertiary);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}',
+      '.mm-summary{margin-top:4px;padding-left:16px;font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:calc(var(--ds-fs) - 2px);color:var(--dsw-alias-label-tertiary);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}',
       '.mm-actions{display:flex;align-items:center;gap:6px;flex:none}',
-      '.mm-expand{display:flex;flex-wrap:wrap;align-items:center;gap:6px;padding-left:18px;padding-top:2px}',
-      '.mm-tool-badge{padding:2px 8px;border-radius:4px;font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:calc(var(--mm-fs) - 3px);line-height:16px;background:var(--dsw-alias-bg-layer-1);color:var(--dsw-alias-label-secondary);border:1px solid transparent;cursor:default}',
+      '.mm-expand{display:flex;flex-wrap:wrap;align-items:center;gap:6px;padding-left:16px;padding-top:2px}',
+      '.mm-tool-badge{display:inline-flex;align-items:center;height:20px;padding:0 6px;border-radius:var(--dsw-radius-xs);font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:calc(var(--ds-fs) - 2px);line-height:19px;background:var(--dsw-alias-bg-layer-1);color:var(--dsw-alias-label-secondary);border:.5px solid transparent;cursor:default}',
       '.mm-tool-badge-auto{background:color-mix(in srgb,var(--dsw-alias-state-success-primary) 12%,transparent);color:var(--dsw-alias-state-success-primary);border-color:color-mix(in srgb,var(--dsw-alias-state-success-primary) 25%,transparent)}',
-      '.mm-tool-badge-disabled{background:color-mix(in srgb,var(--dsw-alias-state-error-primary) 10%,transparent);color:var(--dsw-alias-state-error-primary);border-color:color-mix(in srgb,var(--dsw-alias-state-error-primary) 25%,transparent);text-decoration:line-through}',
-      '.mm-icon-btn{width:32px;height:32px;padding:0;border-radius:8px;border:1px solid transparent;background:transparent;color:var(--dsw-alias-label-secondary);display:inline-flex;align-items:center;justify-content:center;cursor:pointer;transition:background .15s ease,color .15s ease,border-color .15s ease}',
-      '.mm-icon-btn:hover{background:var(--dsw-alias-interactive-bg-hover);color:var(--dsw-alias-label-primary)}',
+      '.mm-tool-badge-disabled{background:color-mix(in srgb,var(--dsw-alias-state-error-primary) 12%,transparent);color:var(--dsw-alias-state-error-primary);border-color:color-mix(in srgb,var(--dsw-alias-state-error-primary) 25%,transparent);text-decoration:line-through}',
+      '.mm-icon-btn{width:32px;height:32px;padding:0;border-radius:var(--dsw-radius-sm);border:.5px solid transparent;background:transparent;color:var(--dsw-alias-label-tertiary);display:inline-flex;align-items:center;justify-content:center;cursor:pointer;transition:background .12s ease,color .12s ease,border-color .12s ease}',
+      '.mm-icon-btn:hover{background:var(--dsw-alias-bg-layer-1);color:var(--dsw-alias-label-primary)}',
       '.mm-icon-btn:disabled{opacity:.4;cursor:default}',
       '.mm-icon-btn-ok{background:color-mix(in srgb,var(--dsw-alias-state-success-primary) 12%,transparent);border-color:color-mix(in srgb,var(--dsw-alias-state-success-primary) 30%,transparent);color:var(--dsw-alias-state-success-primary)}',
       '.mm-icon-btn-ok:hover{background:color-mix(in srgb,var(--dsw-alias-state-success-primary) 20%,transparent);color:var(--dsw-alias-state-success-primary)}',
       '.mm-icon-btn-warn{color:var(--dsw-alias-state-warn-primary)}',
       '.mm-icon-btn-danger:hover{background:color-mix(in srgb,var(--dsw-alias-state-error-primary) 15%,transparent);border-color:color-mix(in srgb,var(--dsw-alias-state-error-primary) 30%,transparent);color:var(--dsw-alias-state-error-primary)}',
       '.mm-icon-btn-spin .mm-icon{animation:mm-spin .8s linear infinite}',
-      '.mm-toolbar-btn{width:36px;height:36px;flex:none;border-radius:9px;border:1px solid var(--dsw-alias-border-l2);background:var(--dsw-alias-bg-layer-1);color:var(--dsw-alias-label-primary)}',
+      '.mm-toolbar-btn{width:32px;height:32px;flex:none;border-radius:var(--dsw-radius-sm);border:.5px solid var(--dsw-alias-border-l2);background:var(--dsw-alias-bg-layer-1);color:var(--dsw-alias-label-primary)}',
       '.mm-toolbar-btn:hover{background:var(--dsw-alias-interactive-bg-hover);color:var(--dsw-alias-label-primary)}',
-      '.mm-btn{display:inline-flex;align-items:center;justify-content:center;gap:6px;height:36px;padding:0 14px;border-radius:9px;border:1px solid var(--dsw-alias-border-l2);background:var(--dsw-alias-bg-layer-1);color:var(--dsw-alias-label-primary);font-size:calc(var(--mm-fs) - 1px);font-weight:500;font-family:inherit;cursor:pointer;transition:background .15s ease,border-color .15s ease}',
+      '.mm-btn{display:inline-flex;align-items:center;justify-content:center;gap:6px;height:36px;padding:0 14px;border-radius:var(--dsw-radius-md);border:.5px solid var(--dsw-alias-border-l2);background:var(--dsw-alias-bg-layer-1);color:var(--dsw-alias-label-primary);font-size:var(--ds-fs);font-weight:500;font-family:inherit;cursor:pointer;transition:background .12s ease,border-color .12s ease}',
       '.mm-btn:hover{background:var(--dsw-alias-interactive-bg-hover)}',
-      '.mm-btn:disabled{opacity:.5;cursor:default}',
-      '.mm-btn-primary{background:var(--dsw-alias-label-primary);border-color:var(--dsw-alias-label-primary);color:var(--dsw-alias-bg-base)}',
-      '.mm-btn-primary:hover{background:color-mix(in srgb,var(--dsw-alias-label-primary) 86%,transparent)}',
-      '.mm-btn-danger{background:var(--dsw-alias-state-error-primary);border-color:var(--dsw-alias-state-error-primary);color:var(--dsw-alias-label-primary)}',
+      '.mm-btn:disabled{opacity:.4;cursor:not-allowed}',
+      '.mm-btn-primary{background:var(--dsw-alias-button-primary-fill);border-color:var(--dsw-alias-button-primary-fill);color:var(--dsw-alias-label-primary-foreground)}',
+      '.mm-btn-primary:hover{background:var(--dsw-alias-button-primary-hover);border-color:var(--dsw-alias-button-primary-hover)}',
+      '.mm-btn-danger{background:var(--dsw-alias-state-error-primary);border-color:var(--dsw-alias-state-error-primary);color:var(--dsw-alias-label-primary-foreground)}',
       '.mm-btn-danger:hover{background:color-mix(in srgb,var(--dsw-alias-state-error-primary) 85%,transparent)}',
       '.mm-btn-ghost{background:transparent;border-color:transparent;color:var(--dsw-alias-label-secondary)}',
       '.mm-btn-ghost:hover{background:var(--dsw-alias-interactive-bg-hover);color:var(--dsw-alias-label-primary)}',
-      '.mm-btn-sm{height:28px;padding:0 10px;font-size:calc(var(--mm-fs) - 2px)}',
-      '.mm-empty{padding:48px 0;text-align:center;font-size:calc(var(--mm-fs) - 1px);color:var(--dsw-alias-label-tertiary)}',
-      '.mm-loading{padding:32px 0;text-align:center;font-size:calc(var(--mm-fs) - 1px);color:var(--dsw-alias-label-tertiary)}',
-      '.mm-warn-banner{margin-top:12px;padding:8px 12px;border-radius:8px;border:1px solid color-mix(in srgb,var(--dsw-alias-state-warn-primary) 35%,transparent);background:color-mix(in srgb,var(--dsw-alias-state-warn-primary) 10%,transparent);color:var(--dsw-alias-state-warn-primary);font-size:calc(var(--mm-fs) - 2px);line-height:18px;display:flex;gap:8px;flex-wrap:wrap}',
+      '.mm-btn-sm{height:28px;padding:0 10px;border-radius:var(--dsw-radius-sm);font-size:calc(var(--ds-fs) - 2px)}',
+      '.mm-btn-md{height:32px;padding:0 12px;border-radius:var(--dsw-radius-md);font-size:calc(var(--ds-fs) - 1px)}',
+      '.mm-empty{padding:48px 0;text-align:center;font-size:var(--ds-fs);color:var(--dsw-alias-label-tertiary)}',
+      '.mm-loading{padding:32px 0;text-align:center;font-size:var(--ds-fs);color:var(--dsw-alias-label-tertiary)}',
+      '.mm-skeleton-row{padding:16px 0;border-bottom:.5px solid var(--dsw-alias-border-l1);display:flex;flex-direction:column;gap:8px}',
+      '.mm-skeleton-line{display:block;height:12px;border-radius:var(--dsw-radius-xs);background:color-mix(in srgb,var(--dsw-alias-label-tertiary) 14%,transparent);animation:mm-pulse 1.4s ease-in-out infinite}',
+      '.mm-skeleton-name{width:40%}',
+      '.mm-skeleton-summary{width:65%;height:10px}',
+      '.mm-warn-banner{margin-top:12px;padding:8px 12px;border-radius:var(--dsw-radius-sm);border:.5px solid color-mix(in srgb,var(--dsw-alias-state-warn-primary) 35%,transparent);background:color-mix(in srgb,var(--dsw-alias-state-warn-primary) 12%,transparent);color:var(--dsw-alias-state-warn-primary);font-size:calc(var(--ds-fs) - 2px);line-height:18px;display:flex;gap:8px;flex-wrap:wrap}',
       '.mm-warn-label{font-weight:600}',
-      '.mm-error-banner{margin-top:12px;padding:8px 12px;border-radius:8px;border:1px solid color-mix(in srgb,var(--dsw-alias-state-error-primary) 35%,transparent);background:color-mix(in srgb,var(--dsw-alias-state-error-primary) 10%,transparent);color:var(--dsw-alias-state-error-primary);font-size:calc(var(--mm-fs) - 2px);line-height:18px}',
-      '.mm-state{padding:40px 20px;display:flex;flex-direction:column;align-items:center;gap:10px;text-align:center}',
-      '.mm-state-title{margin:0;font-size:calc(var(--mm-fs) - 1px);color:var(--dsw-alias-label-secondary)}',
-      '.mm-state-hint{margin:0;font-size:calc(var(--mm-fs) - 2px);color:var(--dsw-alias-label-tertiary)}',
+      '.mm-error-banner{margin-top:12px;padding:8px 12px;border-radius:var(--dsw-radius-sm);border:.5px solid color-mix(in srgb,var(--dsw-alias-state-error-primary) 35%,transparent);background:color-mix(in srgb,var(--dsw-alias-state-error-primary) 12%,transparent);color:var(--dsw-alias-state-error-primary);font-size:calc(var(--ds-fs) - 2px);line-height:18px}',
+      '.mm-state{padding:40px 20px;display:flex;flex-direction:column;align-items:center;gap:8px;text-align:center}',
+      '.mm-state-title{margin:0;font-size:var(--ds-fs);color:var(--dsw-alias-label-secondary)}',
+      '.mm-state-hint{margin:0;font-size:calc(var(--ds-fs) - 2px);color:var(--dsw-alias-label-tertiary)}',
+      '.mm-state-icon{color:var(--dsw-alias-label-tertiary)}',
       '.mm-backdrop{position:fixed;inset:0;z-index:1200;display:flex;align-items:center;justify-content:center;padding:16px;background:transparent}',
-      '.mm-dialog{width:100%;max-width:640px;max-height:88vh;display:flex;flex-direction:column;font-size:var(--mm-fs);background:var(--dsw-static-neutral-bluish-850,var(--dsw-alias-bg-layer-1));border:1px solid var(--dsw-alias-border-l2);border-radius:16px;box-shadow:none;overflow:hidden}',
-      '.mm-dialog-confirm{max-width:360px;max-height:none;border-radius:14px}',
-      '.mm-dialog-head{display:flex;align-items:center;justify-content:space-between;gap:12px;padding:16px 24px;border-bottom:1px solid var(--dsw-alias-border-l1);flex:none}',
-      '.mm-dialog-title{margin:0;font-size:calc(var(--mm-fs) + 1px);font-weight:600}',
-      '.mm-dialog-head-actions{display:flex;align-items:center;gap:10px}',
+      '.mm-dialog{width:100%;max-width:min(640px,calc(100vw - 32px));max-height:calc(100vh - 96px);display:flex;flex-direction:column;font-size:var(--ds-fs);background:var(--dsw-static-neutral-bluish-850,var(--dsw-alias-bg-layer-1));border:.5px solid var(--dsw-alias-border-l2);border-radius:var(--dsw-radius-lg);box-shadow:none;overflow:hidden}',
+      '.mm-dialog-confirm{max-width:min(480px,calc(100vw - 32px));max-height:calc(100vh - 96px);border-radius:var(--dsw-radius-xl)}',
+      '.mm-dialog-head{display:flex;align-items:center;justify-content:space-between;gap:12px;padding:16px 24px;border-bottom:.5px solid var(--dsw-alias-border-l1);flex:none}',
+      '.mm-dialog-title{margin:0;font-size:calc(var(--ds-fs) + 1px);line-height:1.35;font-weight:600}',
+      '.mm-dialog-head-actions{display:flex;align-items:center;gap:8px}',
       '.mm-dialog-body{padding:20px 24px;overflow-y:auto;flex:1 1 auto;min-height:0}',
-      '.mm-dialog-foot{display:flex;align-items:center;justify-content:space-between;gap:12px;padding:14px 24px;border-top:1px solid var(--dsw-alias-border-l1);flex:none}',
+      '.mm-dialog-foot{display:flex;align-items:center;justify-content:space-between;gap:12px;padding:12px 24px;border-top:.5px solid var(--dsw-alias-border-l1);flex:none}',
       '.mm-foot-left{display:flex;align-items:center;gap:8px;min-width:0;flex:1 1 auto}',
       '.mm-foot-right{display:flex;align-items:center;gap:8px;flex:none}',
-      '.mm-tabs{display:inline-flex;padding:2px;border-radius:8px;background:var(--dsw-alias-bg-layer-2);border:1px solid var(--dsw-alias-border-l1)}',
-      '.mm-tab{height:24px;padding:0 12px;border-radius:6px;border:none;background:transparent;color:var(--dsw-alias-label-secondary);font-size:calc(var(--mm-fs) - 2px);font-weight:500;font-family:inherit;cursor:pointer}',
-      '.mm-tab-active{background:var(--dsw-alias-bg-layer-1);color:var(--dsw-alias-label-primary)}',
+      '.mm-tabs{display:inline-flex;padding:4px;border-radius:var(--dsw-radius-lg);background:var(--dsw-alias-bg-module-platform)}',
+      '.mm-tab{height:34px;padding:0 12px;border-radius:var(--dsw-radius-md);border:.5px solid transparent;background:transparent;color:var(--dsw-alias-label-tertiary);font-size:var(--ds-fs);font-weight:500;font-family:inherit;cursor:pointer;transition:background .12s ease,color .12s ease}',
+      '.mm-tab-active{background:var(--dsw-alias-bg-layer-3);border-color:var(--dsw-alias-border-l3);color:var(--dsw-alias-label-primary);font-weight:600}',
       '.mm-form{display:flex;flex-direction:column;gap:16px}',
       '.mm-grid-name{display:grid;grid-template-columns:minmax(0,2fr) minmax(0,1fr);gap:12px}',
       '.mm-field{display:flex;flex-direction:column;gap:6px;min-width:0}',
-      '.mm-field-label{display:flex;align-items:center;gap:6px;font-size:var(--mm-fs);color:var(--dsw-alias-label-secondary);line-height:20px}',
-      '.mm-field-sm .mm-field-label{font-size:calc(var(--mm-fs) - 2px)}',
-      '.mm-required{color:var(--dsw-alias-state-error-primary);font-size:calc(var(--mm-fs) - 2px);cursor:help}',
-      '.mm-input{width:100%;height:36px;padding:0 12px;border-radius:8px;border:1px solid var(--dsw-alias-border-l1);background:var(--dsw-alias-bg-layer-2);color:var(--dsw-alias-label-primary);font-size:var(--mm-fs);font-family:inherit;outline:none;transition:border-color .15s ease}',
+      '.mm-field-label{display:flex;align-items:center;gap:6px;font-size:var(--ds-fs);color:var(--dsw-alias-label-secondary);line-height:20px}',
+      '.mm-field-sm .mm-field-label{font-size:calc(var(--ds-fs) - 1px)}',
+      '.mm-required{color:var(--dsw-alias-state-error-primary);font-size:calc(var(--ds-fs) - 2px);cursor:help}',
+      '.mm-input{width:100%;height:34px;padding:0 12px;border-radius:var(--dsw-radius-md);border:.5px solid var(--dsw-alias-border-l4);background:var(--dsw-alias-bg-layer-3);color:var(--dsw-alias-label-primary);font-size:calc(var(--ds-fs) - 1px);font-family:inherit;outline:none;transition:border-color .12s ease}',
       '.mm-input::placeholder{color:var(--dsw-alias-label-tertiary)}',
-      '.mm-input:focus{border-color:var(--dsw-alias-border-l2)}',
+      '.mm-input:focus{border-color:var(--dsw-alias-state-business-primary)}',
       '.mm-input.mm-mono,.mm-select.mm-mono{font-family:ui-monospace,SFMono-Regular,Menlo,monospace}',
-      '.mm-field-sm .mm-input{height:32px;font-size:calc(var(--mm-fs) - 2px);padding:0 10px}',
+      '.mm-field-sm .mm-input{height:34px;font-size:calc(var(--ds-fs) - 1px);padding:0 10px}',
       '.mm-select{cursor:pointer;padding-right:8px}',
-      '.mm-textarea{height:auto;min-height:64px;padding:9px 12px;line-height:1.6;resize:vertical}',
+      '.mm-textarea{height:auto;min-height:88px;padding:8px 12px;line-height:1.6;resize:vertical}',
       '.mm-label-row{display:flex;align-items:center;justify-content:space-between;gap:8px;margin-bottom:6px}',
-      '.mm-link-btn{padding:0;border:none;background:transparent;color:var(--dsw-alias-label-secondary);font-size:calc(var(--mm-fs) - 2.5px);font-family:inherit;cursor:pointer;white-space:nowrap}',
+      '.mm-link-btn{padding:0;border:none;background:transparent;color:var(--dsw-alias-label-secondary);font-size:calc(var(--ds-fs) - 2px);font-family:inherit;cursor:pointer;white-space:nowrap}',
       '.mm-link-btn:hover{color:var(--dsw-alias-label-primary)}',
       '.mm-kv{display:flex;flex-direction:column;gap:8px}',
       '.mm-kv-row{display:flex;align-items:center;gap:8px}',
-      '.mm-kv-row .mm-input{width:auto;height:32px;font-size:calc(var(--mm-fs) - 2px);padding:0 10px}',
+      '.mm-kv-row .mm-input{width:auto;height:34px;font-size:calc(var(--ds-fs) - 1px);padding:0 10px}',
       '.mm-kv-key{flex:0 0 40%}',
       '.mm-kv-val{flex:1 1 auto}',
-      '.mm-kv-del{width:28px;height:32px;border:none;background:transparent;color:var(--dsw-alias-label-tertiary);cursor:pointer;display:inline-flex;align-items:center;justify-content:center;border-radius:6px;flex:none}',
+      '.mm-kv-del{width:32px;height:32px;border:none;background:transparent;color:var(--dsw-alias-label-tertiary);cursor:pointer;display:inline-flex;align-items:center;justify-content:center;border-radius:var(--dsw-radius-sm);flex:none}',
       '.mm-kv-del:hover{color:var(--dsw-alias-state-error-primary);background:color-mix(in srgb,var(--dsw-alias-state-error-primary) 12%,transparent)}',
-      '.mm-hint{margin:0;font-size:calc(var(--mm-fs) - 2px);line-height:18px;color:var(--dsw-alias-label-tertiary)}',
+      '.mm-hint{margin:0;font-size:calc(var(--ds-fs) - 2px);line-height:18px;color:var(--dsw-alias-label-tertiary)}',
       '.mm-hint-warn{color:var(--dsw-alias-state-warn-primary)}',
-      '.mm-adv{border-top:1px solid var(--dsw-alias-border-l1);padding-top:8px}',
-      '.mm-adv-toggle{width:100%;display:flex;align-items:center;justify-content:space-between;gap:8px;padding:6px 0;border:none;background:transparent;color:var(--dsw-alias-label-secondary);font-size:calc(var(--mm-fs) - 1px);font-family:inherit;cursor:pointer}',
+      '.mm-adv{border-top:.5px solid var(--dsw-alias-border-l1);padding-top:8px}',
+      '.mm-adv-toggle{width:100%;display:flex;align-items:center;justify-content:space-between;gap:8px;padding:6px 0;border:none;background:transparent;color:var(--dsw-alias-label-secondary);font-size:calc(var(--ds-fs) - 1px);font-family:inherit;cursor:pointer}',
       '.mm-adv-toggle:hover{color:var(--dsw-alias-label-primary)}',
       '.mm-adv-title{display:flex;align-items:center;gap:8px;font-weight:500;color:var(--dsw-alias-label-primary)}',
-      '.mm-badge{padding:1px 6px;border-radius:4px;font-size:calc(var(--mm-fs) - 3px);line-height:16px;font-weight:400;background:var(--dsw-alias-bg-layer-1);color:var(--dsw-alias-label-secondary);border:1px solid var(--dsw-alias-border-l2)}',
-      '.mm-adv-panel{padding-top:14px;display:flex;flex-direction:column;gap:16px}',
+      '.mm-badge{display:inline-flex;align-items:center;height:20px;padding:0 6px;border-radius:var(--dsw-radius-xs);font-size:calc(var(--ds-fs) - 2px);line-height:19px;font-weight:400;background:var(--dsw-alias-bg-layer-1);color:var(--dsw-alias-label-secondary);border:.5px solid var(--dsw-alias-border-l2)}',
+      '.mm-adv-panel{padding-top:12px;display:flex;flex-direction:column;gap:16px}',
       '.mm-adv-grid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:12px}',
       '.mm-adv-grid-2{grid-template-columns:repeat(2,minmax(0,1fr))}',
-      '.mm-tools-panel{border:1px solid var(--dsw-alias-border-l1);border-radius:10px;background:var(--dsw-alias-bg-layer-2);overflow:hidden}',
-      '.mm-tools-head{display:flex;align-items:center;justify-content:space-between;gap:8px;padding:10px 14px;border-bottom:1px solid var(--dsw-alias-border-l1);background:var(--dsw-alias-bg-layer-1);flex-wrap:wrap}',
-      '.mm-tools-title{display:flex;align-items:center;gap:8px;font-size:calc(var(--mm-fs) - 1.5px);font-weight:500;color:var(--dsw-alias-label-secondary);min-width:0;flex-wrap:wrap}',
-      '.mm-tools-status{font-size:calc(var(--mm-fs) - 3px);padding:1px 8px;border-radius:9999px;border:1px solid var(--dsw-alias-border-l1);color:var(--dsw-alias-label-tertiary);white-space:nowrap}',
+      '.mm-tools-panel{border:.5px solid var(--dsw-alias-border-l1);border-radius:var(--dsw-radius-md);background:var(--dsw-alias-bg-layer-2);overflow:hidden}',
+      '.mm-tools-head{display:flex;align-items:center;justify-content:space-between;gap:8px;padding:12px 16px;border-bottom:.5px solid var(--dsw-alias-border-l1);background:var(--dsw-alias-bg-layer-1);flex-wrap:wrap}',
+      '.mm-tools-title{display:flex;align-items:center;gap:8px;font-size:calc(var(--ds-fs) - 1px);font-weight:500;color:var(--dsw-alias-label-secondary);min-width:0;flex-wrap:wrap}',
+      '.mm-tools-status{display:inline-flex;align-items:center;height:20px;padding:0 8px;border-radius:9999px;border:.5px solid var(--dsw-alias-border-l1);font-size:calc(var(--ds-fs) - 2px);line-height:19px;color:var(--dsw-alias-label-tertiary);white-space:nowrap}',
       '.mm-tools-status-ok{background:color-mix(in srgb,var(--dsw-alias-state-success-primary) 12%,transparent);border-color:color-mix(in srgb,var(--dsw-alias-state-success-primary) 28%,transparent);color:var(--dsw-alias-state-success-primary)}',
       '.mm-tools-status-warn{background:color-mix(in srgb,var(--dsw-alias-state-warn-primary) 12%,transparent);border-color:color-mix(in srgb,var(--dsw-alias-state-warn-primary) 28%,transparent);color:var(--dsw-alias-state-warn-primary)}',
       '.mm-tools-status-err{background:color-mix(in srgb,var(--dsw-alias-state-error-primary) 12%,transparent);border-color:color-mix(in srgb,var(--dsw-alias-state-error-primary) 28%,transparent);color:var(--dsw-alias-state-error-primary)}',
-      '.mm-tools-toolbar{display:flex;align-items:center;justify-content:space-between;gap:8px;padding:8px 14px;border-bottom:1px solid var(--dsw-alias-border-l1);font-size:calc(var(--mm-fs) - 2.5px);color:var(--dsw-alias-label-secondary);flex-wrap:wrap}',
-      '.mm-tools-filter{height:26px;padding:0 8px;width:180px;border-radius:6px;border:1px solid var(--dsw-alias-border-l1);background:var(--dsw-alias-bg-base);color:var(--dsw-alias-label-primary);font-size:calc(var(--mm-fs) - 2.5px);font-family:inherit;outline:none}',
+      '.mm-tools-toolbar{display:flex;align-items:center;justify-content:space-between;gap:8px;padding:8px 12px;border-bottom:.5px solid var(--dsw-alias-border-l1);font-size:calc(var(--ds-fs) - 2px);color:var(--dsw-alias-label-secondary);flex-wrap:wrap}',
+      '.mm-tools-filter{height:34px;padding:0 12px;width:180px;border-radius:var(--dsw-radius-md);border:.5px solid var(--dsw-alias-border-l4);background:var(--dsw-alias-bg-layer-3);color:var(--dsw-alias-label-primary);font-size:calc(var(--ds-fs) - 1px);font-family:inherit;outline:none}',
       '.mm-tools-filter::placeholder{color:var(--dsw-alias-label-tertiary)}',
-      '.mm-tools-filter:focus{border-color:var(--dsw-alias-border-l2)}',
+      '.mm-tools-filter:focus{border-color:var(--dsw-alias-state-business-primary)}',
       '.mm-tools-batch{display:flex;align-items:center;gap:8px;flex-wrap:wrap}',
-      '.mm-divider{width:1px;height:12px;background:var(--dsw-alias-border-l1);flex:none}',
+      '.mm-divider{width:.5px;height:12px;background:var(--dsw-alias-border-l1);flex:none}',
       '.mm-tools-list{max-height:210px;overflow-y:auto}',
-      '.mm-tool-row{display:flex;align-items:center;justify-content:space-between;gap:12px;padding:10px 14px;border-bottom:1px solid var(--dsw-alias-border-l1)}',
+      '.mm-tool-row{display:flex;align-items:center;justify-content:space-between;gap:12px;padding:12px 16px;border-bottom:.5px solid var(--dsw-alias-border-l1)}',
       '.mm-tool-row:last-child{border-bottom:none}',
       '.mm-tool-row:hover{background:var(--dsw-alias-interactive-bg-hover)}',
       '.mm-tool-info{min-width:0;flex:1 1 auto;display:flex;align-items:baseline;gap:8px;overflow:hidden}',
-      '.mm-tool-name{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:calc(var(--mm-fs) - 1.5px);font-weight:500;color:var(--dsw-alias-label-primary);white-space:nowrap}',
+      '.mm-tool-name{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:var(--ds-fs);font-weight:500;color:var(--dsw-alias-label-primary);white-space:nowrap}',
       '.mm-tool-name-auto{color:var(--dsw-alias-state-success-primary)}',
       '.mm-tool-name-disabled{color:var(--dsw-alias-label-tertiary);text-decoration:line-through}',
-      '.mm-tool-desc{font-size:calc(var(--mm-fs) - 2px);color:var(--dsw-alias-label-secondary);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;min-width:0}',
-      '.mm-tools-empty{padding:28px 14px;text-align:center;font-size:calc(var(--mm-fs) - 2px);color:var(--dsw-alias-label-tertiary)}',
-      '.mm-seg{display:inline-flex;padding:2px;border-radius:7px;background:var(--dsw-alias-bg-base);border:1px solid var(--dsw-alias-border-l1);flex:none}',
-      '.mm-seg-btn{height:22px;padding:0 8px;border-radius:5px;border:1px solid transparent;background:transparent;color:var(--dsw-alias-label-tertiary);font-size:calc(var(--mm-fs) - 3px);font-family:inherit;cursor:pointer;white-space:nowrap}',
-      '.mm-seg-btn:hover{color:var(--dsw-alias-label-primary)}',
-      '.mm-seg-btn-active{background:var(--dsw-alias-bg-layer-1);color:var(--dsw-alias-label-primary);font-weight:500}',
+      '.mm-tool-desc{font-size:calc(var(--ds-fs) - 2px);color:var(--dsw-alias-label-secondary);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;min-width:0}',
+      '.mm-tools-empty{padding:24px 12px;text-align:center;font-size:calc(var(--ds-fs) - 2px);color:var(--dsw-alias-label-tertiary)}',
+      '.mm-seg{display:inline-flex;gap:2px;flex:none}',
+      '.mm-seg-btn{height:28px;padding:0 10px;border-radius:9999px;border:none;background:transparent;color:var(--dsw-alias-label-tertiary);font-size:calc(var(--ds-fs) - 2px);font-family:inherit;cursor:pointer;white-space:nowrap;transition:background .12s ease,color .12s ease}',
+      '.mm-seg-btn:hover{background:var(--dsw-alias-interactive-bg-hover);color:var(--dsw-alias-label-primary)}',
+      '.mm-seg-btn-active{background:var(--dsw-alias-interactive-bg-hover);color:var(--dsw-alias-label-primary);font-weight:500}',
       '.mm-seg-btn-auto.mm-seg-btn-active{background:color-mix(in srgb,var(--dsw-alias-state-success-primary) 20%,transparent);border-color:color-mix(in srgb,var(--dsw-alias-state-success-primary) 35%,transparent);color:var(--dsw-alias-state-success-primary)}',
       '.mm-seg-btn-disabled.mm-seg-btn-active{background:color-mix(in srgb,var(--dsw-alias-state-error-primary) 20%,transparent);border-color:color-mix(in srgb,var(--dsw-alias-state-error-primary) 35%,transparent);color:var(--dsw-alias-state-error-primary)}',
       '.mm-json{display:flex;flex-direction:column;gap:12px}',
-      '.mm-json-toolbar{display:flex;align-items:center;justify-content:space-between;gap:8px;font-size:calc(var(--mm-fs) - 2px);color:var(--dsw-alias-label-secondary);flex-wrap:wrap}',
+      '.mm-json-toolbar{display:flex;align-items:center;justify-content:space-between;gap:8px;font-size:calc(var(--ds-fs) - 2px);color:var(--dsw-alias-label-secondary);flex-wrap:wrap}',
       '.mm-json-actions{display:flex;align-items:center;gap:8px;flex-wrap:wrap}',
       '.mm-json-area{min-height:320px}',
-      '.mm-feedback{font-size:calc(var(--mm-fs) - 2px);line-height:18px}',
+      '.mm-feedback{font-size:calc(var(--ds-fs) - 2px);line-height:18px}',
       '.mm-feedback-ok{color:var(--dsw-alias-state-success-primary)}',
       '.mm-feedback-err{color:var(--dsw-alias-state-error-primary)}',
-      '.mm-test-result{font-size:calc(var(--mm-fs) - 2px);min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:var(--dsw-alias-label-secondary)}',
+      '.mm-test-result{font-size:calc(var(--ds-fs) - 2px);min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:var(--dsw-alias-label-secondary)}',
       '.mm-test-busy{color:var(--dsw-alias-state-warn-primary)}',
       '.mm-test-ok{color:var(--dsw-alias-state-success-primary)}',
       '.mm-test-err{color:var(--dsw-alias-state-error-primary)}',
-      '.mm-delete-desc{margin:0;font-size:calc(var(--mm-fs) - 1px);line-height:1.7;color:var(--dsw-alias-label-secondary)}',
+      '.mm-delete-desc{margin:0;font-size:calc(var(--ds-fs) - 1px);line-height:1.7;color:var(--dsw-alias-label-secondary)}',
       '.mm-delete-name{color:var(--dsw-alias-label-primary)}',
-      '.mm-tooltip{position:fixed;z-index:2000;max-width:290px;padding:6px 10px;border-radius:7px;border:1px solid var(--dsw-alias-border-l2);background:var(--dsw-alias-bg-layer-2);color:var(--dsw-alias-label-secondary);font-size:calc(var(--mm-fs) - 4px);line-height:16px;box-shadow:none;pointer-events:none;opacity:0;transform:translateY(2px);transition:opacity .14s ease,transform .14s ease;white-space:normal}',
+      '.mm-tooltip-host{position:fixed;left:0;top:0;width:0;height:0;z-index:2000;pointer-events:none;--ds-fs:var(--dsh-content-font-size,14px)}',
+      '.mm-tooltip{position:fixed;z-index:2000;max-width:min(40vw,290px);padding:3px 7px;border-radius:var(--dsw-radius-sm);background:var(--dsw-alias-tooltip-bg);color:var(--dsw-static-neutral-bluish-00);font-size:calc(var(--ds-fs) - 2px);line-height:16px;box-shadow:none;pointer-events:none;opacity:0;transform:translateY(2px);transition:opacity .12s ease,transform .12s ease;white-space:normal}',
       '.mm-tooltip-show{opacity:1;transform:translateY(0)}',
-      '.mm-toasts{position:fixed;right:20px;bottom:20px;z-index:2100;display:flex;flex-direction:column;gap:8px;pointer-events:none;max-width:min(420px,calc(100vw - 32px))}',
-      '.mm-toast{display:flex;align-items:flex-start;gap:8px;padding:10px 14px;border-radius:9px;border:1px solid var(--dsw-alias-border-l2);background:var(--dsw-alias-bg-layer-1);color:var(--dsw-alias-label-primary);font-size:calc(var(--mm-fs) - 1.5px);line-height:18px;box-shadow:0 10px 30px color-mix(in srgb,var(--dsw-alias-label-primary) 14%,transparent);animation:mm-toast-in .18s ease;pointer-events:auto}',
+      '.mm-toasts{position:fixed;left:50%;bottom:28px;transform:translateX(-50%);z-index:2100;display:flex;flex-direction:column;gap:8px;pointer-events:none;width:min(420px,calc(100vw - 32px))}',
+      '.mm-toast{display:flex;align-items:flex-start;gap:8px;padding:12px 16px;border-radius:var(--dsw-radius-md);border:.5px solid var(--dsw-alias-border-l2);background:var(--dsw-alias-bg-layer-3);color:var(--dsw-alias-label-primary);font-size:calc(var(--ds-fs) - 1px);line-height:18px;box-shadow:none;animation:mm-toast-in .18s ease;pointer-events:auto}',
       '.mm-toast-dot{width:6px;height:6px;border-radius:50%;margin-top:6px;flex:none;background:var(--dsw-alias-brand-primary)}',
       '.mm-toast-ok{border-color:color-mix(in srgb,var(--dsw-alias-state-success-primary) 40%,transparent)}',
       '.mm-toast-ok .mm-toast-dot{background:var(--dsw-alias-state-success-primary)}',
@@ -2633,12 +2900,14 @@ window.__ModuleLoader__.load({
       '.mm-toast-err .mm-toast-dot{background:var(--dsw-alias-state-error-primary)}',
       '.mm-toast-info .mm-toast-dot{background:var(--dsw-alias-brand-primary)}',
       '.mm-toast-text{min-width:0;word-break:break-word}',
+      '.mm-toast-close{display:inline-flex;align-items:center;justify-content:center;width:24px;height:24px;padding:0;border:none;background:transparent;color:var(--dsw-alias-label-tertiary);cursor:pointer;border-radius:var(--dsw-radius-xs);flex:none}',
+      '.mm-toast-close:hover{color:var(--dsw-alias-label-primary)}',
       '.mm-spin-icon{animation:mm-spin .8s linear infinite}',
       '@keyframes mm-spin{from{transform:rotate(0deg)}to{transform:rotate(360deg)}}',
       '@keyframes mm-pulse{0%,100%{transform:scale(1);opacity:1}50%{transform:scale(1.2);opacity:.45}}',
       '@keyframes mm-toast-in{from{opacity:0;transform:translateY(6px)}to{opacity:1;transform:translateY(0)}}',
-      '@media (max-width:720px){.mm-head{flex-wrap:wrap}.mm-head-actions{width:100%;flex:1 1 100%;justify-content:flex-end}.mm-search{flex:1 1 0;min-width:0;max-width:none;width:auto}.mm-grid-name{grid-template-columns:1fr}.mm-adv-grid,.mm-adv-grid-2{grid-template-columns:1fr}.mm-dialog-head{padding:14px 16px}.mm-dialog-body{padding:16px}.mm-dialog-foot{padding:12px 16px}}',
-      '@media (max-width:520px){.mm-search{flex:1 1 100%;width:100%}.mm-row-main{gap:8px}.mm-actions{gap:2px}.mm-name{font-size:calc(var(--mm-fs) - 1px)}.mm-tools-toolbar{align-items:flex-start;flex-direction:column}.mm-tools-filter{width:100%}}',
+      '@media (max-width:720px){.mm-head{flex-wrap:wrap}.mm-head-actions{width:100%;flex:1 1 100%;justify-content:flex-end}.mm-search{flex:1 1 0;min-width:0;max-width:none;width:auto}.mm-grid-name{grid-template-columns:1fr}.mm-adv-grid,.mm-adv-grid-2{grid-template-columns:1fr}.mm-dialog-head{padding:12px 16px}.mm-dialog-body{padding:16px}.mm-dialog-foot{padding:12px 16px}}',
+      '@media (max-width:520px){.mm-search{flex:1 1 100%;width:100%}.mm-row-main{gap:8px}.mm-actions{gap:2px}.mm-name{font-size:var(--ds-fs)}.mm-tools-toolbar{align-items:flex-start;flex-direction:column}.mm-tools-filter{width:100%}}',
     ].join('\n')
 
     /* ------------------------------------------------------------------ *
@@ -2646,10 +2915,12 @@ window.__ModuleLoader__.load({
      * ------------------------------------------------------------------ */
 
     return {
-      inject: ['slots', 'locale'],
+      inject: ['slots', 'locale', 'theme'],
       apply(ctx) {
         const t = ctx.locale.bind(NS)
         activeT = t
+        pluginCtx = ctx
+        themeService = ctx.theme
 
         ctx.effect(() => ctx.locale.register(NS, { zh: zh, en: en }), 'mcp-manager: dictionaries')
 
@@ -2669,10 +2940,16 @@ window.__ModuleLoader__.load({
 
         ctx.effect(() => () => {
           hideTooltip()
-          if (tooltip.node !== null && tooltip.node.parentNode !== null && tooltip.node.parentNode !== undefined) {
-            tooltip.node.parentNode.removeChild(tooltip.node)
+          if (tooltip.observer !== null && tooltip.observer !== undefined) {
+            tooltip.observer.disconnect()
+            tooltip.observer = null
           }
+          if (tooltip.host !== null && tooltip.host.parentNode !== null && tooltip.host.parentNode !== undefined) {
+            tooltip.host.parentNode.removeChild(tooltip.host)
+          }
+          tooltip.host = null
           tooltip.node = null
+          tooltip.root = null
         }, 'mcp-manager: tooltip')
 
         ctx.effect(() => ctx.slots.inject('settings.section', () => ctx.slots.register({
