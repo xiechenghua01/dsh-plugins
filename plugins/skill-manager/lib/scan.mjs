@@ -406,6 +406,26 @@ async function buildRootSpecs(projectRoot, inferred) {
     sourceType: 'filesystem',
     order: order++,
   })
+  // Drop roots that resolve to the same physical directory. When the workspace root is
+  // the home directory (cwd=/root on a server), `<cwd>/.dsh/skills` is literally
+  // `~/.dsh/skills`: scanning both would report one installed skill as a project skill
+  // and a user skill at once, and flag it as shadowed by itself.
+  const deduped = []
+  const seenReal = new Set()
+  for (let index = specs.length - 1; index >= 0; index -= 1) {
+    const spec = specs[index]
+    let real = spec.path
+    try {
+      real = await realpath(spec.path)
+    } catch {
+      /* keep the resolved path when the directory does not exist yet */
+    }
+    if (seenReal.has(real)) continue
+    seenReal.add(real)
+    deduped.unshift(spec)
+  }
+  specs.length = 0
+  specs.push(...deduped)
   for (const spec of specs) spec.display = abbreviate(spec.path)
   return specs
 }
