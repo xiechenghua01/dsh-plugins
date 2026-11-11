@@ -16,6 +16,7 @@
 import { Buffer } from 'node:buffer'
 import { readFile, realpath } from 'node:fs/promises'
 import { basename, dirname, join, resolve } from 'node:path'
+import { homedir } from 'node:os'
 
 import { ApiError, fail, methodNotAllowed, queryOf, readBody, rejected, sendJson } from './lib/http.mjs'
 import { parseSkillFile, validateFrontmatter } from './lib/frontmatter.mjs'
@@ -987,6 +988,36 @@ async function resolveWrittenSkill(ctx, cwd, result, hint = {}) {
 // ---------------------------------------------------------------------------
 
 /**
+ * 读取宿主「设置 → 通用设置 → 字号大小」：ui-theme 在 patch 层声明 fontSize，
+ * profile 层优先、home 层兜底。patch 里可能有 {{SECRET_x}} 等无法解析的写法，
+ * 因此用文本正则定位，而不是整文件 YAML 解析。
+ */
+async function themeFontSize() {
+  const home = process.env.DSH_HOME || join(homedir(), '.dsh')
+  const files = []
+  if (process.env.DSH_PROFILE_DIR) files.push(join(process.env.DSH_PROFILE_DIR, 'cordis.patch.yml'))
+  if (process.env.DSH_PROFILE) files.push(join(home, 'profiles', process.env.DSH_PROFILE, 'cordis.patch.yml'))
+  /* 当前 profile 之后直接回退 home，再退到其它 profile，避免串读无关 profile 的字号。 */
+  files.push(join(home, 'cordis.patch.yml'))
+  for (const name of ['desktop', 'web', 'headless']) files.push(join(home, 'profiles', name, 'cordis.patch.yml'))
+  for (const file of files) {
+    const raw = await readFile(file, 'utf8').catch(() => '')
+    if (raw.trim() === '') continue
+    /* 去掉整行注释，避免匹配到被注释掉的 fontSize。 */
+    const content = raw.split(/\r?\n/u).filter((line) => !/^\s*#/u.test(line)).join('\n')
+    /* 只取 `- id: ui-theme` 到下一个 `- id:` 之间的配置段，精确匹配 ID（不吞 ui-theme-extra）。 */
+    const blockRe = /(?:^|\n)[ \t]*-[ \t]+id:[ \t]*['"]?ui-theme['"]?[ \t]*(?:\r?\n([\s\S]*?))?(?=\n[ \t]*-[ \t]+id:|$)/u
+    const block = blockRe.exec(content)
+    if (block === null) continue
+    const match = /\bfontSize:[ \t]*(\d{1,3})\b/u.exec(block[1] ?? '')
+    if (match === null) continue
+    const size = Number(match[1])
+    if (Number.isInteger(size) && size >= 10 && size <= 24) return size
+  }
+  return null
+}
+
+/**
  * @param {object} ctx owning Cordis context (`webServer`, `connection`, `timer`)
  * @param {object} [config] the Loader row config, merged over DEFAULTS
  */
@@ -1828,7 +1859,7 @@ export function apply(ctx, config) {
   })
 
   route('GET', `${API_PREFIX}/settings`, async () => ({
-    fontSize: settings.fontSize,
+    fontSize: (await themeFontSize()) ?? settings.fontSize,
     cwd: await resolveCwd(ctx, settings.cwd),
     dshVersion,
   }))

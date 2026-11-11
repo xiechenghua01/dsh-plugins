@@ -28,7 +28,7 @@
           focusable: 'false',
           fill: 'none',
           stroke: 'currentColor',
-          strokeWidth: 1.5,
+          strokeWidth: 1.8,
           strokeLinecap: 'round',
           strokeLinejoin: 'round',
           opacity: active ? 1 : 0.72,
@@ -58,6 +58,25 @@
         void bootstrap(props)
       }, [])
 
+      /* 宿主字号可能在插件打开期间被修改；低频轮询 settings，变化时重绘。 */
+      useEffect(() => {
+        const refreshFontSize = async () => {
+          try {
+            const settings = await api('settings')
+            if (settings === null || typeof settings !== 'object') return
+            const next = typeof settings.fontSize === 'number' ? settings.fontSize : DEFAULT_FONT_SIZE
+            if (next !== appState.fontSize) {
+              appState.fontSize = next
+              __rerender()
+            }
+          } catch {
+            /* settings are best effort */
+          }
+        }
+        const timer = setInterval(() => { void refreshFontSize() }, 30000)
+        return () => clearInterval(timer)
+      }, [])
+
       // `version` is read so React re-runs this component when setState fires.
       void version
       return renderPage(props)
@@ -68,7 +87,7 @@
       try {
         const settings = await api('settings')
         if (settings !== null && typeof settings === 'object') {
-          if (typeof settings.fontSize === 'number') appState.fontSize = settings.fontSize
+          appState.fontSize = typeof settings.fontSize === 'number' ? settings.fontSize : DEFAULT_FONT_SIZE
           if (typeof settings.cwd === 'string') appState.cwd = settings.cwd
         }
       } catch {

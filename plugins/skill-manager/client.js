@@ -10,7 +10,7 @@ window.__ModuleLoader__.load({
     const useCallback = React.useCallback
     const useRef = React.useRef
     const Fragment = React.Fragment
-// ===== 00-prelude.js =====
+// ===== 00-0-head.js =====
     /* ================================================================== *
      * 00-prelude.js                                                       *
      * Constants, locale dictionaries, helpers, mutable state and loaders. *
@@ -36,6 +36,12 @@ window.__ModuleLoader__.load({
     /** Market sort values (contract 3.5). */
     const MARKET_SORTS = ['recommend', 'updated', 'name']
 
+    /* ------------------------------------------------------------------ *
+     * State (contract 3.5). Infrastructure fields (cwd / fontSize /       *
+     * locale / toasts) are kept alongside the contract fields.            *
+     * ------------------------------------------------------------------ */
+// ===== 00-1-locale.js =====
+    /* Locale dictionaries (zh/en). 由 00-prelude.js 26-614 拆出。 */
     /* ------------------------------------------------------------------ *
      * Locale dictionaries. zh/en must keep identical key sets.            *
      * Placeholders use {name} and are interpolated by t().                *
@@ -624,12 +630,7 @@ window.__ModuleLoader__.load({
       'update.title': 'Update skill',
       'update.versionChange': '{current} → {next}',
     }
-
-    /* ------------------------------------------------------------------ *
-     * State (contract 3.5). Infrastructure fields (cwd / fontSize /       *
-     * locale / toasts) are kept alongside the contract fields.            *
-     * ------------------------------------------------------------------ */
-
+// ===== 00-2-core.js =====
     const appState = {
         tab: 'skills',
         category: 'mine',
@@ -891,7 +892,8 @@ window.__ModuleLoader__.load({
     function openFolder(path) {
         toast(t('toast.openedFolder', { path: String(path === undefined || path === null ? '' : path) }))
     }
-
+// ===== 00-3-icons.js =====
+    /* Inline SVG icon set. 由 00-prelude.js 882-1060 拆出。 */
     /* ------------------------------------------------------------------ *
      * Inline SVG icon set (contract section 6).                          *
      * ------------------------------------------------------------------ */
@@ -1071,7 +1073,7 @@ window.__ModuleLoader__.load({
             ['path', { d: 'M3.5 7.5 12 12l8.5-4.5M12 12v9' }],
         ],
     }
-
+// ===== 00-4-icon-fn.js =====
     function icon(name, size, extraClass) {
         const key = String(name === undefined || name === null ? 'skill' : name)
         const glyph = ICON_GLYPHS[key] || ICON_GLYPHS.skill
@@ -1096,7 +1098,7 @@ window.__ModuleLoader__.load({
     }
 
     function upgradeIcon(size) {
-        const px = typeof size === 'number' && size > 0 ? size : 13
+        const px = typeof size === 'number' && size > 0 ? size : 16
         return h('svg', {
             width: px,
             height: px,
@@ -1111,7 +1113,8 @@ window.__ModuleLoader__.load({
         h('circle', { cx: 12, cy: 12, r: 9 }),
         h('path', { d: 'M8.5 11.5L12 8m0 0l3.5 3.5M12 8v8', strokeLinecap: 'round', strokeLinejoin: 'round' }))
     }
-
+// ===== 00-5-helpers.js =====
+    /* Skill helpers. 由 00-prelude.js 1102-1499 拆出。 */
     /* ------------------------------------------------------------------ *
      * Skill helpers shared with the list, market and detail fragments.    *
      * ------------------------------------------------------------------ */
@@ -1184,7 +1187,7 @@ window.__ModuleLoader__.load({
 
     function renderSkillIconBox(skill, options) {
         const opts = options !== null && typeof options === 'object' ? options : {}
-        const size = typeof opts.iconSize === 'number' && opts.iconSize > 0 ? opts.iconSize : 24
+        const size = typeof opts.iconSize === 'number' && opts.iconSize > 0 ? opts.iconSize : 20
         return h('div', { className: cx('sm-card-icon', opts.className) },
             icon(skillIconName(skill), size),
             h('span', { className: skillStatusDot(skill), 'data-tip': skillStatusTip(skill) }))
@@ -1218,7 +1221,7 @@ window.__ModuleLoader__.load({
                 }
                 : undefined,
         },
-        upgradeIcon(13),
+        upgradeIcon(16),
         h('span', null, text === '' ? t('badge.update', { version: '' }) : text))
     }
 
@@ -1510,6 +1513,8 @@ window.__ModuleLoader__.load({
      * The current drop target is exposed as smDragSource.over.target      *
      * (also mirrored as smDragSource.overId / smDragSource.overAfter).    *
      * ------------------------------------------------------------------ */
+// ===== 00-6-drag.js =====
+    /* Drag state and page render. 由 00-prelude.js 1500-1923 拆出。 */
 
     function smDragOver(targetId, event) {
         const dragging = smDragSource.dragging
@@ -1686,46 +1691,29 @@ window.__ModuleLoader__.load({
         const rawSort = String(appState.sort === undefined || appState.sort === null ? '' : appState.sort)
         const sort = rawSort === 'recent' ? 'modified' : rawSort
         const checking = appState.checking === true
-        return h('div', { className: 'sm-toolbar sm-skills-toolbar' },
-            h('div', { className: 'sm-search' },
-                icon('search', 15),
-                h('input', {
-                    className: 'sm-search-input',
-                    type: 'search',
-                    value: search,
-                    placeholder: t('search.skills.placeholder'),
-                    'aria-label': t('search.skills.placeholder'),
-                    spellCheck: false,
-                    onChange: function (event) {
-                        const value = event !== null && event !== undefined && event.target !== null && event.target !== undefined
-                            ? String(event.target.value || '')
-                            : ''
-                        setState({ search: value })
-                    },
-                }),
-                search !== ''
-                    ? h('button', {
-                        type: 'button',
-                        className: 'sm-search-clear',
-                        'aria-label': t('search.clear'),
-                        'data-tip': t('search.clear'),
-                        onClick: function () { setState({ search: '' }) },
-                    }, icon('x', 14))
-                    : null),
-            h('select', {
-                className: 'sm-select',
-                value: SKILL_SORTS.indexOf(sort) !== -1 ? sort : 'name',
-                'aria-label': t('sort.label'),
-                onChange: function (event) {
-                    const value = event !== null && event !== undefined && event.target !== null && event.target !== undefined
-                        ? String(event.target.value || 'name')
-                        : 'name'
-                    setState({ sort: value })
-                },
+        return h(SmSearchToolbar, {
+            search: search,
+            searchPlaceholder: t('search.skills.placeholder'),
+            clearLabel: t('search.clear'),
+            onSearchClear: function () { setState({ search: '' }) },
+            onSearchChange: function (event) {
+                const value = event !== null && event !== undefined && event.target !== null && event.target !== undefined
+                    ? String(event.target.value || '')
+                    : ''
+                setState({ search: value })
             },
-            SKILL_SORTS.map(function (key) {
-                return h('option', { key: key, value: key }, t(SKILL_SORT_LABEL_KEYS[key] || 'sort.name'))
-            })),
+            sortValue: SKILL_SORTS.indexOf(sort) !== -1 ? sort : 'name',
+            sortLabel: t('sort.label'),
+            sortOptions: SKILL_SORTS.map(function (key) {
+                return { value: key, label: t(SKILL_SORT_LABEL_KEYS[key] || 'sort.name') }
+            }),
+            onSortChange: function (event) {
+                const value = event !== null && event !== undefined && event.target !== null && event.target !== undefined
+                    ? String(event.target.value || 'name')
+                    : 'name'
+                setState({ sort: value })
+            },
+        },
             h('div', { className: 'sm-toolbar-actions' },
                 h(SmButton, {
                     tone: 'secondary',
@@ -1753,7 +1741,7 @@ window.__ModuleLoader__.load({
                         'aria-haspopup': 'menu',
                         'aria-expanded': appState.menu !== null && typeof appState.menu === 'object' && appState.menu.type === 'new-skill' ? 'true' : 'false',
                         onClick: openNewSkillMenu,
-                    }, icon('chevron-down', 14)))))
+                    }, icon('chevron-down', 16)))))
     }
 
     /** Split-button menu: new skill vs import skill. */
@@ -1794,7 +1782,7 @@ window.__ModuleLoader__.load({
                     if (typeof action === 'function') action()
                 },
             },
-            h('span', { className: 'sm-menu-icon' }, icon(iconName, 15)),
+            h('span', { className: 'sm-menu-icon' }, icon(iconName, 16)),
             h('span', null, label))
         }
         return [
@@ -1823,8 +1811,7 @@ window.__ModuleLoader__.load({
         return h('div', { className: 'sm-header sm-page-head' },
             h('div', { className: 'sm-page-head-text' },
                 h('h1', { className: 'sm-title sm-page-title' }, t('panel.title')),
-                h('p', { className: 'sm-desc sm-page-desc' }, t('panel.desc'))),
-            appState.tab === 'skills' ? renderSkillsToolbar() : null)
+                h('p', { className: 'sm-desc sm-page-desc' }, t('panel.desc'))))
     }
 
     function renderActiveTab() {
@@ -1844,6 +1831,7 @@ window.__ModuleLoader__.load({
             typeof renderDiagnosticsDrawer === 'function' ? renderDiagnosticsDrawer() : null,
             renderNewSkillMenu(),
             typeof renderTooltipLayer === 'function' ? renderTooltipLayer() : null,
+            h(SmPageTipLifecycle),
             typeof renderToastHost === 'function' ? renderToastHost() : null)
     }
 
@@ -1852,9 +1840,17 @@ window.__ModuleLoader__.load({
      * ------------------------------------------------------------------ */
 
     let tipNode = null
+    /* 鼠标按下后的短时窗口：随后的 focusin 是点击带来的，不排队显示提示语。 */
+    let tipSuppressFocusUntil = 0
     /* Last rendered shell signature (view + tab); used to hide the tooltip
      * when list <-> detail switches even if a caller bypassed setState. */
     let smRenderedShell = null
+
+    /** 归属检查：只处理本插件根内的目标；浮层自身挂在 body 上，额外放行。 */
+    function isSmOwnedTipTarget(target) {
+        if (target === null || target === undefined || typeof target.closest !== 'function') return false
+        return target.closest('.sm-root') !== null || target.closest('.sm-tooltip') !== null
+    }
 
     function closestTipNode(event) {
         const target = event !== null && event !== undefined ? event.target : null
@@ -1864,6 +1860,7 @@ window.__ModuleLoader__.load({
 
     function handlePageTipOver(event) {
         if (typeof smTip !== 'function') return
+        if (!isSmOwnedTipTarget(event !== null && event !== undefined ? event.target : null)) return
         const node = closestTipNode(event)
         if (node === null || node === tipNode) return
         tipNode = node
@@ -1876,6 +1873,7 @@ window.__ModuleLoader__.load({
     }
 
     function handlePageTipOut(event) {
+        if (!isSmOwnedTipTarget(event !== null && event !== undefined ? event.target : null)) return
         const node = closestTipNode(event)
         if (node === null) return
         const related = event.relatedTarget
@@ -1888,12 +1886,40 @@ window.__ModuleLoader__.load({
 
     /* 统一入口：任何点击（行、Tab、工具栏、状态图标、菜单项）都先收起
      * 提示语，不用逐个 onClick 补。 */
-    function handlePageTipDown() {
+    function handlePageTipDown(event) {
+        if (!isSmOwnedTipTarget(event !== null && event !== undefined ? event.target : null)) return
+        /* 点击导致的 focusin 紧随其后，短时抑制以免提示语再次弹出。 */
+        tipSuppressFocusUntil = Date.now() + 400
         tipNode = null
         if (typeof smHideTooltip === 'function') smHideTooltip()
     }
 
-    /** 主动清理：hover 目标已从文档卸载时收起提示语。 */
+    /** 键盘聚焦：[data-tip] 元素获得焦点时按 300ms 延迟显示提示语。 */
+    function handlePageTipFocus(event) {
+        if (typeof smTip !== 'function') return
+        if (Date.now() < tipSuppressFocusUntil) return
+        if (!isSmOwnedTipTarget(event !== null && event !== undefined ? event.target : null)) return
+        const node = closestTipNode(event)
+        if (node === null || node === tipNode) return
+        tipNode = node
+        const label = typeof node.getAttribute === 'function' ? node.getAttribute('data-tip') : ''
+        if (label === null || label === undefined || label === '') return
+        const props = smTip(label)
+        if (props !== null && typeof props === 'object' && typeof props.onFocus === 'function') {
+            props.onFocus({ currentTarget: node })
+        }
+    }
+
+    /** 失焦立即隐藏；焦点仍在元素内部时不隐藏，避免闪烁。 */
+    function handlePageTipBlur(event) {
+        if (!isSmOwnedTipTarget(event !== null && event !== undefined ? event.target : null)) return
+        const node = closestTipNode(event)
+        if (node === null) return
+        const related = event.relatedTarget
+        if (related !== null && related !== undefined && typeof node.contains === 'function' && node.contains(related)) return
+        if (tipNode === node) tipNode = null
+        if (typeof smHideTooltip === 'function') smHideTooltip()
+    }
     function smHideTipIfTargetGone() {
         if (typeof smHideTooltipIfTargetGone === 'function') smHideTooltipIfTargetGone()
     }
@@ -1904,7 +1930,7 @@ window.__ModuleLoader__.load({
         if (typeof source.locale === 'string' && /^(zh|en)/iu.test(source.locale)) appState.locale = source.locale
         if (typeof source.fontSize === 'number' && Number.isFinite(source.fontSize)) appState.fontSize = Math.round(source.fontSize)
         const size = Number.isFinite(appState.fontSize) && appState.fontSize > 0 ? appState.fontSize : DEFAULT_FONT_SIZE
-        const rootStyle = { '--sm-fs': size + 'px' }
+        const rootStyle = { '--ds-fs': size + 'px' }
         const rootListeners = {
             onMouseOver: handlePageTipOver,
             onMouseOut: handlePageTipOut,
@@ -1930,11 +1956,42 @@ window.__ModuleLoader__.load({
                 h('div', { className: 'sm-tabs-row' },
                     renderPrimaryTabs(),
                     renderStatusIcons()),
+                appState.tab === 'skills' ? renderSkillsToolbar() : null,
+                appState.tab === 'market' ? renderMarketToolbarSlot() : null,
                 renderCategoryTabsSlot(),
                 h('div', { className: 'sm-tab-view sm-scroll' }, renderActiveTab())),
             renderOverlays())
     }
-// ===== 10-skills.js =====
+
+    /** 滚动立即隐藏提示语。 */
+    function handlePageTipScroll() {
+        if (typeof smHideTooltip === 'function') smHideTooltip()
+        tipNode = null
+    }
+
+    /**
+     * focusin / focusout / scroll 委托。挂载时注册、卸载时移除，
+     * 与页面组件同生命周期，避免插件卸载后残留监听。
+     */
+    function SmPageTipLifecycle() {
+        useEffect(function () {
+            if (typeof document === 'undefined' || document === null || typeof document.addEventListener !== 'function') return undefined
+            const onFocusIn = function (event) { handlePageTipFocus(event) }
+            const onFocusOut = function (event) { handlePageTipBlur(event) }
+            const onScroll = function () { handlePageTipScroll() }
+            document.addEventListener('focusin', onFocusIn, true)
+            document.addEventListener('focusout', onFocusOut, true)
+            document.addEventListener('scroll', onScroll, { capture: true, passive: true })
+            return function () {
+                document.removeEventListener('focusin', onFocusIn, true)
+                document.removeEventListener('focusout', onFocusOut, true)
+                document.removeEventListener('scroll', onScroll, { capture: true, passive: true })
+            }
+        }, [])
+        return null
+    }
+// ===== 10-skills-list.js =====
+    /* 由原 10-skills.js 行 1-451 拆出。 */
     /* ================================================================== *
      * 10-skills.js                                                        *
      * Skills tab: category tabs, source groups, two-column card grid,     *
@@ -2385,7 +2442,8 @@ window.__ModuleLoader__.load({
             })),
         ]
     }
-
+// ===== 11-skills-actions.js =====
+    /* 由原 10-skills.js 行 452-772 拆出。 */
     async function skillsToggleEnabled(skill, enabled, options) {
         const opts = options !== null && typeof options === 'object' ? options : {}
         if (!skillsIsSkill(skill)) return
@@ -2707,7 +2765,8 @@ window.__ModuleLoader__.load({
             renderSkillGroups(),
             renderSkillMenu())
     }
-// ===== 20-market.js =====
+// ===== 20-market-list.js =====
+    /* 由原 20-market.js 行 1-533 拆出。 */
     /* ------------------------------------------------------------------ *
      * C3 · 市场 Tab                                                       *
      *                                                                    *
@@ -3033,7 +3092,8 @@ window.__ModuleLoader__.load({
             h('div', {
                 key: 'menu-backdrop',
                 className: 'sm-menu-backdrop',
-                style: { position: 'fixed', inset: 0, zIndex: 1290 },
+                /* 定位由 .sm-menu-backdrop 提供；层级按浮层栈保留。 */
+                style: { zIndex: 1290 },
                 onClick: smMarketCloseMenu,
                 onContextMenu: function (event) {
                     if (event !== null && event !== undefined && typeof event.preventDefault === 'function') event.preventDefault()
@@ -3044,8 +3104,8 @@ window.__ModuleLoader__.load({
                 key: 'menu',
                 className: 'sm-menu',
                 role: 'menu',
+                /* 固定定位由 .sm-menu 提供；坐标/宽度/层级按弹出位置计算。 */
                 style: {
-                    position: 'fixed',
                     left: smMarketMenu.x + 'px',
                     top: smMarketMenu.y + 'px',
                     width: '200px',
@@ -3239,7 +3299,8 @@ window.__ModuleLoader__.load({
             },
         }, t('action.install'))
     }
-
+// ===== 21-market-cards.js =====
+    /* 由原 20-market.js 行 534-1009 拆出。 */
     function renderMarketCard(item) {
         if (item === null || typeof item !== 'object') return null
         const update = smMarketCardUpdate(item)
@@ -3287,49 +3348,34 @@ window.__ModuleLoader__.load({
         },
         h('div', {
             className: 'sm-card-icon',
-            style: {
-                width: '48px',
-                height: '48px',
-                borderRadius: 'var(--dsw-radius-lg)',
-                border: '0.5px solid var(--dsw-alias-border-l2)',
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'center',
-                flex: 'none',
-                position: 'relative',
-            },
         },
         icon(smMarketIconName(item), 24),
         h('span', { className: cx('sm-dot', dotClass), title: dotTip, 'data-tip': dotTip })),
         h('div', {
             className: 'sm-card-main',
-            style: { flex: '1 1 auto', minWidth: 0, display: 'flex', flexDirection: 'column', gap: '4px' },
+            /* .sm-card-main 的 gap 为 5px，卡片需更紧，暂留 gap。 */
+            style: { gap: '4px' },
         },
         h('div', {
             className: 'sm-card-title-row',
-            style: { display: 'flex', alignItems: 'center', gap: '8px', minWidth: 0, overflow: 'hidden' },
+            /* .sm-card-title-row 的 gap 为 6px，卡片标题行需 8px 并裁切溢出。 */
+            style: { gap: '8px', overflow: 'hidden' },
         },
         h('span', { className: 'sm-card-name sm-mono', title: String(item.name || '') }, String(item.name || '')),
         version !== '' ? h('span', { className: 'sm-badge sm-mono' }, version) : null,
         tags.length > 0
             ? h('div', {
                 className: 'sm-tagbar',
-                style: { display: 'flex', alignItems: 'center', gap: '4px', maxWidth: '340px', overflow: 'hidden', flexWrap: 'nowrap' },
+                /* 布局/裁切由 .sm-tagbar 提供，其 gap 为 6px，市场标签行需 4px。 */
+                style: { gap: '4px' },
             }, tags)
             : null),
         h('div', {
             className: 'sm-card-desc',
             title: description,
-            style: {
-                overflow: 'hidden',
-                display: '-webkit-box',
-                WebkitLineClamp: '2',
-                WebkitBoxOrient: 'vertical',
-            },
         }, description)),
         h('div', {
             className: 'sm-card-tail',
-            style: { display: 'flex', alignItems: 'center', gap: '8px', flex: 'none', alignSelf: 'center' },
             onClick: function (event) {
                 if (event !== null && event !== undefined && typeof event.stopPropagation === 'function') event.stopPropagation()
             },
@@ -3388,10 +3434,7 @@ window.__ModuleLoader__.load({
         h('div', { className: 'sm-empty-icon' }, icon('package', 32)),
         h('div', { className: 'sm-empty-title sm-card-title' }, t('empty.market.noSkills.title')),
         h('div', { className: 'sm-empty-body sm-desc' }, t('empty.market.noSkills.body')),
-        h('div', {
-            className: 'sm-empty-actions',
-            style: { display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px', flexWrap: 'wrap' },
-        },
+        h('div', { className: 'sm-empty-actions' },
         h('button', {
             type: 'button',
             className: 'sm-btn sm-btn-ghost sm-btn-sm',
@@ -3406,10 +3449,11 @@ window.__ModuleLoader__.load({
             key: 'error-' + sourceId,
             className: 'sm-banner sm-banner-error sm-error',
             role: 'alert',
-            style: { display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' },
+            /* 布局由 .sm-banner 提供，其 gap 为 12px，错误条需 8px 且允许换行。 */
+            style: { gap: '8px', flexWrap: 'wrap' },
         },
         icon('alert', 16),
-        h('div', { className: 'sm-banner-main', style: { flex: '1 1 auto', minWidth: 0 } },
+        h('div', { className: 'sm-banner-main', style: { flex: '1 1 auto' } },
             h('div', { className: 'sm-banner-title' }, t('market.error.source')),
             h('div', { className: 'sm-caption sm-muted' },
                 detail !== '' ? detail : t('market.error.sourceHint'))),
@@ -3454,31 +3498,22 @@ window.__ModuleLoader__.load({
         },
         h('div', {
             className: 'sm-source-block-head',
-            style: { display: 'flex', alignItems: 'center', gap: '8px', padding: '0 2px', minWidth: 0 },
         },
-        h('span', { className: cx('sm-dot', dotClass), title: dotTip, 'data-tip': dotTip, style: { position: 'static', flex: 'none' } }),
+        h('span', { className: cx('sm-dot', dotClass), title: dotTip, 'data-tip': dotTip }),
         h('span', {
             className: 'sm-source-block-title',
             title: name,
-            style: {
-                fontSize: 'var(--sm-fs)',
-                fontWeight: 500,
-                color: 'var(--dsw-alias-label-primary)',
-                whiteSpace: 'nowrap',
-                overflow: 'hidden',
-                textOverflow: 'ellipsis',
-            },
         }, name),
         h('span', {
             className: 'sm-source-block-count',
-            style: { fontSize: 'calc(var(--sm-fs) - 2px)', color: 'var(--dsw-alias-label-caption)', whiteSpace: 'nowrap' },
         }, t('source.skillCount', { count: count }))),
         body,
         cursor !== null && errorText === ''
             ? h('div', {
                 key: 'more',
                 className: 'sm-market-more',
-                style: { display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '4px 0' },
+                /* 布局由 .sm-market-more 提供，其纵向内边距为 12px，此处需 4px。 */
+                style: { padding: '4px 0' },
             },
             h('button', {
                 type: 'button',
@@ -3499,10 +3534,7 @@ window.__ModuleLoader__.load({
             h('div', { className: 'sm-empty-title sm-card-title' }, title),
             body ? h('div', { className: 'sm-empty-body sm-desc' }, body) : null,
             actions && actions.length > 0
-                ? h('div', {
-                    className: 'sm-empty-actions',
-                    style: { display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px', flexWrap: 'wrap' },
-                }, actions)
+                ? h('div', { className: 'sm-empty-actions' }, actions)
                 : null)
     }
 
@@ -3595,10 +3627,11 @@ window.__ModuleLoader__.load({
             key: 'stale-banner',
             className: 'sm-banner sm-banner-warn sm-warn',
             role: 'status',
-            style: { display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' },
+            /* 布局由 .sm-banner 提供，其 gap 为 12px，提示条需 8px 且允许换行。 */
+            style: { gap: '8px', flexWrap: 'wrap' },
         },
         icon('alert', 16),
-        h('div', { className: 'sm-banner-main', style: { flex: '1 1 auto', minWidth: 0 } },
+        h('div', { className: 'sm-banner-main', style: { flex: '1 1 auto' } },
             h('div', { className: 'sm-banner-title' }, t('market.error.offline')),
             h('div', { className: 'sm-caption sm-muted' }, t('market.error.offlineHint'))),
         h('button', {
@@ -3622,11 +3655,12 @@ window.__ModuleLoader__.load({
             'aria-hidden': 'true',
             style: { pointerEvents: 'none' },
         },
-        h('div', { className: 'sm-card-icon', style: { width: '48px', height: '48px', flex: 'none' } },
+        h('div', { className: 'sm-card-icon' },
             h('span', { className: 'sm-skeleton', style: { width: '24px', height: '24px' } })),
         h('div', {
             className: 'sm-card-main',
-            style: { flex: '1 1 auto', minWidth: 0, display: 'flex', flexDirection: 'column', gap: '8px' },
+            /* 骨架行距比 .sm-card-main 的 5px 更松。 */
+            style: { gap: '8px' },
         },
         h('div', { className: 'sm-skeleton', style: { maxWidth: '180px' } }),
         h('div', { className: 'sm-skeleton', style: { maxWidth: '260px', minHeight: '12px' } })))
@@ -3639,7 +3673,6 @@ window.__ModuleLoader__.load({
             key: 'skeleton',
             className: 'sm-market-skeleton',
             'aria-busy': 'true',
-            style: { display: 'flex', flexDirection: 'column', gap: '12px' },
         },
         h('div', { className: 'sm-caption sm-muted', style: { padding: '4px 2px' } }, t('state.loadingMarket')),
         h('div', { className: 'sm-card-grid' }, cards))
@@ -3648,65 +3681,48 @@ window.__ModuleLoader__.load({
     function smMarketToolbar(sources, loading) {
         const hasSources = sources.length > 0
         const checking = appState.checking === true
-        return h('div', {
-            key: 'toolbar',
-            className: 'sm-toolbar sm-market-toolbar',
+        return h(SmSearchToolbar, {
+            search: appState.search,
+            searchPlaceholder: t('search.market.placeholder'),
+            clearLabel: t('action.clear'),
+            onSearchClear: smMarketClearSearch,
+            onSearchChange: smMarketOnSearchInput,
+            searchDisabled: !hasSources,
+            sortValue: smMarketSortValue(),
+            sortLabel: t('sort.label'),
+            sortOptions: [
+                { value: 'recommend', label: t('sort.recommended') },
+                { value: 'updated', label: t('sort.updated') },
+                { value: 'name', label: t('sort.name') },
+            ],
+            onSortChange: smMarketOnSortChange,
+            sortDisabled: !hasSources,
         },
-        h('div', { className: 'sm-search' },
-            icon('search', 15),
-            h('input', {
-                className: 'sm-search-input',
-                type: 'search',
-                value: String(appState.search === undefined || appState.search === null ? '' : appState.search),
-                placeholder: t('search.market.placeholder'),
-                'aria-label': t('search.market.placeholder'),
-                spellCheck: false,
-                disabled: !hasSources,
-                onChange: smMarketOnSearchInput,
-            }),
-            appState.search !== '' && appState.search !== undefined && appState.search !== null
-                ? h('button', {
-                    type: 'button',
-                    className: 'sm-search-clear',
-                    'aria-label': t('action.clear'),
-                    'data-tip': t('action.clear'),
-                    onClick: smMarketClearSearch,
-                }, icon('x', 14))
-                : null),
-        h('select', {
-            className: 'sm-select',
-            value: smMarketSortValue(),
-            'aria-label': t('sort.label'),
-            disabled: !hasSources,
-            onChange: smMarketOnSortChange,
-        },
-        h('option', { value: 'recommend' }, t('sort.recommended')),
-        h('option', { value: 'updated' }, t('sort.updated')),
-        h('option', { value: 'name' }, t('sort.name'))),
-        h('div', { className: 'sm-toolbar-icons' },
-            h('button', {
-                type: 'button',
-                className: 'sm-tool-btn',
-                'aria-label': t('action.checkUpdates'),
-                'data-tip': checking ? t('status.checking') : t('action.checkUpdates'),
-                disabled: !hasSources || loading === true || checking,
-                'aria-busy': checking ? 'true' : undefined,
-                onClick: function () {
-                    if (typeof checkUpdates === 'function') void checkUpdates()
-                },
-            }, icon('refresh', 16)),
-            h('button', {
-                type: 'button',
-                className: 'sm-tool-btn',
-                'aria-label': t('action.manageSources'),
-                'data-tip': t('action.manageSources'),
-                onClick: smMarketManageSources,
-            }, icon('sources', 16))))
+            h('div', { className: 'sm-toolbar-icons' },
+                h(SmButton, {
+                    icon: 'refresh',
+                    className: 'sm-toolbar-btn',
+                    disabled: !hasSources || loading === true || checking,
+                    onClick: function () {
+                        if (typeof checkUpdates === 'function') void checkUpdates()
+                    },
+                }, checking ? t('status.checking') : t('action.checkUpdates')),
+                h(SmButton, {
+                    icon: 'sources',
+                    className: 'sm-toolbar-btn',
+                    onClick: smMarketManageSources,
+                }, t('action.manageSources'))))
     }
 
     /* ------------------------------------------------------------------ *
      * 市场 Tab 入口                                                       *
      * ------------------------------------------------------------------ */
+
+    /** 市场页工具栏独立成槽，渲染在 tab 内容之外，与技能页同层级同宽。 */
+    function renderMarketToolbarSlot() {
+        smMarketEnsureLoaded()
+        return smMarketToolbar(smMarketSourceList(), smMarketLoading())
+    }
 
     function renderMarketTab() {
         smMarketEnsureLoaded()
@@ -3720,7 +3736,7 @@ window.__ModuleLoader__.load({
         const loading = smMarketLoading()
         const stale = appState.marketStale === true
         const hasBlockError = blocks.some(function (block) { return smMarketBlockErrorText(block) !== '' })
-        const nodes = [smMarketToolbar(sources, loading)]
+        const nodes = []
 
         if (blocks.length > 0 && (stale || hasBlockError || scopedError !== null)) nodes.push(smMarketStaleBanner())
 
@@ -3744,7 +3760,8 @@ window.__ModuleLoader__.load({
 
         return h('div', { className: 'sm-page sm-market' }, nodes)
     }
-// ===== 30-source-dialog.js =====
+// ===== 30-source-dialog-base.js =====
+    /* 由原 30-source-dialog.js 行 1-501 拆出。 */
     /* ------------------------------------------------------------------ *
      * C3 · 管理源弹窗                                                     *
      *                                                                    *
@@ -4245,7 +4262,8 @@ window.__ModuleLoader__.load({
     /* ------------------------------------------------------------------ *
      * 渲染                                                                *
      * ------------------------------------------------------------------ */
-
+// ===== 31-source-dialog-rows.js =====
+    /* 由原 30-source-dialog.js 行 502-913 拆出。 */
     function smSourceStatusDot(source) {
         const id = source !== null && typeof source === 'object' ? String(source.id) : ''
         if (id !== '' && smSourceDialogError[id] !== undefined) {
@@ -4275,23 +4293,13 @@ window.__ModuleLoader__.load({
         const id = String(source.id)
         return h('span', {
             key: 'handle',
-            className: 'sm-drag-handle sm-source-handle',
+            className: 'sm-drag-handle',
             role: 'button',
             tabIndex: 0,
             'data-source-handle': id,
             'aria-label': t('source.dragHandle'),
             'data-tip': t('source.dragHandle'),
             'aria-disabled': total <= 1 ? 'true' : undefined,
-            style: {
-                width: '16px',
-                height: '16px',
-                flex: 'none',
-                display: 'inline-flex',
-                alignItems: 'center',
-                justifyContent: 'center',
-                cursor: 'grab',
-                color: 'var(--dsw-alias-label-tertiary)',
-            },
         }, icon('grip', 16))
     }
 
@@ -4327,7 +4335,6 @@ window.__ModuleLoader__.load({
             'aria-disabled': frozen ? 'true' : undefined,
             disabled: frozen,
             draggable: 'false',
-            style: { width: '28px', height: '28px' },
             onClick: function (event) {
                 if (event !== null && event !== undefined && typeof event.stopPropagation === 'function') event.stopPropagation()
                 if (frozen) return
@@ -4351,9 +4358,7 @@ window.__ModuleLoader__.load({
             key: 'row-' + id,
             className: cx(
                 'sm-source-row',
-                'sm-source-item',
-                smSourceDialogDrag !== null && smSourceDialogDrag.id === id && 'is-dragging',
-                smSourceDialogDrag !== null && smSourceDialogDrag.id === id && 'sm-source-dragging'
+                smSourceDialogDrag !== null && smSourceDialogDrag.id === id && 'is-dragging'
             ),
             'data-source-row': id,
             draggable: 'true',
@@ -4386,14 +4391,10 @@ window.__ModuleLoader__.load({
                     moveSource(id, 1)
                 }
             },
+            /* 行高/间距由 .sm-source-row 提供，拖动态透明度由 .is-dragging 提供；
+               分隔线暂无等价类，暂留行内。 */
             style: {
-                display: 'flex',
-                alignItems: 'center',
-                gap: '10px',
-                padding: '10px 12px',
-                borderBottom: '1px solid var(--dsw-alias-border-l2)',
-                minHeight: '56px',
-                opacity: smSourceDialogDrag !== null && smSourceDialogDrag.id === id ? 0.5 : 1,
+                borderBottom: '0.5px solid var(--dsw-alias-border-l2)',
             },
         },
         smSourceHandle(source, total),
@@ -4401,35 +4402,22 @@ window.__ModuleLoader__.load({
             className: cx('sm-dot', dot.className),
             'data-tip': dot.tip,
             title: dot.tip,
-            style: { position: 'static', flex: 'none' },
         }),
         h('div', {
             className: 'sm-source-name-wrap',
-            style: { flex: '1 1 auto', minWidth: 0, display: 'flex', flexDirection: 'column', gap: '2px' },
         },
         h('span', {
             className: 'sm-source-name',
             title: name,
-            style: {
-                fontSize: 'var(--sm-fs)',
-                fontWeight: 500,
-                color: 'var(--dsw-alias-label-primary)',
-                whiteSpace: 'nowrap',
-                overflow: 'hidden',
-                textOverflow: 'ellipsis',
-            },
         }, name),
         h('span', {
             className: 'sm-source-meta',
-            style: { fontSize: 'calc(var(--sm-fs) - 3px)', color: 'var(--dsw-alias-label-caption)' },
         }, smSourceCheckedText(source))),
         h('span', {
             className: 'sm-badge sm-mono',
-            style: { flex: 'none' },
         }, t('source.skillCount', { count: count })),
         h('div', {
             className: 'sm-source-actions',
-            style: { display: 'flex', alignItems: 'center', gap: '4px', flexShrink: 0 },
         },
         smSourceSwitch(source, frozen),
         smSourceIconAction('edit', 'edit', t('action.editSource'), function () {
@@ -4444,20 +4432,18 @@ window.__ModuleLoader__.load({
         if (errorText === '') return rowNode
         const errorNode = h('div', {
             key: 'error-' + id,
-            className: 'sm-source-error sm-source-error-row',
+            className: 'sm-source-error',
             role: 'alert',
+            /* 字号/颜色/行高由 .sm-source-error 提供；布局暂无等价类，暂留行内。 */
             style: {
                 display: 'flex',
                 alignItems: 'center',
                 gap: '8px',
-                padding: '4px 12px 10px 38px',
-                color: 'var(--dsw-alias-state-error-primary)',
-                fontSize: 'calc(var(--sm-fs) - 3px)',
-                lineHeight: 1.5,
+                padding: '4px 12px 8px 32px',
             },
         },
         icon('alert', 14),
-        h('span', { className: 'sm-ellipsis', style: { flex: '1 1 auto', minWidth: 0 } }, errorText),
+        h('span', { className: 'sm-ellipsis', style: { flex: '1 1 auto' } }, errorText),
         h('button', {
             type: 'button',
             className: 'sm-btn sm-btn-ghost sm-btn-sm',
@@ -4473,13 +4459,11 @@ window.__ModuleLoader__.load({
     function smSourceDropIndicator(key) {
         return h('div', {
             key: key,
-            className: 'sm-drop-indicator sm-drop-line',
+            className: 'sm-drop-indicator',
             'aria-hidden': 'true',
+            /* 高度/底色由 .sm-drop-indicator 提供；缩进暂无等价类，暂留行内。 */
             style: {
-                height: '2px',
                 margin: '0 0 0 26px',
-                background: 'var(--dsw-alias-state-business-primary)',
-                flex: 'none',
             },
         })
     }
@@ -4506,12 +4490,11 @@ window.__ModuleLoader__.load({
             key: 'sk-' + String(index),
             className: 'sm-source-row',
             'aria-hidden': 'true',
-            style: { display: 'flex', alignItems: 'center', gap: '10px', padding: '10px 12px', minHeight: '56px' },
         },
         h('span', { className: 'sm-skeleton', style: { width: '16px', height: '16px', flex: 'none' } }),
         h('div', {
             className: 'sm-source-name-wrap',
-            style: { flex: '1 1 auto', minWidth: 0, display: 'flex', flexDirection: 'column', gap: '6px' },
+            style: { gap: '6px' },
         },
         h('span', { className: 'sm-skeleton', style: { maxWidth: '180px' } }),
         h('span', { className: 'sm-skeleton', style: { maxWidth: '120px', minHeight: '10px' } })))
@@ -4521,13 +4504,9 @@ window.__ModuleLoader__.load({
         if (list.length > 0) {
             return h('div', {
                 className: 'sm-source-list',
+                /* 布局与内边距由 .sm-source-list 提供；flex 与拖拽期 user-select 保留。 */
                 style: {
-                    display: 'flex',
-                    flexDirection: 'column',
-                    overflowY: 'auto',
-                    minHeight: 0,
                     flex: '1 1 auto',
-                    paddingRight: '2px',
                     userSelect: smSourceDialogDrag !== null ? 'none' : 'auto',
                 },
             }, smSourceRows(list))
@@ -4536,7 +4515,7 @@ window.__ModuleLoader__.load({
             return h('div', {
                 className: 'sm-source-list',
                 'aria-busy': 'true',
-                style: { display: 'flex', flexDirection: 'column', overflowY: 'auto', minHeight: 0, flex: '1 1 auto' },
+                style: { flex: '1 1 auto' },
             }, [smSourceSkeletonRow(0), smSourceSkeletonRow(1), smSourceSkeletonRow(2)])
         }
         if (scopedError !== null) {
@@ -4591,22 +4570,11 @@ window.__ModuleLoader__.load({
             id: 'sm-source-ghost',
             className: 'sm-source-ghost',
             'aria-hidden': 'true',
+            /* 外观由 .sm-source-ghost 提供；仅保留拖拽过程态的坐标与宽度。 */
             style: {
-                position: 'fixed',
                 left: smSourceDialogDrag.x + 12 + 'px',
                 top: smSourceDialogDrag.y + 12 + 'px',
                 width: smSourceDialogDrag.width > 0 ? smSourceDialogDrag.width + 'px' : undefined,
-                zIndex: 1400,
-                pointerEvents: 'none',
-                display: 'flex',
-                alignItems: 'center',
-                gap: '8px',
-                padding: '6px 10px',
-                borderRadius: 'var(--dsw-radius-sm)',
-                border: '0.5px solid var(--dsw-alias-border-l2)',
-                background: 'var(--dsw-alias-bg-layer-2)',
-                fontSize: 'calc(var(--sm-fs) - 1px)',
-                color: 'var(--dsw-alias-label-primary)',
             },
         },
         h('span', { className: 'sm-mono' }, name),
@@ -4626,24 +4594,21 @@ window.__ModuleLoader__.load({
         const head = h('div', {
             key: 'head',
             className: 'sm-dialog-head',
+            /* 与 .sm-dialog-head 的 padding/gap 不同，布局暂无等价类，暂留行内。 */
             style: {
-                display: 'flex',
                 alignItems: 'center',
-                justifyContent: 'space-between',
                 gap: '8px',
                 padding: '16px 20px',
                 borderBottom: '0.5px solid var(--dsw-alias-border-l2)',
-                flex: 'none',
             },
         },
         h('div', {
             key: 'title',
             className: 'sm-dialog-head-left',
-            style: { display: 'flex', alignItems: 'center', gap: '8px', minWidth: 0 },
         },
         h('span', {
             className: 'sm-dialog-title',
-            style: { fontSize: 'calc(var(--sm-fs) + 2px)', fontWeight: 500, color: 'var(--dsw-alias-label-primary)' },
+            style: { fontSize: 'calc(var(--ds-fs) + 2px)' },
         }, t('source.title')),
         h('span', { className: 'sm-badge' }, String(list.length))),
         h('button', {
@@ -4658,14 +4623,10 @@ window.__ModuleLoader__.load({
         const body = h('div', {
             key: 'body',
             className: 'sm-dialog-body',
+            /* 方向/溢出由 .sm-source-dialog .sm-dialog-body 提供；gap 与上内边距不同，暂留。 */
             style: {
-                display: 'flex',
-                flexDirection: 'column',
                 gap: '12px',
                 padding: '12px 20px 16px',
-                minHeight: 0,
-                flex: '1 1 auto',
-                overflow: 'hidden',
             },
         },
         smSourceDialogBody(list, scopedError, loading),
@@ -4674,14 +4635,9 @@ window.__ModuleLoader__.load({
         const foot = h('div', {
             key: 'foot',
             className: 'sm-dialog-foot',
+            /* 布局/间距由 .sm-dialog-foot 提供；仅上边框色值与类不同，暂留。 */
             style: {
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'flex-end',
-                gap: '8px',
-                padding: '12px 20px',
                 borderTop: '0.5px solid var(--dsw-alias-border-l2)',
-                flex: 'none',
             },
         },
         h('button', {
@@ -4701,36 +4657,15 @@ window.__ModuleLoader__.load({
             'aria-modal': 'true',
             'aria-label': t('source.title'),
             tabIndex: -1,
+            /* 尺寸/边框/背景/阴影均由 .sm-source-dialog 与 .sm-dialog 提供。 */
             style: {
-                width: 'min(720px, 100vw - 32px)',
-                // A list dialog needs room even with one source; 480 keeps the
-                // empty space reasonable while still growing to 720 for many rows.
-                minHeight: 'min(480px, 100vh - 96px)',
-                maxHeight: 'min(720px, 100vh - 96px)',
                 boxSizing: 'border-box',
-                display: 'flex',
-                flexDirection: 'column',
-                overflow: 'hidden',
-                borderRadius: 'var(--dsw-radius-panel)',
-                border: '0.5px solid var(--dsw-alias-border-inverted)',
-                background: 'var(--dsw-alias-bg-layer-1)',
-                boxShadow: 'none',
             },
         }, head, body, foot)
 
         const mask = h('div', {
             key: 'mask',
             className: 'sm-dialog-mask',
-            style: {
-                position: 'fixed',
-                inset: 0,
-                zIndex: 1200,
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'center',
-                padding: '16px',
-                background: 'var(--dsw-alias-bg-mask-1, rgba(0, 0, 0, 0.5))',
-            },
             onMouseDown: function (event) {
                 if (event === null || event === undefined) return
                 if (event.target !== event.currentTarget) return
@@ -4741,7 +4676,8 @@ window.__ModuleLoader__.load({
 
         return h(Fragment, null, mask, smSourceGhost())
     }
-// ===== 40-detail.js =====
+// ===== 40-detail-base.js =====
+    /* 由原 40-detail.js 行 1-487 拆出。 */
     /* ------------------------------------------------------------------ *
      * 40-detail.js — 页内双栏详情（契约 v2 §5.2 / §7.3，交互 SD-01～SD-04）。*
      *                                                                    *
@@ -4999,17 +4935,6 @@ window.__ModuleLoader__.load({
                 : props.onClick,
             style: Object.assign(
                 {
-                    display: 'inline-flex',
-                    alignItems: 'center',
-                    justifyContent: 'center',
-                    gap: '6px',
-                    height: '32px',
-                    /* DSH plugin-page buttons: 0 12 padding, 12px radius. */
-                    padding: '0 12px',
-                    borderRadius: '12px',
-                    fontSize: 'calc(var(--sm-fs) - 1px)',
-                    fontWeight: 500,
-                    whiteSpace: 'nowrap',
                     cursor: disabled ? 'not-allowed' : 'pointer',
                     opacity: disabled ? 0.55 : 1,
                 },
@@ -5034,28 +4959,21 @@ window.__ModuleLoader__.load({
     function SmCard(props) {
         return h('section', {
             className: cx('sm-card', props.className),
-            style: Object.assign({ display: 'flex', flexDirection: 'column', gap: '12px', minWidth: 0 }, props.style || {}),
+            style: Object.assign({ gap: '12px' }, props.style || {}),
         }, props.children)
     }
 
     function SmCardTitle(props) {
-        return h('div', { className: 'sm-card-title', style: { display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '8px', minWidth: 0 } },
-            h('span', { style: { fontSize: 'var(--sm-fs)', fontWeight: 500, color: 'var(--dsw-alias-label-primary)' } }, props.children),
+        return h('div', { className: 'sm-card-title sm-row-gap', style: { justifyContent: 'space-between' } },
+            h('span', null, props.children),
             props.extra === undefined || props.extra === null ? null : props.extra)
     }
 
     function SmMetaRow(props) {
-        return h('div', { className: 'sm-meta-row', style: { display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: '12px' } },
-            h('span', { className: 'sm-meta-label', style: { flexShrink: 0, color: 'var(--dsw-alias-label-caption)', fontSize: 'calc(var(--sm-fs) - 2px)' } }, props.label),
+        return h('div', { className: 'sm-meta-row' },
+            h('span', { className: 'sm-meta-label' }, props.label),
             h('span', {
                 className: cx('sm-meta-value', props.mono === true && 'sm-mono'),
-                style: {
-                    minWidth: 0,
-                    textAlign: 'right',
-                    wordBreak: 'break-all',
-                    color: 'var(--dsw-alias-label-primary)',
-                    fontSize: 'calc(var(--sm-fs) - 1px)',
-                },
             }, props.children))
     }
 
@@ -5065,13 +4983,13 @@ window.__ModuleLoader__.load({
         const lines = text === '' ? [''] : text.split('\n')
         return h('div', {
             className: 'sm-code',
-            style: { maxHeight: props.maxHeight || '420px', overflow: 'auto', padding: '12px', borderRadius: '14px', background: 'var(--dsw-alias-bg-base)', border: '1px solid var(--dsw-alias-border-l1)' },
+            style: { maxHeight: props.maxHeight || '420px', padding: '12px' },
         },
-        h('table', { className: 'sm-mono', style: { width: '100%', borderCollapse: 'collapse', fontFamily: SM_MONO, fontSize: 'calc(var(--sm-fs) - 2px)', lineHeight: '20px' } },
+        h('table', { className: 'sm-mono sm-fs-12', style: { width: '100%', borderCollapse: 'collapse', fontFamily: SM_MONO, lineHeight: '20px' } },
             h('tbody', null, lines.map(function (line, index) {
                 return h('tr', { key: index },
-                    h('td', { style: { width: '32px', paddingRight: '12px', textAlign: 'right', verticalAlign: 'top', userSelect: 'none', color: 'var(--dsw-alias-label-caption)' } }, String(index + 1)),
-                    h('td', { style: { whiteSpace: 'pre-wrap', wordBreak: 'break-word', color: 'var(--dsw-alias-label-primary)' } }, line === '' ? ' ' : line))
+                    h('td', { className: 'sm-caption', style: { width: '32px', paddingRight: '12px', textAlign: 'right', verticalAlign: 'top', userSelect: 'none' } }, String(index + 1)),
+                    h('td', { className: 'sm-code-text', style: { whiteSpace: 'pre-wrap', wordBreak: 'break-word' } }, line === '' ? ' ' : line))
             }))))
     }
 
@@ -5219,73 +5137,55 @@ window.__ModuleLoader__.load({
         const card = function (key, children) {
             return h('div', {
                 key: key,
-                style: {
-                    display: 'flex',
-                    flexDirection: 'column',
-                    gap: '12px',
-                    padding: '16px',
-                    borderRadius: '16px',
-                    border: '1px solid var(--dsw-alias-border-l2)',
-                    background: 'var(--dsw-alias-bg-layer-1)',
-                },
+                className: 'sm-card',
+                style: { gap: '12px', padding: '16px' },
             }, children)
         }
         return h('div', {
             className: 'sm-detail sm-detail-skeleton',
             'aria-busy': 'true',
-            style: { display: 'flex', flexDirection: 'column', gap: '24px' },
         },
-            h('div', { style: { display: 'flex', alignItems: 'center', gap: '14px', paddingBottom: '20px', borderBottom: '1px solid var(--dsw-alias-border-l2)' } },
+            h('div', { style: { display: 'flex', alignItems: 'center', gap: '12px', paddingBottom: '20px', borderBottom: '0.5px solid var(--dsw-alias-border-l2)' } },
                 block('56px', '56px', '16px'),
-                h('div', { style: { display: 'flex', flexDirection: 'column', gap: '8px' } }, block('220px', '20px'), block('140px', '14px'))),
+                h('div', { className: 'sm-stack' }, block('220px', '20px'), block('140px', '14px'))),
             h('div', { className: 'sm-detail-body' },
                 h('div', { className: 'sm-detail-main' },
                     card('desc', block('40%', '16px'), block('100%', '96px')),
                     card('content', block('32%', '16px'), block('100%', '240px'))),
                 h('div', { className: 'sm-detail-side' },
                     card('meta', block('50%', '16px'), block('100%', '168px')))),
-            h('div', { style: { color: 'var(--dsw-alias-label-secondary)', fontSize: 'calc(var(--sm-fs) - 1px)' } }, t('state.loading')))
+            h('div', { className: 'sm-fs-13 sm-text-secondary' }, t('state.loading')))
     }
 
     function SmDetailErrorState(props) {
-        return h('div', { className: 'sm-card sm-detail-error', style: { display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '12px', padding: '56px 20px', textAlign: 'center' } },
+        return h('div', { className: 'sm-card sm-detail-error', style: { alignItems: 'center', gap: '12px', padding: '56px 20px', textAlign: 'center' } },
             h('span', { style: { color: 'var(--dsw-alias-state-error-primary)' } }, icon('alert', 28)),
-            h('div', { style: { fontSize: 'var(--sm-fs)', fontWeight: 500, color: 'var(--dsw-alias-label-primary)' } }, t('state.error.detail.title')),
-            h('div', { style: { color: 'var(--dsw-alias-label-secondary)', fontSize: 'calc(var(--sm-fs) - 2px)' } }, props.message ? String(props.message) : t('state.error.detail.body')),
+            h('div', { className: 'sm-card-title' }, t('state.error.detail.title')),
+            h('div', { className: 'sm-fs-12 sm-text-secondary' }, props.message ? String(props.message) : t('state.error.detail.body')),
             h(SmButton, { tone: 'secondary', onClick: props.onRetry }, t('action.retry')))
     }
-
+// ===== 41-detail-views.js =====
+    /* 由原 40-detail.js 行 488-969 拆出。 */
     function SmDetailHeader(props) {
         const skill = props.skill
         const version = smSkillVersion(skill)
-        return h('div', { className: 'sm-detail-head', style: { display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: '16px', flexWrap: 'wrap', paddingBottom: '20px', borderBottom: '1px solid var(--dsw-alias-border-l2)' } },
-            h('div', { style: { display: 'flex', alignItems: 'center', gap: '14px', minWidth: 0 } },
+        return h('div', { className: 'sm-detail-head' },
+            h('div', null,
                 h('div', {
                     className: 'sm-detail-icon',
                     style: {
-                        position: 'relative',
-                        width: '56px',
-                        height: '56px',
-                        flexShrink: 0,
-                        display: 'flex',
-                        alignItems: 'center',
-                        justifyContent: 'center',
-                        borderRadius: '16px',
-                        background: 'var(--dsw-alias-bg-layer-1)',
-                        border: '1px solid var(--dsw-alias-border-l2)',
-                        color: 'var(--dsw-alias-label-secondary)',
                         opacity: smIsDisabled(skill) ? 0.6 : 1,
                     },
                 }, icon(skillIconName(skill), 28)),
                 h('div', { style: { display: 'flex', flexDirection: 'column', gap: '6px', minWidth: 0 } },
-                    h('div', { style: { display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' } },
-                        h('h2', { className: 'sm-mono sm-detail-title', style: { margin: 0, fontSize: 'calc(var(--sm-fs) + 2px)', lineHeight: '1.4', fontWeight: 500, color: 'var(--dsw-alias-label-primary)' } }, props.name),
-                        version !== '' ? h('span', { className: 'sm-mono', style: { color: 'var(--dsw-alias-label-caption)', fontSize: 'calc(var(--sm-fs) - 2px)' } }, version) : null,
+                    h('div', { className: 'sm-detail-title-line' },
+                        h('h2', { className: 'sm-mono sm-detail-title' }, props.name),
+                        version !== '' ? h('span', { className: 'sm-mono sm-detail-ver' }, version) : null,
                         props.badge !== undefined && props.badge !== null ? props.badge : null),
                     props.subtitle !== undefined && props.subtitle !== null && props.subtitle !== ''
-                        ? h('div', { style: { color: 'var(--dsw-alias-label-secondary)', fontSize: 'calc(var(--sm-fs) - 2px)' } }, props.subtitle)
+                        ? h('div', { className: 'sm-fs-12 sm-text-secondary' }, props.subtitle)
                         : null)),
-            h('div', { className: 'sm-detail-actions', style: { display: 'flex', alignItems: 'center', gap: '8px', flexShrink: 0, flexWrap: 'wrap', justifyContent: 'flex-end' } }, props.children))
+            h('div', { className: 'sm-detail-actions', style: { justifyContent: 'flex-end' } }, props.children))
     }
 
     function SmDetailBack(props) {
@@ -5294,7 +5194,7 @@ window.__ModuleLoader__.load({
                 type: 'button',
                 className: 'sm-detail-back',
                 onClick: smGoBackToList,
-                style: { height: '28px', padding: '0 8px', border: 'none', background: 'transparent', color: 'var(--dsw-alias-label-tertiary)', fontSize: 'calc(var(--sm-fs) - 1.5px)', cursor: 'pointer' },
+                style: { fontSize: 'calc(var(--ds-fs) - 2px)' },
             }, '← ' + (props.kind === 'market' ? t('action.back.market') : t('action.back.skills'))),
             props.extra === undefined || props.extra === null ? null : props.extra)
     }
@@ -5458,28 +5358,28 @@ window.__ModuleLoader__.load({
             h('div', { className: 'sm-detail sm-detail-body' },
                 h('div', { className: 'sm-detail-main' },
                     statusNote !== ''
-                        ? h('div', { className: 'sm-banner', style: { padding: '10px 14px', borderRadius: '12px', background: 'var(--dsw-alias-bg-layer-2)', color: 'var(--dsw-alias-label-secondary)', fontSize: 'calc(var(--sm-fs) - 2px)', lineHeight: '1.5' } }, statusNote)
+                        ? h('div', { className: 'sm-banner sm-fs-12', style: { padding: '10px 14px', borderRadius: '12px', background: 'var(--dsw-alias-bg-layer-2)', color: 'var(--dsw-alias-label-secondary)', lineHeight: '1.5' } }, statusNote)
                         : null,
                     h(SmCard, { className: 'sm-detail-desc' },
                         h(SmCardTitle, null, t('detail.descTitle')),
-                        h('div', { style: { color: 'var(--dsw-alias-label-primary)', fontSize: 'var(--sm-fs)', lineHeight: '1.55' } }, description !== '' ? description : '—')),
+                        h('div', { className: 'sm-fs-14', style: { color: 'var(--dsw-alias-label-primary)', lineHeight: '1.55' } }, description !== '' ? description : '—')),
                     whenToUse !== ''
                         ? h(SmCard, { className: 'sm-detail-when' },
                             h(SmCardTitle, null, t('detail.whenToUse')),
-                            h('div', { style: { color: 'var(--dsw-alias-label-secondary)', fontSize: 'calc(var(--sm-fs) - 1px)', lineHeight: '1.5' } }, whenToUse))
+                            h('div', { className: 'sm-fs-13', style: { color: 'var(--dsw-alias-label-secondary)', lineHeight: '1.5' } }, whenToUse))
                         : null,
                     h(SmCard, { className: 'sm-detail-content' },
                         h(SmCardTitle, { extra: previewActions }, 'SKILL.md'),
                         contentState === 'loading'
-                            ? h('div', { style: { color: 'var(--dsw-alias-label-secondary)', fontSize: 'calc(var(--sm-fs) - 1px)' } }, t('state.loading'))
+                            ? h('div', { className: 'sm-fs-13 sm-text-secondary' }, t('state.loading'))
                             : contentState === 'error'
-                                ? h('div', { style: { display: 'flex', flexDirection: 'column', gap: '8px' } },
-                                    h('div', { style: { color: 'var(--dsw-alias-label-secondary)', fontSize: 'calc(var(--sm-fs) - 1px)' } }, contentError),
+                                ? h('div', { className: 'sm-stack' },
+                                    h('div', { className: 'sm-fs-13 sm-text-secondary' }, contentError),
                                     h(SmButton, { tone: 'secondary', style: { alignSelf: 'flex-start' }, onClick: loadContent }, t('action.retry')))
                                 : contentState === 'none'
-                                    ? h('div', { style: { color: 'var(--dsw-alias-label-secondary)', fontSize: 'calc(var(--sm-fs) - 1px)' } }, t('detail.location.builtin'))
+                                    ? h('div', { className: 'sm-fs-13 sm-text-secondary' }, t('detail.location.builtin'))
                                     : content === ''
-                                        ? h('div', { style: { color: 'var(--dsw-alias-label-caption)', fontSize: 'calc(var(--sm-fs) - 1px)' } }, t('detail.content.empty'))
+                                        ? h('div', { className: 'sm-fs-13', style: { color: 'var(--dsw-alias-label-caption)' } }, t('detail.content.empty'))
                                         : h(SmCodeBlock, { text: content.split('\n').slice(0, 40).join('\n'), maxHeight: '360px' }))),
                 h('div', { className: 'sm-detail-side' },
                     h(SmCard, { className: 'sm-detail-meta' },
@@ -5622,7 +5522,7 @@ window.__ModuleLoader__.load({
                 h('div', { className: 'sm-detail-main' },
                     h(SmCard, null,
                         h(SmCardTitle, null, t('market.detailDesc')),
-                        h('div', { style: { color: 'var(--dsw-alias-label-primary)', fontSize: 'var(--sm-fs)', lineHeight: '1.55' } }, smText(smSkillDescription(market), '—'))),
+                        h('div', { className: 'sm-fs-14', style: { color: 'var(--dsw-alias-label-primary)', lineHeight: '1.55' } }, smText(smSkillDescription(market), '—'))),
                     /* 正文卡片始终占位（即使正文为空），保证骨架与内容页结构一致。 */
                     h(SmCard, { className: 'sm-detail-content' },
                         h(SmCardTitle, {
@@ -5641,13 +5541,13 @@ window.__ModuleLoader__.load({
                         }, 'SKILL.md'),
                         content !== ''
                             ? h(SmCodeBlock, { text: content.split('\n').slice(0, 40).join('\n'), maxHeight: '420px' })
-                            : h('div', { style: { color: 'var(--dsw-alias-label-secondary)', fontSize: 'calc(var(--sm-fs) - 1px)' } },
+                            : h('div', { className: 'sm-fs-13 sm-text-secondary' },
                                 contentError !== '' ? t('source.error.fetch') : t('detail.content.empty')))),
                 h('div', { className: 'sm-detail-side' },
                     h(SmCard, null,
                         h(SmCardTitle, {
                             extra: smNumber(market.publishTimestamp, 0) > 0
-                                ? h('span', { style: { fontSize: 'calc(var(--sm-fs) - 3px)', color: 'var(--dsw-alias-label-caption)', whiteSpace: 'nowrap' } }, t('market.published', { time: fmtTime(market.publishTimestamp) }))
+                                ? h('span', { className: 'sm-fs-11', style: { color: 'var(--dsw-alias-label-caption)', whiteSpace: 'nowrap' } }, t('market.published', { time: fmtTime(market.publishTimestamp) }))
                                 : null,
                         }, t('market.source')),
                         h('div', { style: { display: 'flex', flexDirection: 'column', gap: '10px' } },
@@ -5657,7 +5557,7 @@ window.__ModuleLoader__.load({
                             smText(market.license) !== '' ? h(SmMetaRow, { label: t('market.license') }, smText(market.license)) : null,
                             homepage !== ''
                                 ? h(SmMetaRow, { label: t('market.homepage'), mono: true },
-                                    h('span', { className: 'sm-detail-path', style: { maxWidth: '100%' } },
+                                    h('span', { className: 'sm-detail-path' },
                                         h('span', { className: 'sm-mono sm-detail-path-text', 'data-tip': homepage }, homepage),
                                         h('button', {
                                             type: 'button',
@@ -5667,7 +5567,7 @@ window.__ModuleLoader__.load({
                                             onClick: function () { smCopyText(homepage) },
                                         }, icon('copy', 14))))
                                 : null,
-                            smText(market.enginesDsh) !== '' ? h('div', { style: { color: 'var(--dsw-alias-label-secondary)', fontSize: 'calc(var(--sm-fs) - 2px)' } }, t('market.engines', { range: smText(market.enginesDsh) })) : null,
+                            smText(market.enginesDsh) !== '' ? h('div', { className: 'sm-fs-12 sm-text-secondary' }, t('market.engines', { range: smText(market.enginesDsh) })) : null,
 
                             installedNow ? h(SmMetaRow, { label: t('market.installed') }, installedSkill !== null ? fmtTime(smNumber(installedSkill.mtime, 0)) : t('market.installed')) : null)))
             )
@@ -5748,7 +5648,8 @@ window.__ModuleLoader__.load({
         if (detail === null || typeof detail !== 'object') return null
         return h(SmDetailView, { key: smDetailSignature(detail), detail: detail })
     }
-// ===== 50-modals.js =====
+// ===== 50-modals-core.js =====
+    /* 模态状态、toast、tooltip 基础设施 —— 由原 50-modals.js 行 1-545 拆出。 */
     /* ------------------------------------------------------------------ *
      * 50-modals.js — 十类模态、诊断抽屉、toast 与 tooltip。               *
      *                                                                    *
@@ -5758,34 +5659,6 @@ window.__ModuleLoader__.load({
      *   720  edit-content / preview                                      *
      * 无阴影、遮罩透明、Escape 分层、dialogStack 式的最上层优先。         *
      * ------------------------------------------------------------------ */
-
-    const SM_INPUT_STYLE = {
-        width: '100%',
-        height: '32px',
-        boxSizing: 'border-box',
-        padding: '0 10px',
-        borderRadius: '10px',
-        border: '1px solid var(--dsw-alias-border-l2)',
-        background: 'var(--dsw-alias-bg-base)',
-        color: 'var(--dsw-alias-label-primary)',
-        fontSize: 'calc(var(--sm-fs) - 1px)',
-        outline: 'none',
-    }
-    const SM_TEXTAREA_STYLE = {
-        width: '100%',
-        minHeight: '120px',
-        boxSizing: 'border-box',
-        padding: '10px',
-        borderRadius: '10px',
-        border: '1px solid var(--dsw-alias-border-l2)',
-        background: 'var(--dsw-alias-bg-base)',
-        color: 'var(--dsw-alias-label-primary)',
-        fontFamily: SM_MONO,
-        fontSize: 'calc(var(--sm-fs) - 2px)',
-        lineHeight: '20px',
-        resize: 'vertical',
-        outline: 'none',
-    }
 
     const SM_MODAL_WIDTH = {
         'new-skill': 488,
@@ -6047,7 +5920,7 @@ window.__ModuleLoader__.load({
             confirm: true,
             title: t('error.unexpected'),
             footer: h(SmFooter, null),
-        }, h('div', { style: { color: 'var(--dsw-alias-label-secondary)', fontSize: 'calc(var(--sm-fs) - 1px)' } }, t('error.unexpected')))
+        }, h('div', { className: 'sm-fs-13 sm-text-secondary' }, t('error.unexpected')))
     }
 
     /* ------------------------------------------------------------------ *
@@ -6077,13 +5950,11 @@ window.__ModuleLoader__.load({
             : (normalized.tone === 'info' ? 'var(--dsw-alias-label-secondary)' : 'var(--dsw-alias-state-success-primary)')
         return h('div', {
             className: 'sm-toast-host',
-            style: { position: 'fixed', left: '50%', bottom: '20px', transform: 'translateX(-50%)', zIndex: 2100, display: 'flex', flexDirection: 'column', alignItems: 'center', maxWidth: 'min(480px, calc(100vw - 32px))', pointerEvents: 'none' },
         },
         h('div', {
             className: 'sm-toast sm-toast-' + normalized.tone,
             role: 'status',
             'aria-live': 'polite',
-            style: { display: 'flex', alignItems: 'center', gap: '8px', maxWidth: '100%', padding: '10px 14px', borderRadius: '12px', background: 'var(--dsw-alias-bg-layer-3)', color: 'var(--dsw-alias-label-primary)', fontSize: 'calc(var(--sm-fs) - 1px)', lineHeight: '18px', boxShadow: 'none', pointerEvents: 'auto' },
         },
         h('span', { style: { flexShrink: 0, color: toneColor } }, icon(normalized.tone === 'error' ? 'alert' : (normalized.tone === 'info' ? 'info' : 'check'), 16)),
         h('span', { style: { minWidth: 0, wordBreak: 'break-word' } }, normalized.message),
@@ -6098,7 +5969,7 @@ window.__ModuleLoader__.load({
                         smDismissToast(normalized.id)
                     }
                 },
-                style: { flexShrink: 0, height: '24px', padding: '0 6px', border: 'none', background: 'transparent', color: 'var(--dsw-alias-label-primary)', fontSize: 'calc(var(--sm-fs) - 1px)', fontWeight: 500, cursor: 'pointer' },
+                style: { height: '24px' },
             }, normalized.actionLabel)
             : null))
     }
@@ -6112,23 +5983,39 @@ window.__ModuleLoader__.load({
     }
 
     /* ------------------------------------------------------------------ *
-     * Tooltip：反色、300ms、元素 id 固定 `tooltip`（选择器 #tooltip）。    *
+     * Tooltip：反色、300ms、`data-tooltip` 标记（样式走 `.sm-tooltip`）。 *
      * ------------------------------------------------------------------ */
 
-    const smTooltipState = { timer: null, target: null, label: '', node: null }
+    const smTooltipState = { timer: null, target: null, label: '', node: null, root: null }
+
+    /** 归属根引用在创建浮层时保存；显示时只读它，不重新 querySelector。 */
+    function smTooltipFontSize() {
+        const root = smTooltipState.root
+        if (root !== null && root !== undefined && typeof getComputedStyle === 'function') {
+            const value = getComputedStyle(root).getPropertyValue('--ds-fs').trim()
+            if (value !== '') return value
+        }
+        return '14px'
+    }
+
+    /** 每次显示前调用：宿主字号在会话中变化后，浮层立即跟随（§3.2 / §3.7）。 */
+    function smSyncTooltipFontSize(node) {
+        if (node === null || node === undefined || node.style === null || node.style === undefined) return
+        node.style.setProperty('--ds-fs', smTooltipFontSize())
+    }
 
     function smEnsureTooltipNode() {
         if (typeof document === 'undefined' || document === null) return null
         if (smTooltipState.node !== null && document.body.contains(smTooltipState.node)) return smTooltipState.node
         const node = document.createElement('div')
-        node.id = 'tooltip'
+        node.setAttribute('data-tooltip', '')
         node.className = 'sm-tooltip'
         node.setAttribute('role', 'tooltip')
-        node.style.cssText = 'position:fixed;left:0;top:0;z-index:2000;max-width:290px;padding:6px 10px;border-radius:var(--dsw-radius-sm);border:none;background:var(--dsw-alias-label-primary);color:var(--dsw-alias-bg-layer-3);font-size:calc(var(--sm-fs) - 4px);line-height:1.35;box-shadow:none;pointer-events:none;opacity:0;visibility:hidden;white-space:normal;'
-        const root = document.querySelector('.sm-root')
-        let scale = ''
-        if (root !== null && typeof getComputedStyle === 'function') scale = getComputedStyle(root).getPropertyValue('--sm-fs').trim()
-        node.style.setProperty('--sm-fs', scale !== '' ? scale : '14px')
+        /* 视觉样式全部由 `.sm-tooltip` 提供（§6.7）：这里只保留定位与初始隐藏态。 */
+        node.style.cssText = 'position:fixed;left:0;top:0;z-index:2000;opacity:0;visibility:hidden;'
+        /* 只在此处记录归属根；后续显示复用该引用。 */
+        smTooltipState.root = document.querySelector('.sm-root')
+        smSyncTooltipFontSize(node)
         document.body.appendChild(node)
         smTooltipState.node = node
         return node
@@ -6166,6 +6053,44 @@ window.__ModuleLoader__.load({
         smHideTooltip()
     }
 
+    const SM_TOOLTIP_GAP = 8
+    const SM_TOOLTIP_MARGIN = 8
+
+    function smClampTooltip(value, min, max) {
+        if (max < min) return min
+        if (value < min) return min
+        if (value > max) return max
+        return value
+    }
+
+    /** 候选位置：主方向按锚点自然偏移，交叉方向夹在视口内。 */
+    function smTooltipCandidate(side, anchor, tip, viewWidth, viewHeight) {
+        let left
+        let top
+        if (side === 'top' || side === 'bottom') {
+            left = smClampTooltip(anchor.left + anchor.width / 2 - tip.width / 2, SM_TOOLTIP_MARGIN, viewWidth - tip.width - SM_TOOLTIP_MARGIN)
+            top = side === 'top' ? anchor.top - tip.height - SM_TOOLTIP_GAP : anchor.bottom + SM_TOOLTIP_GAP
+        } else {
+            top = smClampTooltip(anchor.top + anchor.height / 2 - tip.height / 2, SM_TOOLTIP_MARGIN, viewHeight - tip.height - SM_TOOLTIP_MARGIN)
+            left = side === 'right' ? anchor.right + SM_TOOLTIP_GAP : anchor.left - tip.width - SM_TOOLTIP_GAP
+        }
+        return { left: left, top: top }
+    }
+
+    /** 四边距视口至少 8px 才算放得下。 */
+    function smTooltipFits(candidate, tip, viewWidth, viewHeight) {
+        return candidate.left >= SM_TOOLTIP_MARGIN &&
+            candidate.top >= SM_TOOLTIP_MARGIN &&
+            candidate.left + tip.width <= viewWidth - SM_TOOLTIP_MARGIN &&
+            candidate.top + tip.height <= viewHeight - SM_TOOLTIP_MARGIN
+    }
+
+    function smTooltipVisibleArea(candidate, tip, viewWidth, viewHeight) {
+        const width = Math.max(0, Math.min(candidate.left + tip.width, viewWidth) - Math.max(candidate.left, 0))
+        const height = Math.max(0, Math.min(candidate.top + tip.height, viewHeight) - Math.max(candidate.top, 0))
+        return width * height
+    }
+
     function smPlaceTooltip() {
         const target = smTooltipState.target
         if (target === null || target === undefined || typeof target.getBoundingClientRect !== 'function') {
@@ -6178,19 +6103,44 @@ window.__ModuleLoader__.load({
         }
         const node = smEnsureTooltipNode()
         if (node === null) return
+        /* 显示路径上同步字号：不能只在创建时读一次。 */
+        smSyncTooltipFontSize(node)
         node.textContent = smTooltipState.label
         node.style.visibility = 'hidden'
         node.style.opacity = '1'
         const rect = target.getBoundingClientRect()
         const tipRect = node.getBoundingClientRect()
         const viewWidth = typeof window !== 'undefined' && window !== null ? window.innerWidth : 0
-        let left = rect.left + rect.width / 2 - tipRect.width / 2
-        let top = rect.top - tipRect.height - 8
-        if (left < 8) left = 8
-        if (viewWidth > 0 && left + tipRect.width > viewWidth - 8) left = viewWidth - tipRect.width - 8
-        if (top < 8) top = rect.bottom + 8
-        node.style.left = Math.round(left) + 'px'
-        node.style.top = Math.round(top) + 'px'
+        const viewHeight = typeof window !== 'undefined' && window !== null ? window.innerHeight : 0
+        if (viewWidth <= 0 || viewHeight <= 0) {
+            node.style.left = Math.round(rect.left + rect.width / 2 - tipRect.width / 2) + 'px'
+            node.style.top = Math.round(rect.top - tipRect.height - SM_TOOLTIP_GAP) + 'px'
+            node.style.visibility = 'visible'
+            return
+        }
+        const sides = ['top', 'bottom', 'right', 'left']
+        let chosen = null
+        for (let index = 0; index < sides.length; index += 1) {
+            const candidate = smTooltipCandidate(sides[index], rect, tipRect, viewWidth, viewHeight)
+            if (smTooltipFits(candidate, tipRect, viewWidth, viewHeight)) {
+                chosen = candidate
+                break
+            }
+        }
+        if (chosen === null) {
+            /* 四向都放不下时选可见面积最大的一侧；超出的文字由 CSS max-width 折行/滚动承接。 */
+            let bestArea = -1
+            for (let index = 0; index < sides.length; index += 1) {
+                const candidate = smTooltipCandidate(sides[index], rect, tipRect, viewWidth, viewHeight)
+                const area = smTooltipVisibleArea(candidate, tipRect, viewWidth, viewHeight)
+                if (area > bestArea) {
+                    bestArea = area
+                    chosen = candidate
+                }
+            }
+        }
+        node.style.left = Math.round(chosen.left) + 'px'
+        node.style.top = Math.round(chosen.top) + 'px'
         node.style.visibility = 'visible'
     }
 
@@ -6227,6 +6177,7 @@ window.__ModuleLoader__.load({
                     smTooltipState.node.parentNode.removeChild(smTooltipState.node)
                 }
                 smTooltipState.node = null
+                smTooltipState.root = null
             }
         }, [])
         return null
@@ -6243,7 +6194,8 @@ window.__ModuleLoader__.load({
     function renderTooltipLayer() {
         return h(Fragment, null, h(SmTooltipLifecycle), h(SmTooltipGuard))
     }
-
+// ===== 51-modals-common.js =====
+    /* 通用弹窗组件与新建/导入流程 —— 由原 50-modals.js 行 546-954 拆出。 */
     /* ------------------------------------------------------------------ *
      * 弹窗外壳与表单原语。                                               *
      * ------------------------------------------------------------------ */
@@ -6293,15 +6245,14 @@ window.__ModuleLoader__.load({
             }
         }
 
-        /* 每档都不超过视口（两侧各留 16px），窄窗口下跟着 100vw - 32px 收缩。 */
-        const widthStyle = 'min(' + String(width) + 'px, calc(100vw - 32px))'
+        /* 宽度档由 `.sm-dialog*` 负责；这里只保留视口高度上限。 */
         const maxHeightStyle = width === 720
             ? 'min(720px, calc(100vh - 96px))'
-            : 'calc(100vh - 48px)'
+            : 'calc(100vh - 96px)'
 
         return h('div', {
             className: 'sm-dialog-mask sm-modal-backdrop',
-            style: { position: 'fixed', inset: 0, zIndex: 1300 + layerIndex * 2, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '16px', background: 'var(--dsw-alias-bg-mask-1, rgba(0, 0, 0, 0.5))' },
+            style: { zIndex: 1300 + layerIndex * 2 },
             onMouseDown: function (event) {
                 if (event.target !== event.currentTarget) return
                 if (props.isTop !== true) return
@@ -6317,28 +6268,15 @@ window.__ModuleLoader__.load({
             'aria-hidden': props.isTop === true ? undefined : 'true',
             onKeyDown: onKeyDown,
             style: {
-                width: widthStyle,
-                maxWidth: 'calc(100vw - 32px)',
                 maxHeight: maxHeightStyle,
-                boxSizing: 'border-box',
-                display: 'flex',
-                flexDirection: 'column',
-                overflow: 'hidden',
-                borderRadius: confirm ? 'var(--dsw-radius-xl)' : 'var(--dsw-radius-panel)',
-                border: '.5px solid var(--dsw-alias-border-inverted)',
-                background: 'var(--dsw-alias-bg-layer-1)',
-                boxShadow: 'none',
                 pointerEvents: props.isTop === true ? 'auto' : 'none',
             },
         },
-        h('div', {
-            className: 'sm-dialog-head',
-            style: { display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: '12px', padding: confirm ? '20px 20px 0' : '20px 24px 0' },
-        },
+        h('div', { className: 'sm-dialog-head' },
         h('div', { style: { display: 'flex', flexDirection: 'column', gap: '4px', minWidth: 0 } },
-            h('h3', { style: { margin: 0, fontSize: 'calc(var(--sm-fs) + 1px)', lineHeight: '1.4', fontWeight: 500, color: 'var(--dsw-alias-label-primary)' } }, props.title),
+            h('h3', { className: 'sm-dialog-title' }, props.title),
             props.subtitle !== undefined && props.subtitle !== null && props.subtitle !== ''
-                ? h('div', { style: { color: 'var(--dsw-alias-label-secondary)', fontSize: 'calc(var(--sm-fs) - 2px)' } }, props.subtitle)
+                ? h('div', { className: 'sm-dialog-sub' }, props.subtitle)
                 : null),
         confirm
             ? null
@@ -6351,13 +6289,12 @@ window.__ModuleLoader__.load({
             }, icon('x', 16))),
         h('div', {
             className: 'sm-dialog-body',
-            style: { flex: '1 1 auto', minHeight: 0, overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: confirm ? '12px' : '16px', padding: confirm ? '12px 20px 12px' : '38px 24px 20px' },
+            style: { display: 'flex', flexDirection: 'column', gap: confirm ? '12px' : '16px' },
         }, props.children),
         props.footer === undefined || props.footer === null
             ? null
             : h('div', {
                 className: 'sm-dialog-foot',
-                style: { display: 'flex', justifyContent: 'flex-end', gap: '8px', padding: confirm ? '0 20px 20px' : '12px 24px', borderTop: confirm ? 'none' : '1px solid var(--dsw-alias-border-l2)', flexShrink: 0 },
             }, props.footer)))
     }
 
@@ -6368,32 +6305,79 @@ window.__ModuleLoader__.load({
     }
 
     function SmField(props) {
+        const label = props.label === undefined || props.label === null ? '' : String(props.label)
+        /* 给每个子控件补可访问名称：SmField 的标签是视觉文本，不自动关联控件。 */
+        const labelled = React.Children.map(props.children, function (child) {
+            if (!React.isValidElement(child)) return child
+            const childProps = child.props === null || child.props === undefined ? {} : child.props
+            if (childProps['aria-label'] !== undefined || childProps['aria-labelledby'] !== undefined) return child
+            return React.cloneElement(child, { 'aria-label': label })
+        })
         return h('div', { className: 'sm-field', style: { display: 'flex', flexDirection: 'column', gap: '6px' } },
             h('div', { style: { display: 'flex', alignItems: 'baseline', justifyContent: 'space-between', gap: '8px' } },
-                h('span', { style: { fontSize: 'calc(var(--sm-fs) - 1px)', fontWeight: 500, color: 'var(--dsw-alias-label-primary)' } }, props.label),
-                props.hint ? h('span', { style: { fontSize: 'calc(var(--sm-fs) - 3px)', color: 'var(--dsw-alias-label-caption)' } }, props.hint) : null),
-            props.children,
-            props.error ? h('div', { className: 'sm-form-error', style: { fontSize: 'calc(var(--sm-fs) - 2px)', color: 'var(--dsw-alias-state-error-primary)' } }, props.error) : null)
+                h('label', { className: 'sm-form-label' }, label),
+                props.hint ? h('span', { className: 'sm-form-hint' }, props.hint) : null),
+            labelled,
+            props.error ? h('div', { className: 'sm-form-error', role: 'alert' }, props.error) : null)
+    }
+
+    /**
+     * 技能页与市场页共用的「搜索 + 排序 + 右侧操作」工具栏行。
+     * 两页只传数据与回调，结构与样式只有这一份实现。
+     */
+    function SmSearchToolbar(props) {
+        const search = String(props.search === undefined || props.search === null ? '' : props.search)
+        const options = Array.isArray(props.sortOptions) ? props.sortOptions : []
+        return h('div', { className: 'sm-toolbar' },
+            h('div', { className: 'sm-search' },
+                icon('search', 16),
+                h('input', {
+                    className: 'sm-search-input',
+                    type: 'search',
+                    value: search,
+                    placeholder: props.searchPlaceholder,
+                    'aria-label': props.searchPlaceholder,
+                    spellCheck: false,
+                    disabled: props.searchDisabled === true,
+                    onChange: props.onSearchChange,
+                }),
+                search !== ''
+                    ? h('button', {
+                        type: 'button',
+                        className: 'sm-search-clear',
+                        'aria-label': props.clearLabel,
+                        'data-tip': props.clearLabel,
+                        onClick: props.onSearchClear,
+                    }, icon('x', 16))
+                    : null),
+            h('select', {
+                className: 'sm-select',
+                value: props.sortValue,
+                'aria-label': props.sortLabel,
+                disabled: props.sortDisabled === true,
+                onChange: props.onSortChange,
+            }, options.map(function (option) {
+                return h('option', { key: option.value, value: option.value }, option.label)
+            })),
+            props.children)
     }
 
     function SmBanner(props) {
         const tone = props.tone === undefined || props.tone === null ? 'info' : String(props.tone)
-        const color = tone === 'error'
-            ? 'var(--dsw-alias-state-error-primary)'
-            : (tone === 'warn' ? 'var(--dsw-alias-state-warn-primary)' : (tone === 'ok' ? 'var(--dsw-alias-state-success-primary)' : 'var(--dsw-alias-label-secondary)'))
         return h('div', {
             className: 'sm-banner sm-banner-' + tone,
-            style: { display: 'flex', flexDirection: 'column', gap: '4px', padding: '10px 14px', borderRadius: '12px', background: 'var(--dsw-alias-bg-layer-2)', border: '1px solid ' + color, color: 'var(--dsw-alias-label-secondary)', fontSize: 'calc(var(--sm-fs) - 2px)', lineHeight: '1.5' },
+            style: { display: 'flex', flexDirection: 'column', alignItems: 'stretch', gap: '4px' },
         }, props.children)
     }
 
     function SmSegmented(props) {
         const options = Array.isArray(props.options) ? props.options : []
-        return h('div', { role: 'tablist', style: { display: 'inline-flex', gap: '2px', padding: '2px', borderRadius: '14px', background: 'var(--dsw-alias-bg-layer-3)', alignSelf: 'flex-start' } },
+        return h('div', { role: 'tablist', className: 'sm-segmented', style: { alignSelf: 'flex-start' } },
             options.map(function (option) {
                 const selected = props.value === option.value
                 return h('button', {
                     key: option.value,
+                    className: 'sm-seg-tab',
                     type: 'button',
                     role: 'tab',
                     'aria-selected': selected,
@@ -6402,19 +6386,20 @@ window.__ModuleLoader__.load({
                         if (option.disabled === true) return
                         if (typeof props.onChange === 'function') props.onChange(option.value)
                     },
-                    style: { height: '28px', padding: '0 10px', border: 'none', borderRadius: '14px', cursor: option.disabled === true ? 'not-allowed' : 'pointer', background: selected ? 'var(--dsw-alias-interactive-bg-hover)' : 'transparent', color: selected ? 'var(--dsw-alias-label-primary)' : 'var(--dsw-alias-label-tertiary)', fontSize: 'calc(var(--sm-fs) - 1px)', fontWeight: selected ? 500 : 400, opacity: option.disabled === true ? 0.5 : 1 },
+                    style: { cursor: option.disabled === true ? 'not-allowed' : 'pointer', opacity: option.disabled === true ? 0.5 : 1 },
                 }, option.label)
             }))
     }
 
     function SmRadioOptions(props) {
         const options = Array.isArray(props.options) ? props.options : []
-        return h('div', { style: { display: 'flex', flexDirection: 'column', gap: '6px' } },
+        return h('div', { className: 'sm-radio-group' },
             options.map(function (option) {
                 const selected = props.value === option.value
                 return h('label', {
                     key: option.value,
-                    style: { display: 'flex', alignItems: 'flex-start', gap: '8px', padding: '8px 10px', borderRadius: '10px', border: '1px solid ' + (selected ? 'var(--dsw-alias-border-inverted)' : 'var(--dsw-alias-border-l2)'), background: selected ? 'var(--dsw-alias-interactive-bg-hover)' : 'var(--dsw-alias-bg-base)', color: 'var(--dsw-alias-label-primary)', fontSize: 'calc(var(--sm-fs) - 1px)', opacity: option.disabled === true ? 0.5 : 1, cursor: option.disabled === true ? 'not-allowed' : 'pointer' },
+                    className: cx('sm-radio', selected && 'sm-active'),
+                    style: { opacity: option.disabled === true ? 0.5 : 1, cursor: option.disabled === true ? 'not-allowed' : 'pointer' },
                 },
                 h('input', {
                     type: 'radio',
@@ -6425,11 +6410,10 @@ window.__ModuleLoader__.load({
                     onChange: function () {
                         if (option.disabled !== true && typeof props.onChange === 'function') props.onChange(option.value)
                     },
-                    style: { marginTop: '2px', flexShrink: 0 },
                 }),
                 h('span', { style: { display: 'flex', flexDirection: 'column', gap: '2px', minWidth: 0 } },
                     h('span', { style: { wordBreak: 'break-word' } }, option.label),
-                    option.hint ? h('span', { style: { color: 'var(--dsw-alias-label-caption)', fontSize: 'calc(var(--sm-fs) - 3px)' } }, option.hint) : null))
+                    option.hint ? h('span', { className: 'sm-form-hint' }, option.hint) : null))
             }))
     }
 
@@ -6515,36 +6499,36 @@ window.__ModuleLoader__.load({
         h(SmField, { label: t('form.name'), hint: t('form.name.placeholder'), error: nameError },
             h('input', {
                 type: 'text',
-                className: 'sm-mono',
+                className: 'sm-mono sm-input',
                 value: name,
                 placeholder: t('form.name.placeholder'),
                 onChange: function (event) { setName(event.target.value); setServerError('') },
-                style: Object.assign({}, SM_INPUT_STYLE, { fontFamily: SM_MONO }),
             })),
         h(SmField, { label: t('form.description') },
             h('input', {
                 type: 'text',
+                className: 'sm-input',
                 value: description,
                 placeholder: t('form.description.placeholder'),
                 onChange: function (event) { setDescription(event.target.value); setServerError('') },
-                style: SM_INPUT_STYLE,
             })),
         h(SmField, { label: t('form.whenToUse') },
             h('input', {
                 type: 'text',
+                className: 'sm-input',
                 value: whenToUse,
                 onChange: function (event) { setWhenToUse(event.target.value) },
-                style: SM_INPUT_STYLE,
             })),
         h(SmField, { label: t('form.saveTo') },
             h(SmSegmented, { value: location, onChange: setLocation, options: smSaveTargets() }),
-            projectBlocked ? h('div', { style: { color: 'var(--dsw-alias-label-caption)', fontSize: 'calc(var(--sm-fs) - 3px)' } }, t('form.projectUnavailable')) : null),
+            projectBlocked ? h('div', { className: 'sm-form-hint' }, t('form.projectUnavailable')) : null),
         h(SmField, { label: t('form.body') },
             h('textarea', {
+                className: 'sm-textarea sm-mono',
                 value: body,
                 placeholder: t('form.body.placeholder'),
                 onChange: function (event) { setBody(event.target.value); setServerError('') },
-                style: Object.assign({}, SM_TEXTAREA_STYLE, { minHeight: '140px' }),
+                style: { minHeight: '140px' },
             })))
     }
 
@@ -6639,19 +6623,20 @@ window.__ModuleLoader__.load({
                         type: 'button',
                         className: 'sm-link-btn',
                         onClick: function () { void parse() },
-                        style: { height: '24px', padding: '0 6px', border: 'none', background: 'transparent', color: 'var(--dsw-alias-label-primary)', fontSize: 'calc(var(--sm-fs) - 2px)', cursor: 'pointer' },
+                        style: { height: '24px' },
                     }, parsing ? t('state.validating') : t('action.parse')),
                 },
                 h('textarea', {
+                    className: 'sm-textarea sm-mono',
                     value: content,
                     placeholder: t('form.import.paste.placeholder'),
                     onChange: function (event) { setContent(event.target.value); setParsed(null); setParseError('') },
-                    style: Object.assign({}, SM_TEXTAREA_STYLE, { minHeight: '160px' }),
+                    style: { minHeight: '160px' },
                 })),
                 parseError !== '' ? h(SmBanner, { tone: 'error' }, parseError) : null,
                 parsed !== null
                     ? h(SmBanner, { tone: 'ok' },
-                        h('span', { style: { color: 'var(--dsw-alias-state-success-primary)', fontWeight: 500 } }, t('form.import.parsed')),
+                        h('span', { className: 'sm-banner-title', style: { color: 'var(--dsw-alias-state-success-primary)' } }, t('form.import.parsed')),
                         h('span', null, t('form.name') + ': ' + smText(parsed.name, '—')),
                         h('span', null, t('form.description') + ': ' + smText(parsed.description, '—')),
                         typeof parsed.files === 'number' ? h('span', null, t('form.import.preview', { count: parsed.files })) : null)
@@ -6660,16 +6645,16 @@ window.__ModuleLoader__.load({
                 h(SmField, { label: t('form.import.dir') },
                     h('input', {
                         type: 'text',
-                        className: 'sm-mono',
+                        className: 'sm-mono sm-input',
                         value: dirPath,
                         placeholder: t('form.import.dir.placeholder'),
                         onChange: function (event) { setDirPath(event.target.value) },
-                        style: Object.assign({}, SM_INPUT_STYLE, { fontFamily: SM_MONO }),
                     }))),
         h(SmField, { label: t('form.saveTo') },
             h(SmSegmented, { value: location, onChange: setLocation, options: smSaveTargets() })))
     }
-
+// ===== 52-modals-install.js =====
+    /* 安装与更新流程 —— 由原 50-modals.js 行 955-1379 拆出。 */
     /* ------------------------------------------------------------------ *
      * 3. 安装技能（488）                                                 *
      * ------------------------------------------------------------------ */
@@ -6842,7 +6827,7 @@ window.__ModuleLoader__.load({
 
         if (loading) {
             return h(SmDialogFrame, { modalId: props.modalId, isTop: props.isTop, layerIndex: props.layerIndex, width: 488, title: t('install.title'), footer: h(SmFooter, null) },
-                h('div', { style: { color: 'var(--dsw-alias-label-secondary)', fontSize: 'calc(var(--sm-fs) - 1px)' } }, t('state.loading')))
+                h('div', { className: 'sm-fs-13 sm-text-secondary' }, t('state.loading')))
         }
         if (market === null) {
             return h(SmDialogFrame, { modalId: props.modalId, isTop: props.isTop, layerIndex: props.layerIndex, width: 488, title: t('install.title'), footer: h(SmFooter, null, h(SmButton, { tone: 'secondary', onClick: function () { setReloadTick(function (value) { return value + 1 }) } }, t('action.retry'))) },
@@ -6867,7 +6852,7 @@ window.__ModuleLoader__.load({
         error !== '' ? h(SmBanner, { tone: 'error' }, error) : null,
         confirmCancel
             ? h(SmBanner, { tone: 'warn' },
-                h('span', { style: { fontWeight: 500 } }, t('install.cancelConfirm.title')),
+                h('span', { className: 'sm-banner-title' }, t('install.cancelConfirm.title')),
                 h('span', null, t('install.cancelConfirm.body')),
                 h('div', { style: { display: 'flex', gap: '8px', marginTop: '4px' } },
                     h(SmButton, { tone: 'secondary', style: { height: '28px' }, onClick: function () { setConfirmCancel(false) } }, t('action.cancel')),
@@ -6876,10 +6861,10 @@ window.__ModuleLoader__.load({
         h(SmField, { label: t('install.target') },
             h(SmSegmented, { value: location, onChange: function (value) { setLocation(value); setConflictChoice('') }, options: smSaveTargets() })),
         h(SmField, { label: t('install.version') },
-            h('div', { className: 'sm-mono', style: { color: 'var(--dsw-alias-label-primary)', fontSize: 'calc(var(--sm-fs) - 1px)' } }, version === '' ? '—' : (version.charAt(0) === 'v' ? version : 'v' + version))),
+            h('div', { className: 'sm-mono sm-fs-13 sm-text-primary' }, version === '' ? '—' : (version.charAt(0) === 'v' ? version : 'v' + version))),
         conflict
             ? h(SmBanner, { tone: 'warn' },
-                h('span', { style: { fontWeight: 500 } }, t('install.conflict')),
+                h('span', { className: 'sm-banner-title' }, t('install.conflict')),
                 h(SmRadioOptions, {
                     name: 'install-conflict',
                     value: conflictChoice,
@@ -6892,10 +6877,10 @@ window.__ModuleLoader__.load({
                 h(SmButton, { tone: 'secondary', style: { alignSelf: 'flex-start', height: '28px' }, onClick: changeLocation }, t('install.conflict.changeTarget')))
             : null,
         busy
-            ? h('div', { role: 'progressbar', 'aria-busy': 'true', style: { display: 'flex', flexDirection: 'column', gap: '6px', padding: '10px 12px', borderRadius: '12px', background: 'var(--dsw-alias-bg-base)', border: '1px solid var(--dsw-alias-border-l1)' } },
-                h('span', { style: { color: 'var(--dsw-alias-label-secondary)', fontSize: 'calc(var(--sm-fs) - 2px)' } }, stageLabel),
+            ? h('div', { role: 'progressbar', 'aria-busy': 'true', className: 'sm-note neutral', style: { display: 'flex', flexDirection: 'column', gap: '6px' } },
+                h('span', { className: 'sm-fs-12 sm-text-secondary' }, stageLabel),
                 h('div', { style: { width: '100%', height: '6px', borderRadius: '999px', background: 'var(--dsw-alias-bg-layer-3)', overflow: 'hidden' } },
-                    h('div', { style: { width: stage === 0 ? '40%' : '82%', height: '100%', background: 'var(--dsw-alias-label-primary)', transition: 'width 220ms' } })))
+                    h('div', { style: { width: stage === 0 ? '40%' : '82%', height: '100%', background: 'var(--dsw-alias-label-primary)', transition: 'width 180ms' } })))
             : null)
     }
 
@@ -7035,7 +7020,7 @@ window.__ModuleLoader__.load({
         if (error !== '') body.push(h(SmBanner, { key: 'error', tone: 'error' }, error))
         if (confirmCancel) {
             body.push(h(SmBanner, { key: 'cancel', tone: 'warn' },
-                h('span', { style: { fontWeight: 500 } }, t('update.cancelConfirm.title')),
+                h('span', { className: 'sm-banner-title' }, t('update.cancelConfirm.title')),
                 h('span', null, t('update.cancelConfirm.body')),
                 h('div', { style: { display: 'flex', gap: '8px', marginTop: '4px' } },
                     h(SmButton, { key: 'keep', tone: 'secondary', style: { height: '28px' }, onClick: function () { setConfirmCancel(false) } }, t('action.cancel')),
@@ -7044,42 +7029,42 @@ window.__ModuleLoader__.load({
 
         if (phase === 'confirm') {
             if (targets.length === 0) {
-                body.push(h('div', { key: 'none', style: { color: 'var(--dsw-alias-label-secondary)', fontSize: 'calc(var(--sm-fs) - 1px)' } }, t('update.none')))
+                body.push(h('div', { key: 'none', className: 'sm-fs-13 sm-text-secondary' }, t('update.none')))
             } else if (!batch) {
                 const skill = targets[0]
                 body.push(h('div', { key: 'single', style: { display: 'flex', flexDirection: 'column', gap: '10px' } },
-                    h('div', { style: { display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '12px', padding: '12px 14px', borderRadius: '12px', background: 'var(--dsw-alias-bg-base)', border: '1px solid var(--dsw-alias-border-l1)' } },
-                        h('span', { className: 'sm-mono', style: { minWidth: 0, wordBreak: 'break-all', color: 'var(--dsw-alias-label-primary)', fontSize: 'calc(var(--sm-fs) - 1px)' } }, smText(skill.name)),
-                        h('span', { className: 'sm-mono', style: { flexShrink: 0, color: 'var(--dsw-alias-label-secondary)', fontSize: 'calc(var(--sm-fs) - 2px)' } },
+                    h('div', { style: { display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '12px', padding: '12px 14px', borderRadius: '12px', background: 'var(--dsw-alias-bg-base)', border: '0.5px solid var(--dsw-alias-border-l1)' } },
+                        h('span', { className: 'sm-mono sm-fs-13', style: { minWidth: 0, wordBreak: 'break-all', color: 'var(--dsw-alias-label-primary)' } }, smText(skill.name)),
+                        h('span', { className: 'sm-mono sm-fs-12', style: { flexShrink: 0, color: 'var(--dsw-alias-label-secondary)' } },
                             t('update.versionChange', {
                                 current: smSkillVersion(skill) === '' ? '—' : smSkillVersion(skill),
                                 next: (smSkillUpdateVersion(skill).charAt(0) === 'v' ? '' : 'v') + smSkillUpdateVersion(skill),
                             }))),
-                    h('div', { style: { color: 'var(--dsw-alias-label-secondary)', fontSize: 'calc(var(--sm-fs) - 2px)' } }, t('market.source') + ': ' + smText(skill.sourceName, smText(skill.sourceId, '—'))),
+                    h('div', { className: 'sm-fs-12 sm-text-secondary' }, t('market.source') + ': ' + smText(skill.sourceName, smText(skill.sourceId, '—'))),
                     smSkillLocalModified(skill) ? h(SmBanner, { tone: 'warn' }, t('update.localModified')) : null,
-                    h('div', { style: { color: 'var(--dsw-alias-label-caption)', fontSize: 'calc(var(--sm-fs) - 2px)' } }, t('update.backupNote'))))
+                    h('div', { className: 'sm-caption' }, t('update.backupNote'))))
             } else {
                 body.push(h('div', { key: 'batch', style: { display: 'flex', flexDirection: 'column', gap: '10px' } },
-                    h('div', { style: { color: 'var(--dsw-alias-label-primary)', fontSize: 'var(--sm-fs)' } }, t('update.all.body', { count: targets.length })),
+                    h('div', { className: 'sm-fs-14 sm-text-primary' }, t('update.all.body', { count: targets.length })),
                     modifiedCount > 0 ? h(SmBanner, { tone: 'warn' }, t('update.all.modified', { count: modifiedCount })) : null,
                     h('div', { style: { display: 'flex', flexDirection: 'column', gap: '6px', maxHeight: '220px', overflowY: 'auto' } },
                         targets.map(function (skill) {
                             return h('div', { key: smText(skill.id, smText(skill.name)), style: { display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '12px', padding: '8px 10px', borderRadius: '10px', background: 'var(--dsw-alias-bg-base)' } },
-                                h('span', { className: 'sm-mono', style: { minWidth: 0, wordBreak: 'break-all', color: 'var(--dsw-alias-label-primary)', fontSize: 'calc(var(--sm-fs) - 2px)' } }, smText(skill.name)),
-                                h('span', { className: 'sm-mono', style: { flexShrink: 0, color: 'var(--dsw-alias-label-caption)', fontSize: 'calc(var(--sm-fs) - 3px)' } }, 'v' + smSkillUpdateVersion(skill)))
+                                h('span', { className: 'sm-mono sm-fs-12', style: { minWidth: 0, wordBreak: 'break-all', color: 'var(--dsw-alias-label-primary)' } }, smText(skill.name)),
+                                h('span', { className: 'sm-mono sm-fs-11', style: { flexShrink: 0, color: 'var(--dsw-alias-label-caption)' } }, 'v' + smSkillUpdateVersion(skill)))
                         })),
-                    h('div', { style: { color: 'var(--dsw-alias-label-caption)', fontSize: 'calc(var(--sm-fs) - 2px)' } }, t('update.backupNote'))))
+                    h('div', { className: 'sm-caption' }, t('update.backupNote'))))
             }
         } else if (phase === 'running') {
             body.push(h('div', { key: 'progress', style: { display: 'flex', flexDirection: 'column', gap: '8px' } },
-                h('div', { style: { color: 'var(--dsw-alias-label-secondary)', fontSize: 'calc(var(--sm-fs) - 1px)' } }, t('update.progress', { done: done, total: targets.length })),
+                h('div', { className: 'sm-fs-13 sm-text-secondary' }, t('update.progress', { done: done, total: targets.length })),
                 h('div', { role: 'progressbar', style: { width: '100%', height: '6px', borderRadius: '999px', background: 'var(--dsw-alias-bg-layer-3)', overflow: 'hidden' } },
-                    h('div', { style: { width: String(targets.length === 0 ? 0 : Math.round((done / targets.length) * 100)) + '%', height: '100%', background: 'var(--dsw-alias-label-primary)', transition: 'width 220ms' } }))))
+                    h('div', { style: { width: String(targets.length === 0 ? 0 : Math.round((done / targets.length) * 100)) + '%', height: '100%', background: 'var(--dsw-alias-label-primary)', transition: 'width 180ms' } }))))
         } else {
             body.push(h('div', { key: 'result', style: { display: 'flex', flexDirection: 'column', gap: '8px' } },
-                h('div', { style: { color: 'var(--dsw-alias-label-primary)', fontSize: 'var(--sm-fs)', fontWeight: 500 } }, failed.length === 0 ? t('update.result.ok') : t('update.result', { ok: okCount, failed: failed.length })),
+                h('div', { className: 'sm-fs-14', style: { color: 'var(--dsw-alias-label-primary)', fontWeight: 500 } }, failed.length === 0 ? t('update.result.ok') : t('update.result', { ok: okCount, failed: failed.length })),
                 failed.map(function (entry) {
-                    return h('div', { key: smText(entry.skill.id, smText(entry.skill.name)), style: { color: 'var(--dsw-alias-label-secondary)', fontSize: 'calc(var(--sm-fs) - 2px)' } },
+                    return h('div', { key: smText(entry.skill.id, smText(entry.skill.name)), className: 'sm-fs-12 sm-text-secondary' },
                         smText(entry.skill.name) + ' · ' + entry.reason)
                 })))
         }
@@ -7094,7 +7079,8 @@ window.__ModuleLoader__.load({
             footer: footer,
         }, body)
     }
-
+// ===== 53-modals-actions.js =====
+    /* 卸载、删除、添加源 —— 由原 50-modals.js 行 1380-1595 拆出。 */
     /* ------------------------------------------------------------------ *
      * 5. 卸载确认（480）                                                 *
      * ------------------------------------------------------------------ */
@@ -7153,8 +7139,8 @@ window.__ModuleLoader__.load({
         },
         error !== '' ? h(SmBanner, { tone: 'error' }, error) : null,
         blocked ? h(SmBanner, { tone: 'warn' }, t('uninstall.readonly')) : null,
-        h('p', { style: { margin: 0, color: 'var(--dsw-alias-label-secondary)', fontSize: 'calc(var(--sm-fs) - 1px)', lineHeight: '1.55' } }, t('uninstall.body', { name: name !== '' ? name : '—' })),
-        h('label', { style: { display: 'flex', alignItems: 'center', gap: '6px', color: 'var(--dsw-alias-label-secondary)', fontSize: 'calc(var(--sm-fs) - 2px)', cursor: 'pointer' } },
+        h('p', { className: 'sm-desc' }, t('uninstall.body', { name: name !== '' ? name : '—' })),
+        h('label', { className: 'sm-fs-12', style: { display: 'flex', alignItems: 'center', gap: '6px', color: 'var(--dsw-alias-label-secondary)', cursor: 'pointer' } },
             h('input', { type: 'checkbox', checked: preserveBackup, onChange: function (event) { setPreserveBackup(event.target.checked) } }),
             h('span', null, t('action.backup'))))
     }
@@ -7209,7 +7195,7 @@ window.__ModuleLoader__.load({
         },
         error !== '' ? h(SmBanner, { tone: 'error' }, error) : null,
         blocked ? h(SmBanner, { tone: 'warn' }, t('delete.readonly')) : null,
-        h('p', { style: { margin: 0, color: 'var(--dsw-alias-label-secondary)', fontSize: 'calc(var(--sm-fs) - 1px)', lineHeight: '1.55' } }, t('delete.body', { name: name !== '' ? name : '—' })))
+        h('p', { className: 'sm-desc' }, t('delete.body', { name: name !== '' ? name : '—' })))
     }
 
     /* ------------------------------------------------------------------ *
@@ -7286,21 +7272,21 @@ window.__ModuleLoader__.load({
         serverError !== '' ? h(SmBanner, { tone: 'error' }, serverError) : null,
         h(SmBanner, { tone: 'info' }, t('source.trust')),
         h(SmField, { label: t('source.name') },
-            h('input', { type: 'text', value: name, placeholder: t('source.name.placeholder'), onChange: function (event) { setName(event.target.value) }, style: SM_INPUT_STYLE })),
+            h('input', { type: 'text', className: 'sm-input', value: name, placeholder: t('source.name.placeholder'), onChange: function (event) { setName(event.target.value) } })),
         h(SmField, { label: t('source.url'), error: validateError },
             h('div', { style: { display: 'flex', gap: '8px', alignItems: 'center' } },
                 h('input', {
                     type: 'text',
-                    className: 'sm-mono',
+                    className: 'sm-mono sm-input',
                     value: url,
                     placeholder: t('source.url.placeholder'),
                     onChange: function (event) { setUrl(event.target.value); setResult(null); setValidateError('') },
-                    style: Object.assign({}, SM_INPUT_STYLE, { fontFamily: SM_MONO, flex: 1 }),
+                    style: { flex: 1 },
                 }),
                 h(SmButton, { tone: 'secondary', disabled: validating, onClick: function () { void validate() } }, validating ? t('state.validating') : t('action.validate')))),
         result !== null
             ? h(SmBanner, { tone: 'ok' },
-                h('span', { style: { color: 'var(--dsw-alias-state-success-primary)', fontWeight: 500 } }, t('source.validated', { count: typeof result.skillCount === 'number' ? result.skillCount : (typeof result.count === 'number' ? result.count : 0) })),
+                h('span', { className: 'sm-banner-title', style: { color: 'var(--dsw-alias-state-success-primary)' } }, t('source.validated', { count: typeof result.skillCount === 'number' ? result.skillCount : (typeof result.count === 'number' ? result.count : 0) })),
                 result.title ? h('span', null, t('source.title') + ': ' + smText(result.title)) : null,
                 result.description ? h('span', null, smText(result.description)) : null,
                 sampleNames !== '' ? h('span', { className: 'sm-mono', style: { wordBreak: 'break-all' } }, t('source.preview', { names: sampleNames })) : null)
@@ -7310,7 +7296,8 @@ window.__ModuleLoader__.load({
     /* ------------------------------------------------------------------ *
      * 8. 编辑原文（720）                                                 *
      * ------------------------------------------------------------------ */
-
+// ===== 54-modals-edit.js =====
+    /* 编辑内容、预览、移除源确认 —— 由原 50-modals.js 行 1596-1870 拆出。 */
     function SmEditContentModal(props) {
         const payload = props.payload !== null && typeof props.payload === 'object' ? props.payload : {}
         const skill = payload.skill !== null && typeof payload.skill === 'object' ? payload.skill : null
@@ -7412,29 +7399,29 @@ window.__ModuleLoader__.load({
         }
         if (confirmDiscard) {
             body.push(h(SmBanner, { key: 'discard', tone: 'warn' },
-                h('span', { style: { fontWeight: 500 } }, t('form.edit.discard.title')),
+                h('span', { className: 'sm-banner-title' }, t('form.edit.discard.title')),
                 h('span', null, t('form.edit.discard.body')),
                 h('div', { style: { display: 'flex', gap: '8px', marginTop: '4px' } },
                     h(SmButton, { key: 'keep', tone: 'secondary', style: { height: '28px' }, onClick: function () { setConfirmDiscard(false) } }, t('action.cancel')),
                     h(SmButton, { key: 'discard', tone: 'danger', style: { height: '28px' }, onClick: function () { smRemoveModalById(props.modalId) } }, t('form.edit.discard.confirm')))))
         }
         if (loading) {
-            body.push(h('div', { key: 'loading', style: { color: 'var(--dsw-alias-label-secondary)', fontSize: 'calc(var(--sm-fs) - 1px)' } }, t('state.loading')))
+            body.push(h('div', { key: 'loading', className: 'sm-fs-13 sm-text-secondary' }, t('state.loading')))
         } else {
             body.push(h('div', {
                 key: 'editor',
                 className: 'sm-editor',
-                style: { display: 'flex', minHeight: '320px', height: 'min(52vh, 480px)', border: '1px solid var(--dsw-alias-border-l2)', borderRadius: '12px', background: 'var(--dsw-alias-bg-base)', overflow: 'hidden' },
+                style: { display: 'flex', minHeight: '320px', height: 'min(52vh, 480px)', border: '0.5px solid var(--dsw-alias-border-l2)', borderRadius: '12px', background: 'var(--dsw-alias-bg-base)', overflow: 'hidden' },
             },
             h('div', {
                 ref: gutterRef,
-                className: 'sm-mono',
+                className: 'sm-mono sm-fs-12',
                 'aria-hidden': 'true',
-                style: { flexShrink: 0, width: '44px', padding: '10px 8px', overflow: 'hidden', textAlign: 'right', userSelect: 'none', color: 'var(--dsw-alias-label-caption)', fontFamily: SM_MONO, fontSize: 'calc(var(--sm-fs) - 2px)', lineHeight: '20px' },
+                style: { flexShrink: 0, width: '44px', padding: '10px 8px', overflow: 'hidden', textAlign: 'right', userSelect: 'none', color: 'var(--dsw-alias-label-caption)', lineHeight: '20px' },
             }, gutter),
             h('textarea', {
                 ref: textareaRef,
-                className: 'sm-mono',
+                className: 'sm-mono sm-fs-12',
                 value: draft,
                 spellCheck: false,
                 onChange: function (event) {
@@ -7444,9 +7431,9 @@ window.__ModuleLoader__.load({
                 onScroll: function (event) {
                     if (gutterRef.current !== null) gutterRef.current.scrollTop = event.target.scrollTop
                 },
-                style: { flex: '1 1 auto', minWidth: 0, border: 'none', outline: 'none', resize: 'none', background: 'transparent', color: 'var(--dsw-alias-label-primary)', fontFamily: SM_MONO, fontSize: 'calc(var(--sm-fs) - 2px)', lineHeight: '20px', padding: '10px 12px', whiteSpace: 'pre', overflow: 'auto' },
+                style: { flex: '1 1 auto', minWidth: 0, border: 'none', outline: 'none', resize: 'none', background: 'transparent', color: 'var(--dsw-alias-label-primary)', lineHeight: '20px', padding: '10px 12px', whiteSpace: 'pre', overflow: 'auto' },
             })))
-            body.push(h('div', { key: 'hint', style: { color: 'var(--dsw-alias-label-caption)', fontSize: 'calc(var(--sm-fs) - 3px)' } }, t('detail.editHint')))
+            body.push(h('div', { key: 'hint', className: 'sm-fs-11', style: { color: 'var(--dsw-alias-label-caption)' } }, t('detail.editHint')))
         }
 
         return h(SmDialogFrame, {
@@ -7469,7 +7456,7 @@ window.__ModuleLoader__.load({
                 return false
             },
         },
-        dirty ? h('div', { style: { color: 'var(--dsw-alias-state-warn-primary)', fontSize: 'calc(var(--sm-fs) - 2px)' } }, t('form.edit.dirty')) : null,
+        dirty ? h('div', { className: 'sm-fs-12', style: { color: 'var(--dsw-alias-state-warn-primary)' } }, t('form.edit.dirty')) : null,
         body)
     }
 
@@ -7525,11 +7512,11 @@ window.__ModuleLoader__.load({
             footer: h(Fragment, null, h(SmButton, { tone: 'primary', onClick: function () { smRemoveModalById(props.modalId) } }, t('action.close'))),
         },
         loading
-            ? h('div', { style: { color: 'var(--dsw-alias-label-secondary)', fontSize: 'calc(var(--sm-fs) - 1px)' } }, t('state.loading'))
+            ? h('div', { className: 'sm-fs-13 sm-text-secondary' }, t('state.loading'))
             : error !== ''
                 ? h(SmBanner, { tone: 'error' }, error)
                 : content === ''
-                    ? h('div', { style: { color: 'var(--dsw-alias-label-caption)', fontSize: 'calc(var(--sm-fs) - 1px)' } }, t('detail.content.empty'))
+                    ? h('div', { className: 'sm-fs-13', style: { color: 'var(--dsw-alias-label-caption)' } }, t('detail.content.empty'))
                     : h(SmCodeBlock, { text: content, maxHeight: '60vh' }))
     }
 
@@ -7578,14 +7565,15 @@ window.__ModuleLoader__.load({
                 h(SmButton, { tone: 'danger', disabled: busy, onClick: function () { void submit() } }, t('action.deleteSource'))),
         },
         error !== '' ? h(SmBanner, { tone: 'error' }, error) : null,
-        h('p', { style: { margin: 0, color: 'var(--dsw-alias-label-secondary)', fontSize: 'calc(var(--sm-fs) - 1px)', lineHeight: '1.55' } }, t('source.confirmDelete.body')),
-        name !== '' ? h('div', { className: 'sm-mono', style: { wordBreak: 'break-all', color: 'var(--dsw-alias-label-primary)', fontSize: 'calc(var(--sm-fs) - 2px)' } }, name) : null)
+        h('p', { className: 'sm-desc' }, t('source.confirmDelete.body')),
+        name !== '' ? h('div', { className: 'sm-mono sm-fs-12', style: { wordBreak: 'break-all', color: 'var(--dsw-alias-label-primary)' } }, name) : null)
     }
 
     /* ------------------------------------------------------------------ *
      * 诊断抽屉（420，DG-01～DG-03 / PRD §9）。                            *
      * ------------------------------------------------------------------ */
-
+// ===== 55-modals-diag.js =====
+    /* 诊断抽屉 —— 由原 50-modals.js 行 1871-2170 拆出。 */
     function smDiagnosticsPayload() {
         if (smDiagnostics.data !== null && typeof smDiagnostics.data === 'object') return smDiagnostics.data
         if (appState.diagnostics !== null && typeof appState.diagnostics === 'object') return appState.diagnostics
@@ -7770,13 +7758,13 @@ window.__ModuleLoader__.load({
         const path = smText(issue.path)
         const effective = smText(issue.effective, smText(issue.activeName, smText(issue.shadowedBy, smText(issue.effectivePath, smText(issue.activePath)))))
 
-        return h('div', { className: 'sm-issue', style: { display: 'flex', flexDirection: 'column', gap: '8px', padding: '14px 16px', borderRadius: '16px', background: 'var(--dsw-alias-bg-layer-1)', border: '1px solid var(--dsw-alias-border-l2)' } },
+        return h('div', { className: 'sm-issue' },
             h('div', { style: { display: 'flex', alignItems: 'flex-start', gap: '8px', minWidth: 0 } },
                 h('span', { style: { flexShrink: 0, color: kind === 'oversize' || kind === 'source-unreachable' ? 'var(--dsw-alias-label-secondary)' : 'var(--dsw-alias-state-warn-primary)' } }, icon(kind === 'oversize' || kind === 'source-unreachable' ? 'info' : 'alert', 16)),
                 h('div', { style: { display: 'flex', flexDirection: 'column', gap: '4px', minWidth: 0 } },
-                    h('span', { className: 'sm-mono', style: { wordBreak: 'break-all', color: 'var(--dsw-alias-label-primary)', fontSize: 'calc(var(--sm-fs) - 1px)', fontWeight: 500 } }, name),
-                    h('span', { style: { color: 'var(--dsw-alias-label-secondary)', fontSize: 'calc(var(--sm-fs) - 2px)', lineHeight: '1.5' } }, smIssueSentence(issue)))),
-            fixError !== '' ? h('div', { style: { color: 'var(--dsw-alias-state-error-primary)', fontSize: 'calc(var(--sm-fs) - 2px)' } }, fixError) : null,
+                    h('span', { className: 'sm-mono sm-fs-13', style: { wordBreak: 'break-all', color: 'var(--dsw-alias-label-primary)', fontWeight: 500 } }, name),
+                    h('span', { className: 'sm-fs-12', style: { color: 'var(--dsw-alias-label-secondary)', lineHeight: '1.5' } }, smIssueSentence(issue)))),
+            fixError !== '' ? h('div', { className: 'sm-fs-12', style: { color: 'var(--dsw-alias-state-error-primary)' } }, fixError) : null,
             h('div', { style: { display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' } },
                 h(SmButton, { tone: 'primary', style: { height: '28px' }, disabled: busy, onClick: function () { smRunIssueFix(issue, setBusy, setFixError) } }, action.label),
                 h(SmButton, {
@@ -7785,15 +7773,15 @@ window.__ModuleLoader__.load({
                     onClick: function () { setDetailsOpen(!detailsOpen) },
                 }, detailsOpen ? t('diag.details.hide') : t('diag.details'))),
             detailsOpen
-                ? h('div', { className: 'sm-issue-detail', style: { display: 'flex', flexDirection: 'column', gap: '6px', paddingTop: '6px', borderTop: '1px solid var(--dsw-alias-border-l2)' } },
+                ? h('div', { className: 'sm-issue-detail', style: { display: 'flex', flexDirection: 'column', gap: '6px', paddingTop: '6px', borderTop: '0.5px solid var(--dsw-alias-border-l2)' } },
                     path !== ''
                         ? h('div', { style: { display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: '8px' } },
-                            h('span', { className: 'sm-mono', style: { minWidth: 0, wordBreak: 'break-all', color: 'var(--dsw-alias-label-secondary)', fontSize: 'calc(var(--sm-fs) - 3px)' } }, t('diag.path') + ': ' + path),
+                            h('span', { className: 'sm-mono sm-fs-11', style: { minWidth: 0, wordBreak: 'break-all', color: 'var(--dsw-alias-label-secondary)' } }, t('diag.path') + ': ' + path),
                             h(SmButton, { tone: 'ghost', icon: 'copy', style: { height: '24px', flexShrink: 0 }, onClick: function () { smCopyText(path, t('toast.copied')) } }, t('action.copyPath')))
                         : null,
-                    h('div', { style: { color: 'var(--dsw-alias-label-caption)', fontSize: 'calc(var(--sm-fs) - 3px)' } }, t('diag.kind') + ': ' + smIssueTypeLabel(issue)),
-                    effective !== '' ? h('div', { style: { color: 'var(--dsw-alias-label-caption)', fontSize: 'calc(var(--sm-fs) - 3px)' } }, t('diag.effective') + ': ' + effective) : null,
-                    h('div', { style: { color: 'var(--dsw-alias-label-caption)', fontSize: 'calc(var(--sm-fs) - 3px)' } }, t('diag.fixHint')))
+                    h('div', { className: 'sm-fs-11', style: { color: 'var(--dsw-alias-label-caption)' } }, t('diag.kind') + ': ' + smIssueTypeLabel(issue)),
+                    effective !== '' ? h('div', { className: 'sm-fs-11', style: { color: 'var(--dsw-alias-label-caption)' } }, t('diag.effective') + ': ' + effective) : null,
+                    h('div', { className: 'sm-fs-11', style: { color: 'var(--dsw-alias-label-caption)' } }, t('diag.fixHint')))
                 : null)
     }
 
@@ -7811,15 +7799,15 @@ window.__ModuleLoader__.load({
 
         const sections = []
         if (inactive.length > 0) {
-            sections.push(h('section', { key: 'inactive', style: { display: 'flex', flexDirection: 'column', gap: '8px' } },
-                h('h4', { style: { margin: 0, color: 'var(--dsw-alias-label-primary)', fontSize: 'calc(var(--sm-fs) - 1px)', fontWeight: 500 } }, t('diag.section.inactive')),
+            sections.push(h('section', { key: 'inactive', className: 'sm-stack' },
+                h('h4', { className: 'sm-fs-13', style: { margin: 0, color: 'var(--dsw-alias-label-primary)', fontWeight: 500 } }, t('diag.section.inactive')),
                 inactive.slice().sort(sortByName).map(function (issue, index) {
                     return h(SmIssueCard, { key: smText(issue.id, 'inactive-' + String(index)), issue: issue })
                 })))
         }
         if (attention.length > 0) {
-            sections.push(h('section', { key: 'attention', style: { display: 'flex', flexDirection: 'column', gap: '8px' } },
-                h('h4', { style: { margin: 0, color: 'var(--dsw-alias-label-primary)', fontSize: 'calc(var(--sm-fs) - 1px)', fontWeight: 500 } }, t('diag.section.attention')),
+            sections.push(h('section', { key: 'attention', className: 'sm-stack' },
+                h('h4', { className: 'sm-fs-13', style: { margin: 0, color: 'var(--dsw-alias-label-primary)', fontWeight: 500 } }, t('diag.section.attention')),
                 attention.slice().sort(sortByName).map(function (issue, index) {
                     return h(SmIssueCard, { key: smText(issue.id, 'attention-' + String(index)), issue: issue })
                 })))
@@ -7828,32 +7816,31 @@ window.__ModuleLoader__.load({
         let body
         if (loading) {
             body = h('div', { style: { display: 'flex', flexDirection: 'column', gap: '12px' } },
-                h('div', { style: { height: '64px', borderRadius: '14px', background: 'var(--dsw-alias-bg-layer-1)' } }),
-                h('div', { style: { height: '64px', borderRadius: '14px', background: 'var(--dsw-alias-bg-layer-1)' } }),
-                h('div', { style: { color: 'var(--dsw-alias-label-secondary)', fontSize: 'calc(var(--sm-fs) - 1px)' } }, t('state.loading')))
+                h('div', { className: 'sm-skeleton', style: { height: '64px' } }),
+                h('div', { className: 'sm-skeleton', style: { height: '64px' } }),
+                h('div', { className: 'sm-fs-13 sm-text-secondary' }, t('state.loading')))
         } else if (smDiagnostics.error !== null) {
-            body = h('div', { style: { display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '10px', padding: '48px 20px', textAlign: 'center' } },
-                h('span', { style: { color: 'var(--dsw-alias-state-error-primary)' } }, icon('alert', 28)),
-                h('div', { style: { color: 'var(--dsw-alias-label-primary)', fontSize: 'var(--sm-fs)', fontWeight: 500 } }, t('state.error.diag.title')),
-                h('div', { style: { color: 'var(--dsw-alias-label-secondary)', fontSize: 'calc(var(--sm-fs) - 2px)' } }, smErrorMessage(smDiagnostics.error)),
+            body = h('div', { className: 'sm-empty sm-empty-error' },
+                h('span', { className: 'sm-empty-icon' }, icon('alert', 28)),
+                h('div', { className: 'sm-empty-title' }, t('state.error.diag.title')),
+                h('div', { className: 'sm-empty-body' }, smErrorMessage(smDiagnostics.error)),
                 h(SmButton, { tone: 'secondary', onClick: function () { void smLoadDiagnostics() } }, t('action.retry')))
         } else if (issues.length === 0) {
-            body = h('div', { style: { display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '10px', padding: '56px 20px', textAlign: 'center' } },
-                h('span', { style: { color: 'var(--dsw-alias-state-success-primary)' } }, icon('check', 32)),
-                h('div', { style: { color: 'var(--dsw-alias-label-primary)', fontSize: 'var(--sm-fs)', fontWeight: 500 } }, t('empty.diag.title')),
-                h('div', { style: { color: 'var(--dsw-alias-label-secondary)', fontSize: 'calc(var(--sm-fs) - 2px)' } }, t('empty.diag.body')))
+            body = h('div', { className: 'sm-empty' },
+                h('span', { className: 'sm-empty-icon', style: { color: 'var(--dsw-alias-state-success-primary)' } }, icon('check', 32)),
+                h('div', { className: 'sm-empty-title' }, t('empty.diag.title')),
+                h('div', { className: 'sm-empty-body' }, t('empty.diag.body')))
         } else {
             body = h('div', { style: { display: 'flex', flexDirection: 'column', gap: '16px' } },
                 partial ? h(SmBanner, { tone: 'warn' },
                     h('span', null, t('diag.partial')),
                     h(SmButton, { tone: 'secondary', style: { alignSelf: 'flex-start', height: '28px' }, onClick: function () { void smLoadDiagnostics() } }, t('action.retry'))) : null,
                 sections,
-                h('div', { style: { color: 'var(--dsw-alias-label-caption)', fontSize: 'calc(var(--sm-fs) - 3px)', lineHeight: '1.5' } }, t('diag.note')))
+                h('div', { className: 'sm-fs-11', style: { color: 'var(--dsw-alias-label-caption)', lineHeight: '1.5' } }, t('diag.note')))
         }
 
         return h('div', {
             className: 'sm-drawer-mask sm-drawer-backdrop',
-            style: { position: 'fixed', inset: 0, zIndex: 1100, background: 'var(--dsw-alias-bg-mask-1, rgba(0, 0, 0, 0.5))' },
             onMouseDown: function (event) {
                 if (event.target !== event.currentTarget) return
                 if (smModalStack.length > 0) return
@@ -7865,12 +7852,12 @@ window.__ModuleLoader__.load({
             role: 'dialog',
             'aria-modal': 'true',
             'aria-label': t('diag.title'),
-            style: { position: 'fixed', top: 0, right: 0, bottom: 0, width: 'min(420px, 92vw)', display: 'flex', flexDirection: 'column', background: 'var(--dsw-alias-bg-layer-2)', borderLeft: '.5px solid var(--dsw-alias-border-l2)', boxShadow: 'none' },
+            style: { width: 'min(420px, 92vw)' },
         },
-        h('div', { className: 'sm-drawer-head', style: { display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: '12px', padding: '20px 20px 14px', borderBottom: '1px solid var(--dsw-alias-border-l2)' } },
+        h('div', { className: 'sm-drawer-head' },
             h('div', { style: { display: 'flex', flexDirection: 'column', gap: '4px', minWidth: 0 } },
-                h('h3', { style: { margin: 0, fontSize: 'calc(var(--sm-fs) + 1px)', fontWeight: 500, color: 'var(--dsw-alias-label-primary)' } }, t('diag.title')),
-                h('div', { style: { color: 'var(--dsw-alias-label-secondary)', fontSize: 'calc(var(--sm-fs) - 2px)' } },
+                h('h3', { className: 'sm-dialog-title' }, t('diag.title')),
+                h('div', { className: 'sm-fs-12 sm-text-secondary' },
                     t('diag.summary', { active: inactive.length, attention: attention.length }) + ' · ' + t('diag.checkedAt', { time: checkedAt > 0 ? fmtTime(checkedAt) : '—' }))),
             h('div', { style: { display: 'flex', alignItems: 'center', gap: '8px', flexShrink: 0 } },
                 h(SmButton, { tone: 'secondary', style: { height: '28px' }, disabled: loading, onClick: function () { void smLoadDiagnostics() } }, loading ? t('diag.rechecking') : t('diag.recheck')),
@@ -7880,21 +7867,21 @@ window.__ModuleLoader__.load({
                     'aria-label': t('action.close'),
                     onClick: smCloseDiagnostics,
                 }, icon('x', 16)))),
-        h('div', { className: 'sm-drawer-body', style: { flex: '1 1 auto', minHeight: 0, overflowY: 'auto', padding: '16px 20px 20px', display: 'flex', flexDirection: 'column', gap: '12px' } }, body)))
+        h('div', { className: 'sm-drawer-body', style: { flex: '1 1 auto', display: 'flex', flexDirection: 'column', gap: '12px' } }, body)))
     }
 
     function renderDiagnosticsDrawer() {
         if (!smDiagnostics.open) return null
         return h(SmDiagnosticsDrawer)
     }
-// ===== 90-styles.js =====
-    /** Every style rule of the panel, scoped under .sm-root. */
-    const STYLES = `
+// ===== 90-styles-base.js =====
+/* 基础：字体刻度、reset、页面骨架 —— 由原 90-styles.js 按章节拆出（行 3-227）。 */
+const STYLES_1 = `
 /* ================================================================== *
  * skill-manager v2 — DSH native-parity stylesheet                     *
  * Contract: design/implementation-contract-v2.md §7                   *
  * Rules: token colours only (--dsw-* / color-mix on tokens);          *
- *        font sizes only via --sm-fs; no gradients; no box-shadow     *
+ *        font sizes only via --ds-fs; no gradients; no box-shadow     *
  *        except "none"; hover and selected share one background       *
  *        token and differ by text colour.                             *
  * ================================================================== */
@@ -7911,8 +7898,8 @@ window.__ModuleLoader__.load({
 }
 
 .sm-root {
-  --sm-fs: var(--dsh-content-font-size, 14px);
-  font-size: calc(var(--sm-fs) - 1px);
+  --ds-fs: var(--dsh-content-font-size, 14px);
+  font-size: var(--ds-fs);
   line-height: 1.5;
   font-family: var(--dsw-font-family, -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei", sans-serif);
   background: var(--dsw-alias-bg-base);
@@ -7949,8 +7936,10 @@ window.__ModuleLoader__.load({
   opacity: 0.45;
 }
 
-/* Native focus: background + text colour, never a coloured outline. */
-.sm-root :where(button, [tabindex]):focus-visible {
+/* Native focus: background + text colour, never a coloured outline.
+ * Skip tabindex="-1" containers (dialog/drawer roots) so focus does not
+ * paint a translucent background over the whole surface. */
+.sm-root :where(button, [tabindex]:not([tabindex="-1"])):focus-visible {
   outline: none;
   background: var(--dsw-alias-interactive-bg-hover);
   color: var(--dsw-alias-label-primary);
@@ -8001,7 +7990,7 @@ window.__ModuleLoader__.load({
 .sm-files::-webkit-scrollbar-thumb,
 .sm-editor::-webkit-scrollbar-thumb {
   background: var(--dsw-alias-scrollbar-bg-l1);
-  border-radius: 999px;
+  border-radius: var(--dsw-radius-panel);
 }
 
 /* ------------------------------------------------------------------ *
@@ -8022,7 +8011,7 @@ window.__ModuleLoader__.load({
   overflow: hidden;
   --sm-content-max: 960px;
   /* Requested top breathing room. */
-  padding: 76px clamp(20px, 4vw, 48px) 0;
+  padding: calc(28px + var(--dsh-frame-top-clearance, 0px)) clamp(20px, 4vw, 48px) 0;
 }
 
 /* Header, tabs, list and detail share the same column, so their left
@@ -8067,7 +8056,7 @@ window.__ModuleLoader__.load({
 .sm-page-title {
   margin: 0;
   /* DSH plugin page title: 20px / 500 / 28px. */
-  font-size: calc(var(--sm-fs) + 6px);
+  font-size: calc(var(--ds-fs) + 6px);
   font-weight: 500;
   line-height: 1.4;
   letter-spacing: -0.01em;
@@ -8076,7 +8065,7 @@ window.__ModuleLoader__.load({
 
 .sm-page-desc {
   margin: 6px 0 0;
-  font-size: calc(var(--sm-fs) - 1px);
+  font-size: calc(var(--ds-fs) - 1px);
   line-height: 1.5;
   color: var(--dsw-alias-label-secondary);
 }
@@ -8098,7 +8087,7 @@ window.__ModuleLoader__.load({
 .sm-title {
   margin: 0;
   /* v1 alias shares the same element as .sm-page-title; keep both at 20px. */
-  font-size: calc(var(--sm-fs) + 6px);
+  font-size: calc(var(--ds-fs) + 6px);
   font-weight: 500;
   line-height: 1.4;
   letter-spacing: -0.01em;
@@ -8107,12 +8096,16 @@ window.__ModuleLoader__.load({
 
 .sm-desc {
   margin: 6px 0 0;
-  font-size: calc(var(--sm-fs) - 1px);
+  font-size: calc(var(--ds-fs) - 1px);
   line-height: 1.5;
   color: var(--dsw-alias-label-secondary);
 }
 
 /* ------------------------------------------------------------------ *
+`
+// ===== 91-styles-toolbar.js =====
+/* 工具栏与 Tab —— 由原 90-styles.js 按章节拆出（行 228-731）。 */
+const STYLES_2 = `
  * 3. Toolbar: search, sort, native icon buttons                      *
  * ------------------------------------------------------------------ */
 
@@ -8124,24 +8117,26 @@ window.__ModuleLoader__.load({
   flex-wrap: wrap;
   margin-left: auto;
   min-width: 0;
+  /* 技能页与市场页共用同一行结构：撑满内容列，右对齐到同一右边界。 */
+  width: 100%;
 }
 
 /* Split menu: DSH plugin-page dropdown shape — larger radius, roomier rows. */
 .sm-menu.sm-split-menu {
   padding: 6px;
-  border-radius: 16px;
+  border-radius: var(--dsw-radius-lg);
   min-width: 200px;
   max-width: 200px;
   border-color: var(--dsw-alias-border-l1);
-  background: var(--dsw-alias-bg-layer-2, var(--dsw-static-neutral-bluish-850));
+  background: var(--dsw-alias-bg-layer-2);
 }
 
 .sm-split-menu .sm-menu-item {
-  height: 40px;
-  padding: 0 10px;
-  border-radius: 10px;
-  gap: 10px;
-  font-size: var(--sm-fs);
+  height: 30px;
+  padding: 0 12px;
+  border-radius: var(--dsw-radius-sm);
+  gap: 8px;
+  font-size: var(--ds-fs);
 }
 
 .sm-split-menu .sm-menu-item .sm-menu-icon {
@@ -8157,7 +8152,7 @@ window.__ModuleLoader__.load({
 
 /* Split button: the primary half keeps the left radius, the caret the right one. */
 .sm-toolbar .sm-split-btn .sm-btn.sm-split-main {
-  border-radius: 12px 0 0 12px;
+  border-radius: var(--dsw-radius-md) 0 0 var(--dsw-radius-md);
 }
 
 .sm-toolbar .sm-split-arrow {
@@ -8168,15 +8163,15 @@ window.__ModuleLoader__.load({
   height: 32px;
   padding: 0;
   border: none;
-  border-radius: 0 12px 12px 0;
-  background: var(--dsw-static-neutral-bluish-50, #f9fafb);
-  color: var(--dsw-static-neutral-bluish-1000, #0f1115);
+  border-radius: 0 var(--dsw-radius-md) var(--dsw-radius-md) 0;
+  background: var(--dsw-static-neutral-bluish-50, var(--dsw-alias-bg-layer-1));
+  color: var(--dsw-static-neutral-bluish-1000, var(--dsw-alias-label-primary-foreground));
   cursor: pointer;
   box-shadow: inset 1px 0 0 var(--dsw-alias-border-l1);
 }
 
 .sm-toolbar .sm-split-arrow:hover {
-  background: var(--dsw-static-neutral-bluish-60, #f1f3f5);
+  background: var(--dsw-static-neutral-bluish-60, var(--dsw-alias-bg-layer-2));
 }
 
 .sm-toolbar-actions {
@@ -8184,6 +8179,9 @@ window.__ModuleLoader__.load({
   align-items: center;
   gap: 8px;
   flex: none;
+  /* 两页按钮组按最宽的一组预留，搜索框与排序框因此落在同一位置。 */
+  min-width: 250px;
+  justify-content: flex-end;
 }
 
 /* Toolbar buttons follow the plugin page: the secondary one is borderless and
@@ -8191,8 +8189,8 @@ window.__ModuleLoader__.load({
 .sm-toolbar .sm-btn.sm-toolbar-btn {
   height: 32px;
   padding: 0 12px;
-  border-radius: 12px;
-  font-size: calc(var(--sm-fs) - 1px);
+  border-radius: var(--dsw-radius-md);
+  font-size: calc(var(--ds-fs) - 1px);
   font-weight: 400;
 }
 
@@ -8207,35 +8205,35 @@ window.__ModuleLoader__.load({
 }
 
 .sm-toolbar .sm-btn-primary.sm-toolbar-btn {
-  background: var(--dsw-static-neutral-bluish-50, #f9fafb);
-  border-color: var(--dsw-static-neutral-bluish-50, #f9fafb);
-  color: var(--dsw-static-neutral-bluish-1000, #0f1115);
+  background: var(--dsw-static-neutral-bluish-50, var(--dsw-alias-bg-layer-1));
+  border-color: var(--dsw-static-neutral-bluish-50, var(--dsw-alias-bg-layer-1));
+  color: var(--dsw-static-neutral-bluish-1000, var(--dsw-alias-label-primary-foreground));
 }
 
 .sm-toolbar .sm-btn-primary.sm-toolbar-btn:hover:not(:disabled) {
-  background: var(--dsw-static-neutral-bluish-60, #f1f3f5);
-  border-color: var(--dsw-static-neutral-bluish-60, #f1f3f5);
+  background: var(--dsw-static-neutral-bluish-60, var(--dsw-alias-bg-layer-2));
+  border-color: var(--dsw-static-neutral-bluish-60, var(--dsw-alias-bg-layer-2));
 }
 
 .sm-toolbar-icons {
-  display: inline-flex;
+  display: flex;
   align-items: center;
-  gap: 6px;
-  flex-shrink: 0;
+  gap: 8px;
+  flex: none;
 }
 
 .sm-search {
   position: relative;
   width: 240px;
   max-width: 100%;
-  height: 33px;
-  padding: 0 28px 0 32px;
-  border-radius: 12px;
-  background: var(--dsw-alias-bg-layer-1);
-  border: 0.5px solid var(--dsw-alias-border-l2);
+  height: 34px;
+  padding: 0 32px;
+  border-radius: var(--dsw-radius-md);
+  background: var(--dsw-alias-bg-layer-3);
+  border: 0.5px solid var(--dsw-alias-border-l4);
   color: var(--dsw-alias-label-primary);
-  font-size: calc(var(--sm-fs) - 1px);
-  line-height: 31px;
+  font-size: calc(var(--ds-fs) - 1px);
+  line-height: 32px;
   outline: none;
 }
 
@@ -8246,7 +8244,7 @@ window.__ModuleLoader__.load({
 
 .sm-search:focus,
 .sm-search:focus-within {
-  border-color: var(--dsw-alias-border-l3);
+  border-color: var(--dsw-alias-state-business-primary);
 }
 
 .sm-search input,
@@ -8283,7 +8281,7 @@ window.__ModuleLoader__.load({
   height: 20px;
   padding: 0;
   border: none;
-  border-radius: 999px;
+  border-radius: var(--dsw-radius-panel);
   background: transparent;
   color: var(--dsw-alias-label-caption);
   display: inline-flex;
@@ -8298,13 +8296,13 @@ window.__ModuleLoader__.load({
 }
 
 .sm-select {
-  height: 33px;
-  padding: 0 10px;
-  border-radius: 12px;
-  border: 0.5px solid var(--dsw-alias-border-l2);
-  background: var(--dsw-alias-bg-layer-1);
+  height: 34px;
+  padding: 0 12px;
+  border-radius: var(--dsw-radius-md);
+  border: 0.5px solid var(--dsw-alias-border-l4);
+  background: var(--dsw-alias-bg-layer-3);
   color: var(--dsw-alias-label-secondary);
-  font-size: calc(var(--sm-fs) - 1px);
+  font-size: calc(var(--ds-fs) - 1px);
   font-family: inherit;
   cursor: pointer;
   outline: none;
@@ -8322,16 +8320,16 @@ window.__ModuleLoader__.load({
 }
 
 .sm-sort-label {
-  font-size: calc(var(--sm-fs) - 1px);
+  font-size: calc(var(--ds-fs) - 1px);
   color: var(--dsw-alias-label-secondary);
   white-space: nowrap;
 }
 
-/* Native .iconButton: 30×30 hit area, 6px padding, radius-sm,
+/* Native .iconButton: 32×32 hit area, 6px padding, radius-sm,
  * hover bg-layer-1 + label-primary. */
 .sm-tool-btn {
-  width: 30px;
-  height: 30px;
+  width: 32px;
+  height: 32px;
   padding: 6px;
   border-radius: var(--dsw-radius-sm);
   background: transparent;
@@ -8355,10 +8353,10 @@ window.__ModuleLoader__.load({
 }
 
 /* Transitional alias: market toolbar markup still renders .sm-icon-btn until
- * R3 switches it to .sm-tool-btn; both must be 30×30 here. */
+ * R3 switches it to .sm-tool-btn; both must be 32×32 here. */
 .sm-toolbar-icons .sm-icon-btn {
-  width: 30px;
-  height: 30px;
+  width: 32px;
+  height: 32px;
   padding: 6px;
 }
 
@@ -8418,14 +8416,14 @@ window.__ModuleLoader__.load({
   min-width: 0;
 }
 
-/* Primary tabs: 34px container, 28px tabs (contract §7.1). */
+/* Primary tabs: 42px container (34px item + 4px padding), 34px tabs (§7.3). */
 .sm-tabs {
   display: inline-flex;
   align-items: center;
   gap: 2px;
-  height: 34px;
-  padding: 3px;
-  border-radius: 14px;
+  height: 42px;
+  padding: 4px;
+  border-radius: var(--dsw-radius-lg);
   background: var(--dsw-alias-bg-layer-3);
   width: fit-content;
   max-width: 100%;
@@ -8433,13 +8431,13 @@ window.__ModuleLoader__.load({
 }
 
 .sm-tab {
-  height: 28px;
+  height: 34px;
   padding: 0 12px;
   border-radius: var(--dsw-radius-lg);
   border: none;
   background: transparent;
   color: var(--dsw-alias-label-tertiary);
-  font-size: var(--sm-fs);
+  font-size: var(--ds-fs);
   font-family: inherit;
   display: inline-flex;
   align-items: center;
@@ -8454,13 +8452,16 @@ window.__ModuleLoader__.load({
   background: var(--dsw-alias-interactive-bg-hover);
 }
 
+/* .selected is the canonical selected-state name (design §2.5);
+ * .active remains a legacy alias with the same selected semantics. */
+.sm-tab.selected,
 .sm-tab.active,
 .sm-tab.sm-active,
 .sm-tab.sm-tab-active,
 .sm-tab[aria-selected="true"] {
   background: var(--dsw-alias-interactive-bg-hover);
   color: var(--dsw-alias-label-primary);
-  font-weight: 500;
+  font-weight: 600;
 }
 
 .sm-tab-badge,
@@ -8469,10 +8470,10 @@ window.__ModuleLoader__.load({
   min-width: 16px;
   height: 18px;
   padding: 0 6px;
-  border-radius: 999px;
+  border-radius: var(--dsw-radius-panel);
   background: transparent;
   color: var(--dsw-alias-label-caption);
-  font-size: calc(var(--sm-fs) - 3px);
+  font-size: calc(var(--ds-fs) - 3px);
   font-weight: 500;
   line-height: 18px;
   text-align: center;
@@ -8483,10 +8484,12 @@ window.__ModuleLoader__.load({
   justify-content: center;
 }
 
+.sm-tab.selected .sm-tab-badge,
 .sm-tab.active .sm-tab-badge,
 .sm-tab.sm-active .sm-tab-badge,
 .sm-tab.sm-tab-active .sm-tab-badge,
 .sm-tab[aria-selected="true"] .sm-tab-badge,
+.sm-tab.selected .sm-tab-count,
 .sm-tab.active .sm-tab-count,
 .sm-tab.sm-active .sm-tab-count,
 .sm-tab.sm-tab-active .sm-tab-count,
@@ -8517,9 +8520,9 @@ window.__ModuleLoader__.load({
 
 .sm-subtab {
   height: 28px;
-  padding: 0 10px;
-  border-radius: 14px;
-  font-size: var(--sm-fs);
+  padding: 0 8px;
+  border-radius: var(--dsw-radius-lg);
+  font-size: var(--ds-fs);
   line-height: 22px;
   color: var(--dsw-alias-label-tertiary);
   background: transparent;
@@ -8612,6 +8615,10 @@ window.__ModuleLoader__.load({
 }
 
 /* ------------------------------------------------------------------ *
+`
+// ===== 92-styles-controls.js =====
+/* 控件与双列卡片网格 —— 由原 90-styles.js 按章节拆出（行 732-1185）。 */
+const STYLES_3 = `
  * 5. Controls: buttons, chips, inputs, switch                        *
  * ------------------------------------------------------------------ */
 
@@ -8624,11 +8631,11 @@ window.__ModuleLoader__.load({
 .sm-btn-dangerSolid {
   height: 32px;
   padding: 0 12px;
-  border-radius: 12px;
-  border: 1px solid transparent;
+  border-radius: var(--dsw-radius-md);
+  border: 0.5px solid transparent;
   background: transparent;
   color: var(--dsw-alias-label-primary);
-  font-size: calc(var(--sm-fs) - 1px);
+  font-size: calc(var(--ds-fs) - 1px);
   font-weight: 500;
   font-family: inherit;
   display: inline-flex;
@@ -8657,7 +8664,7 @@ window.__ModuleLoader__.load({
 }
 
 .sm-btn-primary:hover:not(:disabled) {
-  opacity: 0.9;
+  background: var(--dsw-alias-button-primary-hover, var(--dsw-alias-button-primary-fill));
 }
 
 .sm-btn-secondary {
@@ -8671,7 +8678,7 @@ window.__ModuleLoader__.load({
 }
 
 .sm-btn-ghost {
-  padding: 0 10px;
+  padding: 0 12px;
   background: transparent;
   border-color: transparent;
   color: var(--dsw-alias-label-secondary);
@@ -8719,9 +8726,9 @@ window.__ModuleLoader__.load({
 
 .sm-btn-sm {
   height: 28px;
-  padding: 0 10px;
-  border-radius: 10px;
-  font-size: calc(var(--sm-fs) - 2px);
+  padding: 0 8px;
+  border-radius: var(--dsw-radius-sm);
+  font-size: calc(var(--ds-fs) - 2px);
 }
 
 .sm-check-updates {
@@ -8753,12 +8760,12 @@ window.__ModuleLoader__.load({
 
 .sm-chip {
   height: 24px;
-  padding: 0 10px;
-  border-radius: 999px;
-  border: 1px solid var(--dsw-alias-border-l1);
+  padding: 0 8px;
+  border-radius: var(--dsw-radius-panel);
+  border: 0.5px solid var(--dsw-alias-border-l1);
   background: var(--dsw-alias-bg-layer-1);
   color: var(--dsw-alias-label-secondary);
-  font-size: calc(var(--sm-fs) - 2px);
+  font-size: calc(var(--ds-fs) - 2px);
   font-family: inherit;
   display: inline-flex;
   align-items: center;
@@ -8773,7 +8780,9 @@ window.__ModuleLoader__.load({
 }
 
 /* Selected chips follow the same rule as tabs: same background token as
- * hover, text colour carries the state. */
+ * hover, text colour carries the state. .selected is canonical;
+ * .active stays as a legacy alias with the same semantics. */
+.sm-chip.selected,
 .sm-chip.active,
 .sm-chip.sm-active,
 .sm-chip.sm-chip-active,
@@ -8793,13 +8802,13 @@ window.__ModuleLoader__.load({
 
 .sm-input {
   width: 100%;
-  height: 33px;
+  height: 34px;
   padding: 0 12px;
-  border-radius: 12px;
-  border: 1px solid var(--dsw-alias-border-l2);
-  background: var(--dsw-alias-bg-layer-1);
+  border-radius: var(--dsw-radius-md);
+  border: 0.5px solid var(--dsw-alias-border-l4);
+  background: var(--dsw-alias-bg-layer-3);
   color: var(--dsw-alias-label-primary);
-  font-size: calc(var(--sm-fs) - 1px);
+  font-size: calc(var(--ds-fs) - 1px);
   font-family: inherit;
   outline: none;
 }
@@ -8809,7 +8818,7 @@ window.__ModuleLoader__.load({
 }
 
 .sm-input:focus {
-  border-color: var(--dsw-alias-border-l3);
+  border-color: var(--dsw-alias-state-business-primary);
 }
 
 textarea.sm-input {
@@ -8823,7 +8832,7 @@ textarea.sm-input {
 textarea.sm-input.sm-edit-body {
   min-height: 320px;
   font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
-  font-size: calc(var(--sm-fs) - 2px);
+  font-size: calc(var(--ds-fs) - 2px);
   line-height: 1.65;
 }
 
@@ -8831,11 +8840,11 @@ textarea.sm-input.sm-edit-body {
   width: 100%;
   min-height: 96px;
   padding: 8px 12px;
-  border-radius: 12px;
-  border: 1px solid var(--dsw-alias-border-l2);
+  border-radius: var(--dsw-radius-md);
+  border: 0.5px solid var(--dsw-alias-border-l4);
   background: var(--dsw-alias-bg-layer-1);
   color: var(--dsw-alias-label-primary);
-  font-size: calc(var(--sm-fs) - 1px);
+  font-size: calc(var(--ds-fs) - 1px);
   font-family: inherit;
   line-height: 1.6;
   resize: vertical;
@@ -8851,7 +8860,7 @@ textarea.sm-input.sm-edit-body {
   width: 36px;
   height: 20px;
   padding: 2px;
-  border-radius: 999px;
+  border-radius: var(--dsw-radius-panel);
   border: none;
   background: var(--dsw-alias-border-l3);
   display: inline-flex;
@@ -8876,7 +8885,7 @@ textarea.sm-input.sm-edit-body {
   border-radius: 50%;
   background: var(--dsw-alias-bg-base);
   transform: translateX(0);
-  transition: transform 150ms cubic-bezier(0.2, 0.8, 0.2, 1);
+  transition: transform 180ms cubic-bezier(0.2, 0.8, 0.2, 1);
 }
 
 .sm-switch[aria-checked="true"]:empty::after,
@@ -8890,7 +8899,7 @@ textarea.sm-input.sm-edit-body {
   border-radius: 50%;
   background: var(--dsw-alias-bg-base);
   transform: translateX(0);
-  transition: transform 150ms cubic-bezier(0.2, 0.8, 0.2, 1);
+  transition: transform 180ms cubic-bezier(0.2, 0.8, 0.2, 1);
 }
 
 .sm-switch[aria-checked="true"] > .sm-switch-thumb,
@@ -8952,7 +8961,7 @@ textarea.sm-input.sm-edit-body {
   align-items: flex-start;
   gap: 12px;
   border: 0.5px solid var(--dsw-alias-settings-card-stroke);
-  border-radius: var(--dsw-radius-xl);
+  border-radius: var(--dsw-radius-lg);
   background: var(--dsw-alias-settings-card-fill);
   cursor: pointer;
   transition: background 120ms ease;
@@ -8987,8 +8996,8 @@ textarea.sm-input.sm-edit-body {
 }
 
 .sm-card-icon svg {
-  width: 22px;
-  height: 22px;
+  width: 20px;
+  height: 20px;
 }
 
 .sm-card-main {
@@ -8996,8 +9005,8 @@ textarea.sm-input.sm-edit-body {
   min-width: 0;
   display: flex;
   flex-direction: column;
-  gap: 5px;
-  padding-top: 1px;
+  gap: 6px;
+  padding-top: 2px;
 }
 
 .sm-card-title-row {
@@ -9010,7 +9019,7 @@ textarea.sm-input.sm-edit-body {
 .sm-card-name {
   font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
   /* DSH plugin card title: 16px. */
-  font-size: calc(var(--sm-fs) + 2px);
+  font-size: calc(var(--ds-fs) + 2px);
   font-weight: 500;
   line-height: 1.4;
   color: var(--dsw-alias-label-primary);
@@ -9021,7 +9030,7 @@ textarea.sm-input.sm-edit-body {
 }
 
 .sm-card-desc {
-  font-size: calc(var(--sm-fs) - 1px);
+  font-size: calc(var(--ds-fs) - 1px);
   color: var(--dsw-alias-label-tertiary);
   line-height: 1.5;
   display: -webkit-box;
@@ -9049,8 +9058,8 @@ textarea.sm-input.sm-edit-body {
 
 /* ⋯ is hidden by default and fades in on card hover / focus. */
 .sm-card-more {
-  width: 26px;
-  height: 26px;
+  width: 28px;
+  height: 28px;
   opacity: 0;
   pointer-events: none;
   transition: opacity 120ms ease;
@@ -9064,6 +9073,10 @@ textarea.sm-input.sm-edit-body {
 }
 
 /* ------------------------------------------------------------------ *
+`
+// ===== 93-styles-lists.js =====
+/* 分组、行、徽章 —— 由原 90-styles.js 按章节拆出（行 1186-1668）。 */
+const STYLES_4 = `
  * 7. Groups (source grouping in the skills tab)                      *
  * ------------------------------------------------------------------ */
 
@@ -9096,15 +9109,16 @@ textarea.sm-input.sm-edit-body {
 }
 
 .sm-group-head {
-  height: 22px;
+  height: auto;
+  min-height: 22px;
   display: flex;
   align-items: center;
   justify-content: space-between;
   gap: 8px;
   padding: 0 8px;
-  margin-bottom: 10px;
+  margin-bottom: 8px;
   min-width: 0;
-  font-size: var(--sm-fs);
+  font-size: var(--ds-fs);
   font-weight: 500;
 }
 
@@ -9123,7 +9137,7 @@ textarea.sm-input.sm-edit-body {
 }
 
 .sm-group-title {
-  font-size: var(--sm-fs);
+  font-size: var(--ds-fs);
   font-weight: 500;
   color: var(--dsw-alias-label-primary);
   white-space: nowrap;
@@ -9131,7 +9145,7 @@ textarea.sm-input.sm-edit-body {
 
 .sm-group-path {
   font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
-  font-size: calc(var(--sm-fs) - 2px);
+  font-size: calc(var(--ds-fs) - 2px);
   font-weight: 400;
   color: var(--dsw-alias-label-caption);
   white-space: nowrap;
@@ -9142,7 +9156,7 @@ textarea.sm-input.sm-edit-body {
 }
 
 .sm-group-count {
-  font-size: calc(var(--sm-fs) - 2px);
+  font-size: calc(var(--ds-fs) - 2px);
   font-weight: 400;
   color: var(--dsw-alias-label-caption);
   white-space: nowrap;
@@ -9172,19 +9186,19 @@ textarea.sm-input.sm-edit-body {
 .sm-market-blocks {
   display: flex;
   flex-direction: column;
-  gap: 28px;
+  gap: 24px;
   min-width: 0;
 }
 
 .sm-source-block {
   display: flex;
   flex-direction: column;
-  gap: 10px;
+  gap: 12px;
   min-width: 0;
 }
 
 .sm-market > .sm-source-block + .sm-source-block {
-  margin-top: 28px;
+  margin-top: 24px;
 }
 
 .sm-source-block-head {
@@ -9196,7 +9210,7 @@ textarea.sm-input.sm-edit-body {
 }
 
 .sm-source-block-title {
-  font-size: var(--sm-fs);
+  font-size: var(--ds-fs);
   font-weight: 500;
   color: var(--dsw-alias-label-primary);
   white-space: nowrap;
@@ -9205,7 +9219,7 @@ textarea.sm-input.sm-edit-body {
 }
 
 .sm-source-block-count {
-  font-size: calc(var(--sm-fs) - 2px);
+  font-size: calc(var(--ds-fs) - 2px);
   color: var(--dsw-alias-label-caption);
   white-space: nowrap;
 }
@@ -9231,13 +9245,13 @@ textarea.sm-input.sm-edit-body {
 
 .sm-row {
   min-height: 72px;
-  padding: 8px 10px;
-  border-radius: 20px;
-  border: 1px solid transparent;
+  padding: 8px 12px;
+  border-radius: var(--dsw-radius-lg);
+  border: 0.5px solid transparent;
   display: flex;
   align-items: center;
   justify-content: space-between;
-  gap: 14px;
+  gap: 12px;
   min-width: 0;
   cursor: pointer;
   transition: background 120ms ease;
@@ -9273,9 +9287,9 @@ textarea.sm-input.sm-edit-body {
 .sm-icon-box {
   width: 49px;
   height: 49px;
-  border-radius: 16px;
+  border-radius: var(--dsw-radius-lg);
   background: var(--dsw-alias-bg-layer-1);
-  border: 1px solid var(--dsw-alias-border-l2);
+  border: 0.5px solid var(--dsw-alias-border-l2);
   display: flex;
   align-items: center;
   justify-content: center;
@@ -9286,8 +9300,8 @@ textarea.sm-input.sm-edit-body {
 
 .sm-row-icon svg,
 .sm-icon-box svg {
-  width: 24px;
-  height: 24px;
+  width: 20px;
+  height: 20px;
 }
 
 .sm-row.market .sm-icon-box,
@@ -9301,7 +9315,7 @@ textarea.sm-input.sm-edit-body {
   min-width: 0;
   display: flex;
   align-items: center;
-  gap: 14px;
+  gap: 12px;
 }
 
 .sm-row-text {
@@ -9309,7 +9323,7 @@ textarea.sm-input.sm-edit-body {
   min-width: 0;
   display: flex;
   flex-direction: column;
-  gap: 3px;
+  gap: 4px;
 }
 
 .sm-row-title {
@@ -9322,7 +9336,7 @@ textarea.sm-input.sm-edit-body {
 
 .sm-row-name {
   font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
-  font-size: var(--sm-fs);
+  font-size: var(--ds-fs);
   font-weight: 500;
   line-height: 1.4;
   color: var(--dsw-alias-label-primary);
@@ -9335,7 +9349,7 @@ textarea.sm-input.sm-edit-body {
 
 .sm-row-version {
   font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
-  font-size: calc(var(--sm-fs) - 2px);
+  font-size: calc(var(--ds-fs) - 2px);
   color: var(--dsw-alias-label-caption);
   white-space: nowrap;
   flex-shrink: 0;
@@ -9343,7 +9357,7 @@ textarea.sm-input.sm-edit-body {
 
 .sm-row-desc {
   flex: 0 0 auto;
-  font-size: calc(var(--sm-fs) - 1px);
+  font-size: calc(var(--ds-fs) - 1px);
   line-height: 1.45;
   color: var(--dsw-alias-label-tertiary);
   white-space: nowrap;
@@ -9386,14 +9400,14 @@ textarea.sm-input.sm-edit-body {
 }
 
 .sm-row-builtin {
-  font-size: calc(var(--sm-fs) - 2px);
+  font-size: calc(var(--ds-fs) - 2px);
   color: var(--dsw-alias-label-caption);
   white-space: nowrap;
   flex-shrink: 0;
 }
 
 .sm-row-by {
-  font-size: calc(var(--sm-fs) - 2px);
+  font-size: calc(var(--ds-fs) - 2px);
   color: var(--dsw-alias-label-caption);
   min-width: 0;
 }
@@ -9423,9 +9437,9 @@ textarea.sm-input.sm-edit-body {
 .sm-dot {
   width: 8px;
   height: 8px;
-  border-radius: 999px;
+  border-radius: var(--dsw-radius-panel);
   background: var(--dsw-alias-label-caption);
-  border: 1.5px solid var(--dsw-alias-bg-base);
+  border: 0.5px solid var(--dsw-alias-bg-base);
   flex-shrink: 0;
 }
 
@@ -9470,13 +9484,13 @@ textarea.sm-input.sm-edit-body {
 .sm-badge-loc {
   display: inline-flex;
   align-items: center;
-  gap: 3px;
-  padding: 1px 8px;
-  border-radius: 999px;
-  border: 1px solid var(--dsw-alias-border-l1);
+  gap: 4px;
+  padding: 2px 8px;
+  border-radius: var(--dsw-radius-panel);
+  border: 0.5px solid var(--dsw-alias-border-l1);
   background: var(--dsw-alias-bg-layer-2);
   color: var(--dsw-alias-label-secondary);
-  font-size: calc(var(--sm-fs) - 3px);
+  font-size: calc(var(--ds-fs) - 3px);
   font-weight: 500;
   line-height: 17px;
   white-space: nowrap;
@@ -9546,6 +9560,10 @@ textarea.sm-input.sm-edit-body {
 }
 
 /* ------------------------------------------------------------------ *
+`
+// ===== 94-styles-states.js =====
+/* 状态面：banner / 空态 / 骨架 / spinner —— 由原 90-styles.js 按章节拆出（行 1669-1936）。 */
+const STYLES_5 = `
  * 10. State surfaces: banners, empty, skeleton, spinner              *
  * ------------------------------------------------------------------ */
 
@@ -9557,12 +9575,12 @@ textarea.sm-input.sm-edit-body {
 }
 
 .sm-banner {
-  padding: 10px 16px;
-  border-radius: 16px;
-  border: 1px solid var(--dsw-alias-border-l2);
+  padding: 12px 16px;
+  border-radius: var(--dsw-radius-lg);
+  border: 0.5px solid var(--dsw-alias-border-l2);
   background: var(--dsw-alias-bg-layer-1);
   color: var(--dsw-alias-label-primary);
-  font-size: calc(var(--sm-fs) - 1px);
+  font-size: calc(var(--ds-fs) - 1px);
   line-height: 1.5;
   display: flex;
   align-items: center;
@@ -9639,7 +9657,7 @@ textarea.sm-input.sm-edit-body {
 }
 
 .sm-banner-meta {
-  font-size: calc(var(--sm-fs) - 2px);
+  font-size: calc(var(--ds-fs) - 2px);
   color: var(--dsw-alias-label-secondary);
   min-width: 0;
 }
@@ -9650,7 +9668,7 @@ textarea.sm-input.sm-edit-body {
 }
 
 .sm-banner-code {
-  font-size: calc(var(--sm-fs) - 2px);
+  font-size: calc(var(--ds-fs) - 2px);
   color: var(--dsw-alias-label-caption);
   overflow-wrap: anywhere;
 }
@@ -9661,15 +9679,15 @@ textarea.sm-input.sm-edit-body {
   flex-direction: column;
   align-items: center;
   justify-content: center;
-  gap: 10px;
+  gap: 12px;
   text-align: center;
   color: var(--dsw-alias-label-tertiary);
-  font-size: calc(var(--sm-fs) - 1px);
+  font-size: calc(var(--ds-fs) - 1px);
   line-height: 1.5;
 }
 
 .sm-empty-installed {
-  padding: 64px 20px;
+  padding: 48px 20px;
 }
 
 .sm-empty-error .sm-empty-icon {
@@ -9685,7 +9703,7 @@ textarea.sm-input.sm-edit-body {
 }
 
 .sm-empty-title {
-  font-size: calc(var(--sm-fs) + 1px);
+  font-size: calc(var(--ds-fs) + 1px);
   font-weight: 500;
   line-height: 1.4;
   color: var(--dsw-alias-label-primary);
@@ -9693,7 +9711,7 @@ textarea.sm-input.sm-edit-body {
 
 .sm-empty-body {
   max-width: 420px;
-  font-size: calc(var(--sm-fs) - 1px);
+  font-size: calc(var(--ds-fs) - 1px);
   line-height: 1.5;
   color: var(--dsw-alias-label-tertiary);
 }
@@ -9708,13 +9726,13 @@ textarea.sm-input.sm-edit-body {
 }
 
 .sm-market-empty {
-  padding: 40px 20px;
+  padding: 48px 20px;
 }
 
 .sm-skeleton {
   width: 100%;
   min-height: 14px;
-  border-radius: 12px;
+  border-radius: var(--dsw-radius-md);
   background: var(--dsw-alias-bg-skeleton);
   animation: sm-skeleton-pulse 1.4s ease-in-out infinite;
 }
@@ -9722,7 +9740,7 @@ textarea.sm-input.sm-edit-body {
 .sm-skeleton-row {
   display: flex;
   align-items: center;
-  gap: 14px;
+  gap: 12px;
   min-height: 65px;
   padding: 8px;
 }
@@ -9736,7 +9754,7 @@ textarea.sm-input.sm-edit-body {
 .sm-skeleton-icon {
   width: 49px;
   height: 49px;
-  border-radius: 16px;
+  border-radius: var(--dsw-radius-lg);
   flex-shrink: 0;
 }
 
@@ -9751,7 +9769,7 @@ textarea.sm-input.sm-edit-body {
 .sm-skeleton-line {
   height: 12px;
   max-width: 420px;
-  border-radius: 6px;
+  border-radius: var(--dsw-radius-sm);
 }
 
 .sm-skeleton-line-lg {
@@ -9762,7 +9780,7 @@ textarea.sm-input.sm-edit-body {
 
 .sm-skeleton-banner {
   height: 42px;
-  border-radius: 16px;
+  border-radius: var(--dsw-radius-lg);
 }
 
 .sm-skeleton-filters {
@@ -9775,14 +9793,16 @@ textarea.sm-input.sm-edit-body {
 .sm-skeleton-chip {
   width: 64px;
   height: 24px;
-  border-radius: 999px;
+  border-radius: var(--dsw-radius-panel);
 }
 
 .sm-spinner {
   width: 16px;
   height: 16px;
   border-radius: 50%;
-  border: 2px solid color-mix(in srgb, var(--dsw-alias-label-tertiary) 30%, transparent);
+  /* Hairline ring per design §2.4; the track tint is deepened (30% → 60%)
+   * so a .5px ring stays visible at 16px. */
+  border: 0.5px solid color-mix(in srgb, var(--dsw-alias-label-tertiary) 60%, transparent);
   border-top-color: var(--dsw-alias-label-primary);
   animation: sm-spin 0.8s linear infinite;
   flex-shrink: 0;
@@ -9790,16 +9810,16 @@ textarea.sm-input.sm-edit-body {
 
 .sm-error-panel {
   padding: 24px;
-  border-radius: 16px;
-  border: 1px solid color-mix(in srgb, var(--dsw-alias-state-error-primary) 30%, transparent);
+  border-radius: var(--dsw-radius-lg);
+  border: 0.5px solid color-mix(in srgb, var(--dsw-alias-state-error-primary) 30%, transparent);
   background: color-mix(in srgb, var(--dsw-alias-state-error-primary) 10%, transparent);
   color: var(--dsw-alias-label-primary);
-  font-size: calc(var(--sm-fs) - 1px);
+  font-size: calc(var(--ds-fs) - 1px);
   line-height: 1.5;
   display: flex;
   flex-direction: column;
   align-items: flex-start;
-  gap: 10px;
+  gap: 12px;
 }
 
 @keyframes sm-skeleton-pulse {
@@ -9812,13 +9832,17 @@ textarea.sm-input.sm-edit-body {
 }
 
 /* ------------------------------------------------------------------ *
+`
+// ===== 95-styles-detail.js =====
+/* 详情页与弹窗外壳 —— 由原 90-styles.js 按章节拆出（行 1937-2517）。 */
+const STYLES_6 = `
  * 11. In-page two-column detail                                      *
  * ------------------------------------------------------------------ */
 
 .sm-detail {
   display: flex;
   flex-direction: column;
-  gap: 22px;
+  gap: 20px;
   min-width: 0;
   min-height: 0;
 }
@@ -9853,7 +9877,7 @@ textarea.sm-input.sm-edit-body {
   border: none;
   background: transparent;
   color: var(--dsw-alias-label-tertiary);
-  font-size: calc(var(--sm-fs) - 1px);
+  font-size: calc(var(--ds-fs) - 1px);
   font-family: inherit;
   cursor: pointer;
   align-self: flex-start;
@@ -9871,23 +9895,23 @@ textarea.sm-input.sm-edit-body {
   gap: 16px;
   flex-wrap: wrap;
   padding-bottom: 20px;
-  border-bottom: 1px solid var(--dsw-alias-border-l2);
+  border-bottom: 0.5px solid var(--dsw-alias-border-l2);
   min-width: 0;
 }
 
 .sm-detail-head > div:first-child {
   display: flex;
   align-items: center;
-  gap: 14px;
+  gap: 12px;
   min-width: 0;
 }
 
 .sm-detail-icon {
   width: 56px;
   height: 56px;
-  border-radius: 16px;
+  border-radius: var(--dsw-radius-lg);
   background: var(--dsw-alias-bg-layer-1);
-  border: 1px solid var(--dsw-alias-border-l2);
+  border: 0.5px solid var(--dsw-alias-border-l2);
   display: flex;
   align-items: center;
   justify-content: center;
@@ -9904,7 +9928,7 @@ textarea.sm-input.sm-edit-body {
 .sm-detail-title {
   margin: 0;
   font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
-  font-size: calc(var(--sm-fs) + 2px);
+  font-size: calc(var(--ds-fs) + 2px);
   font-weight: 500;
   line-height: 1.4;
   color: var(--dsw-alias-label-primary);
@@ -9955,7 +9979,7 @@ textarea.sm-input.sm-edit-body {
 .sm-meta-label {
   flex-shrink: 0;
   color: var(--dsw-alias-label-caption);
-  font-size: calc(var(--sm-fs) - 2px);
+  font-size: calc(var(--ds-fs) - 2px);
 }
 
 .sm-meta-value {
@@ -9963,7 +9987,7 @@ textarea.sm-input.sm-edit-body {
   text-align: right;
   word-break: break-all;
   color: var(--dsw-alias-label-primary);
-  font-size: calc(var(--sm-fs) - 1px);
+  font-size: calc(var(--ds-fs) - 1px);
 }
 
 /* Location row: one line within the right column, ellipsis when it does
@@ -9988,8 +10012,8 @@ textarea.sm-input.sm-edit-body {
 /* 24×24 copy icon button; hover inherits the native .sm-icon-btn spec
  * (bg-layer-1 + label-primary). */
 .sm-detail-path-copy {
-  width: 24px;
-  height: 24px;
+  width: 28px;
+  height: 28px;
   padding: 4px;
   flex-shrink: 0;
 }
@@ -10001,19 +10025,19 @@ textarea.sm-input.sm-edit-body {
 
 /* Detail panel card (distinct from .sm-card-item). */
 .sm-card {
-  padding: 16px 18px;
+  padding: 16px 20px;
   border-radius: var(--dsw-radius-panel);
-  border: 1px solid var(--dsw-alias-border-l2);
+  border: 0.5px solid var(--dsw-alias-border-l2);
   background: var(--dsw-alias-bg-layer-1);
   display: flex;
   flex-direction: column;
-  gap: 10px;
+  gap: 12px;
   min-width: 0;
 }
 
 .sm-card-title {
   margin: 0;
-  font-size: var(--sm-fs);
+  font-size: var(--ds-fs);
   font-weight: 500;
   line-height: 1.4;
   color: var(--dsw-alias-label-primary);
@@ -10022,12 +10046,12 @@ textarea.sm-input.sm-edit-body {
 .sm-code {
   margin: 0;
   padding: 12px 0;
-  border-radius: 14px;
-  border: 1px solid var(--dsw-alias-border-l1);
+  border-radius: var(--dsw-radius-lg);
+  border: 0.5px solid var(--dsw-alias-border-l1);
   background: var(--dsw-alias-bg-base);
   color: var(--dsw-alias-label-secondary);
   font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
-  font-size: calc(var(--sm-fs) - 2px);
+  font-size: calc(var(--ds-fs) - 2px);
   line-height: 1.7;
   max-height: 320px;
   overflow: auto;
@@ -10054,13 +10078,13 @@ textarea.sm-input.sm-edit-body {
 .sm-editor {
   width: 100%;
   min-height: 420px;
-  padding: 12px 14px;
-  border-radius: 12px;
-  border: 1px solid var(--dsw-alias-border-l2);
+  padding: 12px 16px;
+  border-radius: var(--dsw-radius-md);
+  border: 0.5px solid var(--dsw-alias-border-l2);
   background: var(--dsw-alias-bg-base);
   color: var(--dsw-alias-label-primary);
   font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
-  font-size: calc(var(--sm-fs) - 2px);
+  font-size: calc(var(--ds-fs) - 2px);
   line-height: 1.7;
   tab-size: 2;
   resize: vertical;
@@ -10086,11 +10110,11 @@ textarea.sm-input.sm-edit-body {
 .sm-file-row {
   display: flex;
   align-items: center;
-  gap: 10px;
-  padding: 8px 10px;
-  border-radius: 10px;
+  gap: 8px;
+  padding: 8px 12px;
+  border-radius: var(--dsw-radius-md);
   color: var(--dsw-alias-label-secondary);
-  font-size: calc(var(--sm-fs) - 2px);
+  font-size: calc(var(--ds-fs) - 2px);
   line-height: 1.45;
   min-width: 0;
 }
@@ -10121,7 +10145,7 @@ textarea.sm-input.sm-edit-body {
   justify-content: center;
   padding: 16px;
   /* DSH dialog mask: a real dim layer, not a transparent hit area. */
-  background: var(--dsw-alias-bg-mask-1, rgba(0, 0, 0, 0.5));
+  background: var(--dsw-alias-bg-mask-1);
   backdrop-filter: none;
 }
 
@@ -10131,13 +10155,13 @@ textarea.sm-input.sm-edit-body {
   max-height: min(720px, 100vh - 96px);
   display: flex;
   flex-direction: column;
-  background: var(--dsw-static-neutral-bluish-850, var(--dsw-alias-bg-layer-1));
+  background: var(--dsw-alias-bg-layer-2);
   border: 0.5px solid var(--dsw-alias-border-inverted);
   border-radius: var(--dsw-radius-panel);
   box-shadow: none;
   overflow: hidden;
   color: var(--dsw-alias-label-primary);
-  font-size: var(--sm-fs);
+  font-size: var(--ds-fs);
 }
 
 /* 480 — confirmations */
@@ -10157,7 +10181,7 @@ textarea.sm-input.sm-edit-body {
 .sm-dialog-preview,
 .sm-dialog-edit,
 .sm-dialog-large {
-  width: min(720px, 100%);
+  width: min(720px, 100vw - 32px);
   border-radius: var(--dsw-radius-panel);
 }
 
@@ -10172,7 +10196,7 @@ textarea.sm-input.sm-edit-body {
   align-items: flex-start;
   justify-content: space-between;
   gap: 12px;
-  padding: 18px 20px 0;
+  padding: 16px 20px 0;
   flex-shrink: 0;
   min-width: 0;
 }
@@ -10188,7 +10212,7 @@ textarea.sm-input.sm-edit-body {
 .sm-dialog-head .sm-dialog-title,
 .sm-dialog-title {
   margin: 0;
-  font-size: calc(var(--sm-fs) + 1px);
+  font-size: calc(var(--ds-fs) + 1px);
   font-weight: 500;
   line-height: 1.4;
   color: var(--dsw-alias-label-primary);
@@ -10197,13 +10221,13 @@ textarea.sm-input.sm-edit-body {
 
 .sm-dialog-sub {
   margin: 4px 0 0;
-  font-size: calc(var(--sm-fs) - 2px);
+  font-size: calc(var(--ds-fs) - 2px);
   color: var(--dsw-alias-label-caption);
 }
 
 .sm-dialog-intro {
   margin: 0 0 12px;
-  font-size: calc(var(--sm-fs) - 2px);
+  font-size: calc(var(--ds-fs) - 2px);
   color: var(--dsw-alias-label-caption);
   line-height: 1.6;
   flex-shrink: 0;
@@ -10218,7 +10242,7 @@ textarea.sm-input.sm-edit-body {
   overflow-y: auto;
   flex: 1 1 auto;
   min-height: 0;
-  font-size: var(--sm-fs);
+  font-size: var(--ds-fs);
   line-height: 1.6;
   scrollbar-width: thin;
   scrollbar-color: var(--dsw-alias-scrollbar-bg-l1) transparent;
@@ -10226,12 +10250,12 @@ textarea.sm-input.sm-edit-body {
 
 .sm-dialog.form .sm-dialog-body,
 .sm-dialog-form .sm-dialog-body {
-  padding-top: 38px;
+  padding-top: 32px;
 }
 
 .sm-dialog.large .sm-dialog-body,
 .sm-dialog-large .sm-dialog-body {
-  padding-top: 18px;
+  padding-top: 20px;
 }
 
 .sm-dialog-foot {
@@ -10241,7 +10265,7 @@ textarea.sm-input.sm-edit-body {
   gap: 8px;
   min-height: 56px;
   padding: 12px 20px;
-  border-top: 1px solid var(--dsw-alias-border-l1);
+  border-top: 0.5px solid var(--dsw-alias-border-l1);
   flex-shrink: 0;
 }
 
@@ -10251,7 +10275,7 @@ textarea.sm-input.sm-edit-body {
   display: flex;
   flex-direction: column;
   gap: 6px;
-  margin-bottom: 14px;
+  margin-bottom: 12px;
   min-width: 0;
 }
 
@@ -10266,20 +10290,20 @@ textarea.sm-input.sm-edit-body {
   align-items: center;
   justify-content: space-between;
   gap: 8px;
-  font-size: calc(var(--sm-fs) - 1px);
+  font-size: calc(var(--ds-fs) - 1px);
   font-weight: 500;
   line-height: 1.4;
   color: var(--dsw-alias-label-secondary);
 }
 
 .sm-form-hint {
-  font-size: calc(var(--sm-fs) - 3px);
+  font-size: calc(var(--ds-fs) - 3px);
   color: var(--dsw-alias-label-caption);
   font-weight: 400;
 }
 
 .sm-form-error {
-  font-size: calc(var(--sm-fs) - 2px);
+  font-size: calc(var(--ds-fs) - 2px);
   line-height: 1.4;
   color: var(--dsw-alias-state-error-primary);
 }
@@ -10295,12 +10319,12 @@ textarea.sm-input.sm-edit-body {
   display: flex;
   align-items: flex-start;
   gap: 8px;
-  padding: 8px 10px;
-  border-radius: 10px;
-  border: 1px solid var(--dsw-alias-border-l1);
+  padding: 8px 12px;
+  border-radius: var(--dsw-radius-md);
+  border: 0.5px solid var(--dsw-alias-border-l1);
   background: var(--dsw-alias-bg-layer-1);
   color: var(--dsw-alias-label-secondary);
-  font-size: calc(var(--sm-fs) - 1px);
+  font-size: calc(var(--ds-fs) - 1px);
   line-height: 1.45;
   cursor: pointer;
 }
@@ -10309,6 +10333,7 @@ textarea.sm-input.sm-edit-body {
   background: var(--dsw-alias-interactive-bg-hover);
 }
 
+.sm-radio.selected,
 .sm-radio.active,
 .sm-radio.sm-active,
 .sm-radio[data-checked="true"] {
@@ -10324,10 +10349,10 @@ textarea.sm-input.sm-edit-body {
 }
 
 .sm-dropzone {
-  padding: 28px 20px;
+  padding: 24px 20px;
   border-radius: var(--dsw-radius-lg);
   text-align: center;
-  border: 1px dashed var(--dsw-alias-border-l3);
+  border: 0.5px dashed var(--dsw-alias-border-l3);
   background: var(--dsw-alias-bg-layer-1);
   display: flex;
   flex-direction: column;
@@ -10341,12 +10366,12 @@ textarea.sm-input.sm-edit-body {
 }
 
 .sm-dropzone-title {
-  font-size: calc(var(--sm-fs) - 1px);
+  font-size: calc(var(--ds-fs) - 1px);
   color: var(--dsw-alias-label-secondary);
 }
 
 .sm-dropzone-hint {
-  font-size: calc(var(--sm-fs) - 3px);
+  font-size: calc(var(--ds-fs) - 3px);
   color: var(--dsw-alias-label-caption);
 }
 
@@ -10361,7 +10386,7 @@ textarea.sm-input.sm-edit-body {
   display: flex;
   align-items: center;
   gap: 8px;
-  font-size: calc(var(--sm-fs) - 1px);
+  font-size: calc(var(--ds-fs) - 1px);
   color: var(--dsw-alias-label-secondary);
   flex-wrap: wrap;
 }
@@ -10371,18 +10396,18 @@ textarea.sm-input.sm-edit-body {
 }
 
 .sm-confirm-note {
-  font-size: calc(var(--sm-fs) - 2px);
+  font-size: calc(var(--ds-fs) - 2px);
   color: var(--dsw-alias-label-caption);
   line-height: 1.65;
   margin: 0;
 }
 
 .sm-confirm-warn {
-  padding: 9px 11px;
-  border-radius: 10px;
+  padding: 8px 12px;
+  border-radius: var(--dsw-radius-md);
   background: color-mix(in srgb, var(--dsw-alias-state-warn-primary) 10%, transparent);
-  border: 1px solid color-mix(in srgb, var(--dsw-alias-state-warn-primary) 26%, transparent);
-  font-size: calc(var(--sm-fs) - 2px);
+  border: 0.5px solid color-mix(in srgb, var(--dsw-alias-state-warn-primary) 26%, transparent);
+  font-size: calc(var(--ds-fs) - 2px);
   color: var(--dsw-alias-label-secondary);
   line-height: 1.55;
 }
@@ -10392,6 +10417,10 @@ textarea.sm-input.sm-edit-body {
 }
 
 /* ------------------------------------------------------------------ *
+`
+// ===== 96-styles-dialogs.js =====
+/* 管理源弹窗与诊断抽屉 —— 由原 90-styles.js 按章节拆出（行 2518-2940）。 */
+const STYLES_7 = `
  * 13. Manage-sources dialog (contract §7.6)                          *
  * ------------------------------------------------------------------ */
 
@@ -10406,16 +10435,16 @@ textarea.sm-input.sm-edit-body {
   display: flex;
   flex-direction: column;
   overflow: hidden;
-  background: var(--dsw-static-neutral-bluish-850, var(--dsw-alias-bg-layer-1));
+  background: var(--dsw-alias-bg-layer-2);
   color: var(--dsw-alias-label-primary);
-  font-size: var(--sm-fs);
+  font-size: var(--ds-fs);
 }
 
 .sm-source-dialog .sm-dialog-body {
   display: flex;
   flex-direction: column;
   overflow: hidden;
-  padding-top: 14px;
+  padding-top: 12px;
   padding-bottom: 16px;
 }
 
@@ -10433,9 +10462,9 @@ textarea.sm-input.sm-edit-body {
 .sm-source-row {
   display: flex;
   align-items: center;
-  gap: 10px;
-  padding: 10px 12px;
-  border-radius: 10px;
+  gap: 8px;
+  padding: 8px 12px;
+  border-radius: var(--dsw-radius-md);
   min-width: 0;
   min-height: 56px;
 }
@@ -10450,7 +10479,7 @@ textarea.sm-input.sm-edit-body {
 
 .sm-source-drag-hint {
   margin: 0;
-  font-size: calc(var(--sm-fs) - 3px);
+  font-size: calc(var(--ds-fs) - 3px);
   line-height: 1.5;
   color: var(--dsw-alias-label-caption);
 }
@@ -10462,12 +10491,12 @@ textarea.sm-input.sm-edit-body {
   display: flex;
   align-items: center;
   gap: 8px;
-  padding: 6px 10px;
+  padding: 6px 8px;
   border-radius: var(--dsw-radius-sm);
   border: 0.5px solid var(--dsw-alias-border-l2);
   background: var(--dsw-alias-bg-layer-2);
   color: var(--dsw-alias-label-primary);
-  font-size: calc(var(--sm-fs) - 1px);
+  font-size: calc(var(--ds-fs) - 1px);
   pointer-events: none;
 }
 
@@ -10497,7 +10526,7 @@ textarea.sm-input.sm-edit-body {
 
 .sm-drop-indicator {
   height: 2px;
-  border-radius: 2px;
+  border-radius: var(--dsw-radius-xs);
   background: var(--dsw-alias-state-business-primary);
   flex-shrink: 0;
 }
@@ -10511,7 +10540,7 @@ textarea.sm-input.sm-edit-body {
   left: 8px;
   right: 8px;
   height: 2px;
-  border-radius: 2px;
+  border-radius: var(--dsw-radius-xs);
   background: var(--dsw-alias-state-business-primary);
   pointer-events: none;
 }
@@ -10549,7 +10578,7 @@ textarea.sm-input.sm-edit-body {
 }
 
 .sm-source-name {
-  font-size: var(--sm-fs);
+  font-size: var(--ds-fs);
   font-weight: 500;
   flex: 1 1 auto;
   min-width: 0;
@@ -10560,7 +10589,7 @@ textarea.sm-input.sm-edit-body {
 }
 
 .sm-source-url {
-  font-size: calc(var(--sm-fs) - 3px);
+  font-size: calc(var(--ds-fs) - 3px);
   color: var(--dsw-alias-label-caption);
   white-space: nowrap;
   overflow: hidden;
@@ -10568,12 +10597,12 @@ textarea.sm-input.sm-edit-body {
 }
 
 .sm-source-meta {
-  font-size: calc(var(--sm-fs) - 3px);
+  font-size: calc(var(--ds-fs) - 3px);
   color: var(--dsw-alias-label-caption);
 }
 
 .sm-source-error {
-  font-size: calc(var(--sm-fs) - 3px);
+  font-size: calc(var(--ds-fs) - 3px);
   color: var(--dsw-alias-state-error-primary);
   line-height: 1.5;
 }
@@ -10592,10 +10621,10 @@ textarea.sm-input.sm-edit-body {
 
 /* Legacy source card (v1 sources page) */
 .sm-source {
-  padding: 10px 12px;
-  border-radius: 14px;
+  padding: 8px 12px;
+  border-radius: var(--dsw-radius-lg);
   background: var(--dsw-alias-bg-layer-1);
-  border: 1px solid var(--dsw-alias-border-l2);
+  border: 0.5px solid var(--dsw-alias-border-l2);
   display: flex;
   flex-direction: column;
   gap: 4px;
@@ -10623,7 +10652,7 @@ textarea.sm-input.sm-edit-body {
   position: fixed;
   inset: 0;
   z-index: 1100;
-  background: var(--dsw-alias-bg-mask-1, rgba(0, 0, 0, 0.5));
+  background: var(--dsw-alias-bg-mask-1);
   backdrop-filter: none;
 }
 
@@ -10640,15 +10669,15 @@ textarea.sm-input.sm-edit-body {
   max-width: 90vw;
   display: flex;
   flex-direction: column;
-  background: var(--dsw-static-neutral-bluish-850, var(--dsw-alias-bg-layer-1));
-  border-left: 1px solid var(--dsw-alias-border-l2);
+  background: var(--dsw-alias-bg-layer-2);
+  border-left: 0.5px solid var(--dsw-alias-border-l2);
   border-top-left-radius: var(--dsw-radius-panel);
   border-bottom-left-radius: var(--dsw-radius-panel);
   box-shadow: none;
   z-index: 1150;
   overflow: hidden;
   color: var(--dsw-alias-label-primary);
-  font-size: var(--sm-fs);
+  font-size: var(--ds-fs);
 }
 
 .sm-drawer-head {
@@ -10656,8 +10685,8 @@ textarea.sm-input.sm-edit-body {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  gap: 10px;
-  border-bottom: 1px solid var(--dsw-alias-border-l1);
+  gap: 8px;
+  border-bottom: 0.5px solid var(--dsw-alias-border-l1);
   flex-shrink: 0;
 }
 
@@ -10669,26 +10698,26 @@ textarea.sm-input.sm-edit-body {
 }
 
 .sm-drawer-title {
-  font-size: calc(var(--sm-fs) + 1px);
+  font-size: calc(var(--ds-fs) + 1px);
   font-weight: 500;
 }
 
 .sm-drawer-body {
-  padding: 18px 20px 28px;
+  padding: 16px 20px 24px;
   overflow-y: auto;
   min-height: 0;
 }
 
 .sm-drawer-intro {
   margin: 0 0 16px;
-  font-size: calc(var(--sm-fs) - 2px);
+  font-size: calc(var(--ds-fs) - 2px);
   color: var(--dsw-alias-label-caption);
   line-height: 1.6;
 }
 
 .sm-drawer-note {
-  margin: 14px 0 0;
-  font-size: calc(var(--sm-fs) - 3px);
+  margin: 12px 0 0;
+  font-size: calc(var(--ds-fs) - 3px);
   color: var(--dsw-alias-label-caption);
   line-height: 1.6;
 }
@@ -10697,9 +10726,9 @@ textarea.sm-input.sm-edit-body {
   display: flex;
   flex-direction: column;
   gap: 8px;
-  padding: 14px;
-  border-radius: 16px;
-  border: 1px solid var(--dsw-alias-border-l2);
+  padding: 16px;
+  border-radius: var(--dsw-radius-lg);
+  border: 0.5px solid var(--dsw-alias-border-l2);
   background: var(--dsw-alias-bg-layer-1);
   min-width: 0;
 }
@@ -10718,7 +10747,7 @@ textarea.sm-input.sm-edit-body {
   gap: 8px;
   flex-wrap: wrap;
   justify-content: space-between;
-  font-size: calc(var(--sm-fs) - 1px);
+  font-size: calc(var(--ds-fs) - 1px);
   font-weight: 500;
   line-height: 1.4;
   color: var(--dsw-alias-label-primary);
@@ -10728,7 +10757,7 @@ textarea.sm-input.sm-edit-body {
 .sm-issue-icon {
   width: 30px;
   height: 30px;
-  border-radius: 10px;
+  border-radius: var(--dsw-radius-md);
   background: color-mix(in srgb, var(--dsw-alias-state-warn-primary) 14%, transparent);
   color: var(--dsw-alias-state-warn-primary);
   display: inline-flex;
@@ -10739,7 +10768,7 @@ textarea.sm-input.sm-edit-body {
 
 .sm-issue-reason {
   margin: 0;
-  font-size: calc(var(--sm-fs) - 1px);
+  font-size: calc(var(--ds-fs) - 1px);
   color: var(--dsw-alias-label-secondary);
   line-height: 1.65;
 }
@@ -10753,7 +10782,7 @@ textarea.sm-input.sm-edit-body {
 
 .sm-issue-path {
   font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
-  font-size: calc(var(--sm-fs) - 2px);
+  font-size: calc(var(--ds-fs) - 2px);
   line-height: 1.45;
   color: var(--dsw-alias-label-tertiary);
   word-break: break-all;
@@ -10762,12 +10791,12 @@ textarea.sm-input.sm-edit-body {
 .sm-issue-action {
   align-self: flex-start;
   height: 28px;
-  padding: 0 10px;
+  padding: 0 8px;
   border-radius: var(--dsw-radius-sm);
-  border: 1px solid var(--dsw-alias-border-l2);
+  border: 0.5px solid var(--dsw-alias-border-l2);
   background: var(--dsw-alias-bg-layer-2);
   color: var(--dsw-alias-label-primary);
-  font-size: calc(var(--sm-fs) - 2px);
+  font-size: calc(var(--ds-fs) - 2px);
   font-family: inherit;
   cursor: pointer;
   white-space: nowrap;
@@ -10787,18 +10816,18 @@ textarea.sm-input.sm-edit-body {
 }
 
 .sm-details {
-  border-top: 1px solid var(--dsw-alias-border-l1);
+  border-top: 0.5px solid var(--dsw-alias-border-l1);
   padding-top: 8px;
 }
 
 .sm-details summary {
   cursor: pointer;
-  font-size: calc(var(--sm-fs) - 2px);
+  font-size: calc(var(--ds-fs) - 2px);
   color: var(--dsw-alias-label-caption);
   list-style: none;
   display: inline-flex;
   align-items: center;
-  gap: 5px;
+  gap: 4px;
   user-select: none;
 }
 
@@ -10815,44 +10844,36 @@ textarea.sm-input.sm-edit-body {
 }
 
 /* ------------------------------------------------------------------ *
+`
+// ===== 97-styles-layers.js =====
+/* 浮层与市场/来源页 —— 由原 90-styles.js 按章节拆出（行 2941-3322）。 */
+const STYLES_8 = `
  * 15. Floating layers: tooltip, toast, menu                          *
  * ------------------------------------------------------------------ */
 
-/* Inverted tooltip: light surface in dark mode, no border, no shadow.
- * The node is appended to <body>, so it carries its own --sm-fs. */
-.sm-tooltip,
-#tooltip {
-  --sm-fs: var(--dsh-content-font-size, 14px);
+/* Tooltip: dark surface in both themes, no border, no shadow.
+ * The node is appended to <body>, so it carries its own --ds-fs. */
+.sm-tooltip {
+  --ds-fs: var(--dsh-content-font-size, 14px);
   position: fixed;
   z-index: 2000;
-  max-width: 290px;
-  padding: 6px 10px;
+  max-width: min(40vw, 290px);
+  padding: 4px 8px;
   border-radius: var(--dsw-radius-sm);
   border: 0;
-  background: var(--dsw-alias-label-primary);
-  color: var(--dsw-alias-bg-layer-3);
-  font-size: calc(var(--sm-fs) - 4px);
+  background: var(--dsw-alias-tooltip-bg);
+  color: var(--dsw-static-neutral-bluish-00);
+  font-size: calc(var(--ds-fs) - 2px);
   line-height: 1.35;
   box-shadow: none;
   pointer-events: none;
   white-space: normal;
   opacity: 0;
-  transition: opacity 110ms ease;
-}
-
-/* The tooltip node currently ships legacy inline colours from 50-modals.js;
- * keep the inverted palette authoritative until that module drops them. */
-.sm-tooltip {
-  border: 0 !important;
-  border-radius: var(--dsw-radius-sm) !important;
-  background: var(--dsw-alias-label-primary) !important;
-  color: var(--dsw-alias-bg-layer-3) !important;
-  box-shadow: none !important;
+  transition: opacity 120ms ease;
 }
 
 .sm-tooltip.visible,
-.sm-tooltip.show,
-#tooltip.visible {
+.sm-tooltip.show {
   opacity: 1;
 }
 
@@ -10873,14 +10894,14 @@ textarea.sm-input.sm-edit-body {
 .sm-toast {
   display: inline-flex;
   align-items: center;
-  gap: 10px;
+  gap: 8px;
   max-width: 100%;
-  padding: 8px 14px;
-  border-radius: 12px;
-  border: 1px solid var(--dsw-alias-border-l2);
+  padding: 8px 12px;
+  border-radius: var(--dsw-radius-md);
+  border: 0.5px solid var(--dsw-alias-border-l2);
   background: var(--dsw-alias-bg-layer-3);
   color: var(--dsw-alias-label-primary);
-  font-size: calc(var(--sm-fs) - 1px);
+  font-size: calc(var(--ds-fs) - 1px);
   line-height: 1.4;
   box-shadow: none;
   pointer-events: auto;
@@ -10943,15 +10964,15 @@ textarea.sm-input.sm-edit-body {
   min-width: 128px;
   max-width: 260px;
   padding: 4px;
-  border-radius: 12px;
-  border: 1px solid var(--dsw-alias-border-l2);
-  background: var(--dsw-static-neutral-bluish-850, var(--dsw-alias-bg-layer-2));
+  border-radius: var(--dsw-radius-md);
+  border: 0.5px solid var(--dsw-alias-border-l2);
+  background: var(--dsw-alias-bg-layer-2);
   box-shadow: none;
   display: flex;
   flex-direction: column;
   gap: 2px;
   color: var(--dsw-alias-label-primary);
-  font-size: var(--sm-fs);
+  font-size: var(--ds-fs);
 }
 
 .sm-menu-item {
@@ -10961,7 +10982,7 @@ textarea.sm-input.sm-edit-body {
   border: none;
   background: transparent;
   color: var(--dsw-alias-label-primary);
-  font-size: calc(var(--sm-fs) - 1px);
+  font-size: calc(var(--ds-fs) - 1px);
   font-family: inherit;
   display: flex;
   align-items: center;
@@ -11026,7 +11047,7 @@ textarea.sm-input.sm-edit-body {
 }
 
 .sm-menu-sep {
-  height: 1px;
+  height: 0.5px;
   margin: 4px 6px;
   background: var(--dsw-alias-border-l1);
   flex-shrink: 0;
@@ -11039,7 +11060,7 @@ textarea.sm-input.sm-edit-body {
 .sm-market-controls {
   display: flex;
   flex-direction: column;
-  gap: 10px;
+  gap: 12px;
   min-width: 0;
 }
 
@@ -11102,7 +11123,7 @@ textarea.sm-input.sm-edit-body {
 }
 
 .sm-market-installed {
-  font-size: calc(var(--sm-fs) - 3px);
+  font-size: calc(var(--ds-fs) - 3px);
   color: var(--dsw-alias-label-tertiary);
 }
 
@@ -11131,7 +11152,7 @@ textarea.sm-input.sm-edit-body {
 }
 
 .sm-sources-hint {
-  font-size: calc(var(--sm-fs) - 2px);
+  font-size: calc(var(--ds-fs) - 2px);
   color: var(--dsw-alias-label-caption);
 }
 
@@ -11161,17 +11182,17 @@ textarea.sm-input.sm-edit-body {
 }
 
 .sm-source-path {
-  font-size: calc(var(--sm-fs) - 2px);
+  font-size: calc(var(--ds-fs) - 2px);
   color: var(--dsw-alias-label-caption);
 }
 
 .sm-source-count {
-  font-size: calc(var(--sm-fs) - 2px);
+  font-size: calc(var(--ds-fs) - 2px);
   color: var(--dsw-alias-label-tertiary);
 }
 
 .sm-source-note {
-  font-size: calc(var(--sm-fs) - 2px);
+  font-size: calc(var(--ds-fs) - 2px);
   color: var(--dsw-alias-label-tertiary);
 }
 
@@ -11182,9 +11203,9 @@ textarea.sm-input.sm-edit-body {
 }
 
 .sm-add-source {
-  margin-top: 14px;
-  padding-top: 14px;
-  border-top: 1px solid var(--dsw-alias-border-l1);
+  margin-top: 12px;
+  padding-top: 12px;
+  border-top: 0.5px solid var(--dsw-alias-border-l1);
   display: flex;
   flex-direction: column;
   gap: 8px;
@@ -11192,7 +11213,7 @@ textarea.sm-input.sm-edit-body {
 }
 
 .sm-add-label {
-  font-size: calc(var(--sm-fs) - 2px);
+  font-size: calc(var(--ds-fs) - 2px);
   font-weight: 500;
   color: var(--dsw-alias-label-secondary);
 }
@@ -11209,6 +11230,10 @@ textarea.sm-input.sm-edit-body {
 }
 
 /* ------------------------------------------------------------------ *
+`
+// ===== 98-styles-misc.js =====
+/* 原型别名、工具类、响应式 —— 由原 90-styles.js 按章节拆出（行 3323-3748）。 */
+const STYLES_9 = `
  * 17. Prototype aliases (visual reference markup)                    *
  * ------------------------------------------------------------------ */
 
@@ -11216,19 +11241,20 @@ textarea.sm-input.sm-edit-body {
   display: inline-flex;
   align-items: center;
   gap: 2px;
-  height: 34px;
-  padding: 3px;
-  border-radius: 14px;
+  height: auto;
+  min-height: 34px;
+  padding: 4px;
+  border-radius: var(--dsw-radius-lg);
   background: var(--dsw-alias-bg-layer-3);
 }
 
 .sm-seg-tab {
   height: 28px;
-  padding: 0 14px;
+  padding: 0 12px;
   border-radius: var(--dsw-radius-lg);
   background: transparent;
   color: var(--dsw-alias-label-secondary);
-  font-size: var(--sm-fs);
+  font-size: var(--ds-fs);
   display: inline-flex;
   align-items: center;
   gap: 6px;
@@ -11249,12 +11275,12 @@ textarea.sm-input.sm-edit-body {
 .sm-back {
   display: inline-flex;
   align-items: center;
-  gap: 5px;
+  gap: 4px;
   height: 28px;
   padding: 2px 4px;
   border-radius: var(--dsw-radius-sm);
   color: var(--dsw-alias-label-tertiary);
-  font-size: calc(var(--sm-fs) - 1px);
+  font-size: calc(var(--ds-fs) - 1px);
   cursor: pointer;
 }
 
@@ -11279,19 +11305,19 @@ textarea.sm-input.sm-edit-body {
 }
 
 .sm-detail-name {
-  font-size: calc(var(--sm-fs) + 2px);
+  font-size: calc(var(--ds-fs) + 2px);
   font-weight: 500;
   line-height: 1.3;
   color: var(--dsw-alias-label-primary);
 }
 
 .sm-detail-ver {
-  font-size: calc(var(--sm-fs) - 2px);
+  font-size: calc(var(--ds-fs) - 2px);
   color: var(--dsw-alias-label-caption);
 }
 
 .sm-detail-desc {
-  font-size: calc(var(--sm-fs) - 1px);
+  font-size: calc(var(--ds-fs) - 1px);
   color: var(--dsw-alias-label-secondary);
   max-width: 640px;
 }
@@ -11301,7 +11327,7 @@ textarea.sm-input.sm-edit-body {
   grid-template-columns: minmax(0, 2fr) minmax(250px, 1fr);
   gap: 24px;
   align-items: start;
-  margin-top: 22px;
+  margin-top: 20px;
   min-width: 0;
 }
 
@@ -11314,7 +11340,7 @@ textarea.sm-input.sm-edit-body {
 
 .sm-prose {
   margin: 0;
-  font-size: calc(var(--sm-fs) - 1px);
+  font-size: calc(var(--ds-fs) - 1px);
   color: var(--dsw-alias-label-secondary);
   line-height: 1.7;
 }
@@ -11335,9 +11361,9 @@ textarea.sm-input.sm-edit-body {
   display: flex;
   align-items: flex-start;
   justify-content: space-between;
-  gap: 14px;
+  gap: 12px;
   padding: 8px 0;
-  border-bottom: 1px solid var(--dsw-alias-border-l1);
+  border-bottom: 0.5px solid var(--dsw-alias-border-l1);
 }
 
 .sm-kv:last-child {
@@ -11346,13 +11372,13 @@ textarea.sm-input.sm-edit-body {
 }
 
 .sm-kv-label {
-  font-size: calc(var(--sm-fs) - 2px);
+  font-size: calc(var(--ds-fs) - 2px);
   color: var(--dsw-alias-label-caption);
   flex-shrink: 0;
 }
 
 .sm-kv-value {
-  font-size: calc(var(--sm-fs) - 2px);
+  font-size: calc(var(--ds-fs) - 2px);
   color: var(--dsw-alias-label-secondary);
   text-align: right;
   min-width: 0;
@@ -11386,11 +11412,11 @@ textarea.sm-input.sm-edit-body {
 }
 
 .sm-note {
-  padding: 10px 12px;
-  border-radius: 12px;
+  padding: 8px 12px;
+  border-radius: var(--dsw-radius-md);
   background: color-mix(in srgb, var(--dsw-alias-state-warn-primary) 10%, transparent);
-  border: 1px solid color-mix(in srgb, var(--dsw-alias-state-warn-primary) 26%, transparent);
-  font-size: calc(var(--sm-fs) - 2px);
+  border: 0.5px solid color-mix(in srgb, var(--dsw-alias-state-warn-primary) 26%, transparent);
+  font-size: calc(var(--ds-fs) - 2px);
   color: var(--dsw-alias-label-secondary);
   line-height: 1.6;
 }
@@ -11410,10 +11436,10 @@ textarea.sm-input.sm-edit-body {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  gap: 10px;
+  gap: 8px;
   padding: 8px 0;
-  border-bottom: 1px solid var(--dsw-alias-border-l1);
-  font-size: calc(var(--sm-fs) - 2px);
+  border-bottom: 0.5px solid var(--dsw-alias-border-l1);
+  font-size: calc(var(--ds-fs) - 2px);
 }
 
 .sm-file:last-child {
@@ -11442,12 +11468,12 @@ textarea.sm-input.sm-edit-body {
 
 .sm-choice {
   height: 30px;
-  padding: 0 10px;
-  border-radius: 10px;
-  font-size: calc(var(--sm-fs) - 2px);
+  padding: 0 8px;
+  border-radius: var(--dsw-radius-md);
+  font-size: calc(var(--ds-fs) - 2px);
   color: var(--dsw-alias-label-secondary);
   background: var(--dsw-alias-bg-base);
-  border: 1px solid var(--dsw-alias-border-l2);
+  border: 0.5px solid var(--dsw-alias-border-l2);
   cursor: pointer;
 }
 
@@ -11455,6 +11481,7 @@ textarea.sm-input.sm-edit-body {
   background: var(--dsw-alias-interactive-bg-hover);
 }
 
+.sm-choice.selected,
 .sm-choice.active {
   background: var(--dsw-alias-interactive-bg-hover);
   color: var(--dsw-alias-label-primary);
@@ -11462,11 +11489,11 @@ textarea.sm-input.sm-edit-body {
 }
 
 .sm-footer {
-  margin-top: 44px;
+  margin-top: 48px;
   padding-top: 16px;
-  border-top: 1px solid var(--dsw-alias-border-l1);
+  border-top: 0.5px solid var(--dsw-alias-border-l1);
   text-align: center;
-  font-size: calc(var(--sm-fs) - 3px);
+  font-size: calc(var(--ds-fs) - 3px);
   color: var(--dsw-alias-label-caption);
 }
 
@@ -11478,7 +11505,7 @@ textarea.sm-input.sm-edit-body {
 
 .sm-empty-desc {
   max-width: 400px;
-  font-size: calc(var(--sm-fs) - 1px);
+  font-size: calc(var(--ds-fs) - 1px);
   line-height: 1.5;
   color: var(--dsw-alias-label-tertiary);
 }
@@ -11508,7 +11535,7 @@ textarea.sm-input.sm-edit-body {
   background: var(--dsw-alias-interactive-bg-hover);
 }
 
-.sm-tab:not(.active):not(.sm-active):not(.sm-tab-active):not([aria-selected="true"]):focus-visible {
+.sm-tab:not(.selected):not(.active):not(.sm-active):not(.sm-tab-active):not([aria-selected="true"]):focus-visible {
   color: var(--dsw-alias-label-tertiary);
 }
 
@@ -11516,13 +11543,21 @@ textarea.sm-input.sm-edit-body {
  * 18. Utilities                                                      *
  * ------------------------------------------------------------------ */
 
-.sm-fs-16 { font-size: calc(var(--sm-fs) + 2px); }
-.sm-fs-15 { font-size: calc(var(--sm-fs) + 1px); }
-.sm-fs-14 { font-size: var(--sm-fs); }
-.sm-fs-13 { font-size: calc(var(--sm-fs) - 1px); }
-.sm-fs-12 { font-size: calc(var(--sm-fs) - 2px); }
-.sm-fs-11 { font-size: calc(var(--sm-fs) - 3px); }
-.sm-fs-10 { font-size: calc(var(--sm-fs) - 4px); }
+.sm-fs-16 { font-size: calc(var(--ds-fs) + 2px); }
+.sm-fs-15 { font-size: calc(var(--ds-fs) + 1px); }
+.sm-fs-14 { font-size: var(--ds-fs); }
+.sm-fs-13 { font-size: calc(var(--ds-fs) - 1px); }
+.sm-fs-12 { font-size: calc(var(--ds-fs) - 2px); }
+/* Semantic text colours — replaces per-element inline colour styles. */
+.sm-text-primary { color: var(--dsw-alias-label-primary); }
+.sm-text-secondary { color: var(--dsw-alias-label-secondary); }
+.sm-text-caption { color: var(--dsw-alias-label-caption); }
+.sm-text-success { color: var(--dsw-alias-state-success-primary); }
+.sm-text-warn { color: var(--dsw-alias-state-warn-primary); }
+.sm-text-error { color: var(--dsw-alias-state-error-primary); }
+
+.sm-fs-11 { font-size: calc(var(--ds-fs) - 3px); }
+.sm-fs-10 { font-size: calc(var(--ds-fs) - 3px); }
 
 .sm-mono {
   font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
@@ -11533,7 +11568,7 @@ textarea.sm-input.sm-edit-body {
 }
 
 .sm-caption {
-  font-size: calc(var(--sm-fs) - 2px);
+  font-size: calc(var(--ds-fs) - 2px);
   color: var(--dsw-alias-label-caption);
 }
 
@@ -11575,8 +11610,8 @@ textarea.sm-input.sm-edit-body {
   .sm-detail-actions .sm-btn-primary,
   .sm-detail-actions .sm-btn-secondary {
     height: 28px;
-    padding: 0 10px;
-    font-size: calc(var(--sm-fs) - 2px);
+    padding: 0 8px;
+    font-size: calc(var(--ds-fs) - 2px);
   }
 
   .sm-detail-actions {
@@ -11594,7 +11629,20 @@ textarea.sm-input.sm-edit-body {
   }
 
   .sm-dialog {
-    width: 100%;
+    width: min(720px, 100vw - 32px);
+  }
+
+  /* 窄屏下窄档必须保持自身宽度，不能被上面的 720 档覆盖 */
+  .sm-dialog-form,
+  .sm-dialog.form {
+    width: min(488px, 100vw - 32px);
+  }
+
+  .sm-dialog-confirm,
+  .sm-dialog.sm-narrow,
+  .sm-dialog.sm-dialog-confirm,
+  .sm-narrow {
+    width: min(480px, 100vw - 32px);
   }
 }
 
@@ -11603,17 +11651,19 @@ textarea.sm-input.sm-edit-body {
   .sm-root *::before,
   .sm-root *::after,
   .sm-tooltip,
-  #tooltip,
   .sm-toast-host,
   .sm-menu {
-    animation-duration: 0.001ms !important;
-    animation-iteration-count: 1 !important;
-    transition-duration: 0.001ms !important;
-    scroll-behavior: auto !important;
+    animation-duration: 0.001ms;
+    animation-iteration-count: 1;
+    transition-duration: 0.001ms;
+    scroll-behavior: auto;
   }
 }
 
 `
+
+/* 按原顺序拼接，保证层叠顺序不变。 */
+const STYLES = STYLES_1 + STYLES_2 + STYLES_3 + STYLES_4 + STYLES_5 + STYLES_6 + STYLES_7 + STYLES_8 + STYLES_9
 // ===== 99-apply.js =====
     /* ------------------------------------------------------------------ *
      * Panel entry, sidebar icon, and registration.                        *
@@ -11645,7 +11695,7 @@ textarea.sm-input.sm-edit-body {
           focusable: 'false',
           fill: 'none',
           stroke: 'currentColor',
-          strokeWidth: 1.5,
+          strokeWidth: 1.8,
           strokeLinecap: 'round',
           strokeLinejoin: 'round',
           opacity: active ? 1 : 0.72,
@@ -11675,6 +11725,25 @@ textarea.sm-input.sm-edit-body {
         void bootstrap(props)
       }, [])
 
+      /* 宿主字号可能在插件打开期间被修改；低频轮询 settings，变化时重绘。 */
+      useEffect(() => {
+        const refreshFontSize = async () => {
+          try {
+            const settings = await api('settings')
+            if (settings === null || typeof settings !== 'object') return
+            const next = typeof settings.fontSize === 'number' ? settings.fontSize : DEFAULT_FONT_SIZE
+            if (next !== appState.fontSize) {
+              appState.fontSize = next
+              __rerender()
+            }
+          } catch {
+            /* settings are best effort */
+          }
+        }
+        const timer = setInterval(() => { void refreshFontSize() }, 30000)
+        return () => clearInterval(timer)
+      }, [])
+
       // `version` is read so React re-runs this component when setState fires.
       void version
       return renderPage(props)
@@ -11685,7 +11754,7 @@ textarea.sm-input.sm-edit-body {
       try {
         const settings = await api('settings')
         if (settings !== null && typeof settings === 'object') {
-          if (typeof settings.fontSize === 'number') appState.fontSize = settings.fontSize
+          appState.fontSize = typeof settings.fontSize === 'number' ? settings.fontSize : DEFAULT_FONT_SIZE
           if (typeof settings.cwd === 'string') appState.cwd = settings.cwd
         }
       } catch {
