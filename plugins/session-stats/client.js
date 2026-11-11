@@ -7,7 +7,10 @@ window.__ModuleLoader__.load({
     const useEffect = React.useEffect
     const useMemo = React.useMemo
     const useCallback = React.useCallback
+    const useRef = React.useRef
 
+    /** Plugin identity, reused by the overlay scope container and the style element. */
+    const PLUGIN_ID = '@chengze/dsh-session-stats'
     /** Locale namespace shared by the dictionaries, the page and the sidebar entry. */
     const NS = 'session-stats'
     /** Main panel key; the sidebar entry id must equal it so the entry addresses this page. */
@@ -95,6 +98,7 @@ window.__ModuleLoader__.load({
       'runtime.sparkline': 'CPU 走势',
       'runtime.peak': '峰值 {value}',
       'runtime.unavailable': '运行状态暂不可用',
+      'runtime.noHistory': '暂无 CPU 历史数据',
       'logs.title': '日志占用',
       'logs.total': '合计',
       'logs.sessionLog': '会话日志',
@@ -177,6 +181,7 @@ window.__ModuleLoader__.load({
       'runtime.sparkline': 'CPU history',
       'runtime.peak': 'Peak {value}',
       'runtime.unavailable': 'Runtime status unavailable',
+      'runtime.noHistory': 'No CPU history yet',
       'logs.title': 'Log footprint',
       'logs.total': 'Total',
       'logs.sessionLog': 'Session logs',
@@ -198,25 +203,85 @@ window.__ModuleLoader__.load({
 
     const CSS = `
 .ss-page,.ss-page *{box-sizing:border-box}
-.ss-page{--ds-fs:var(--dsh-content-font-size,14px);--ss-series-1:#4d93f8;--ss-series-2:#22c55e;--ss-series-3:#8b5cf6;--ss-series-4:#f59e0b;--ss-series-5:#ef4444;--ss-series-6:#06b6d4;--ss-series-7:#ec4899;--ss-series-8:#9aa0a6;--ss-session-row:56px;--ss-table-head:33px;width:100%;min-width:0;height:100%;min-height:0;display:flex;overflow:hidden;background:var(--dsw-alias-bg-base);color:var(--dsw-alias-label-primary);font-family:var(--dsw-font-family,inherit);font-size:var(--ds-fs);line-height:1.5}
+.ss-page{--ds-fs:var(--dsh-content-font-size,14px);--ss-series-1:#4d93f8;--ss-series-2:#22c55e;--ss-series-3:#8b5cf6;--ss-series-4:#f59e0b;--ss-series-5:#ef4444;--ss-series-6:#06b6d4;--ss-series-7:#ec4899;--ss-series-8:#9aa0a6;--ss-session-row:calc(var(--ds-fs) * 2.9 + 16px);--ss-table-head:calc(var(--ds-fs) * 1.5 + 12px);width:100%;min-width:0;height:100%;min-height:0;display:flex;overflow:hidden;background:var(--dsw-alias-bg-base);color:var(--dsw-alias-label-primary);font-family:var(--dsw-font-family,inherit);font-size:var(--ds-fs);line-height:1.5}
 /* The eight --ss-series-* colors are data-visualization series colors, not theme
    surface colors: charts need several distinguishable hues in both color schemes. */
+.ss-page [data-series="1"]{--ss-series:var(--ss-series-1)}
+.ss-page [data-series="2"]{--ss-series:var(--ss-series-2)}
+.ss-page [data-series="3"]{--ss-series:var(--ss-series-3)}
+.ss-page [data-series="4"]{--ss-series:var(--ss-series-4)}
+.ss-page [data-series="5"]{--ss-series:var(--ss-series-5)}
+.ss-page [data-series="6"]{--ss-series:var(--ss-series-6)}
+.ss-page [data-series="7"]{--ss-series:var(--ss-series-7)}
+.ss-page [data-series="8"]{--ss-series:var(--ss-series-8)}
+/* Buttons (§7.1): SsButton. Hover changes only the interactive background. */
+.ss-btn{display:inline-flex;align-items:center;justify-content:center;gap:6px;box-sizing:border-box;white-space:nowrap;font-family:inherit;font-weight:500;border:.5px solid transparent;background:transparent;color:var(--dsw-alias-label-primary);cursor:pointer;transition:background 120ms,color 120ms}
+.ss-btn[data-size="lg"]{height:36px;padding:0 14px;border-radius:var(--dsw-radius-md);font-size:var(--ds-fs);line-height:22px}
+.ss-btn[data-size="md"]{height:32px;padding:0 12px;border-radius:var(--dsw-radius-md);font-size:calc(var(--ds-fs) - 1px);line-height:20px}
+.ss-btn[data-size="sm"]{height:28px;padding:0 10px;border-radius:var(--dsw-radius-sm);font-size:calc(var(--ds-fs) - 2px);line-height:18px}
+.ss-btn[data-variant="primary"]{background:var(--dsw-alias-button-primary-fill);color:var(--dsw-alias-label-primary-foreground);border-color:transparent}
+.ss-btn[data-variant="primary"]:hover{background:var(--dsw-alias-button-primary-hover)}
+.ss-btn[data-variant="secondary"]{background:var(--dsw-alias-bg-layer-1);border-color:var(--dsw-alias-border-l2)}
+.ss-btn[data-variant="ghost"]{background:transparent;color:var(--dsw-alias-label-secondary)}
+.ss-btn[data-variant="danger"]{background:transparent;color:var(--dsw-alias-state-error-primary)}
+.ss-btn[data-variant="secondary"]:hover,.ss-btn[data-variant="ghost"]:hover{background:var(--dsw-alias-interactive-bg-hover);color:var(--dsw-alias-label-primary)}
+.ss-btn[data-variant="danger"]:hover{background:var(--dsw-alias-interactive-bg-hover-danger)}
+.ss-btn:active:not(:disabled){background:var(--dsw-alias-interactive-bg-active)}
+.ss-btn:focus-visible{outline:none;background:var(--dsw-alias-interactive-bg-hover);color:var(--dsw-alias-label-primary)}
+.ss-btn[data-variant="primary"]:focus-visible{background:var(--dsw-alias-button-primary-hover)}
+.ss-btn[data-variant="danger"]:focus-visible{background:var(--dsw-alias-interactive-bg-hover-danger)}
+.ss-btn:disabled{opacity:.4;cursor:not-allowed}
+/* Icon buttons (§7.2): SsIconButton. */
+.ss-icon-btn{display:inline-flex;align-items:center;justify-content:center;box-sizing:border-box;padding:0;border:0;border-radius:var(--dsw-radius-sm);background:transparent;color:var(--dsw-alias-label-tertiary);cursor:pointer;transition:background 120ms,color 120ms}
+.ss-icon-btn[data-size="md"]{width:32px;height:32px}
+.ss-icon-btn[data-size="sm"]{width:28px;height:28px}
+.ss-icon-btn:hover{background:var(--dsw-alias-interactive-bg-hover);color:var(--dsw-alias-label-primary)}
+.ss-icon-btn[data-variant="danger"]:hover{background:var(--dsw-alias-interactive-bg-hover-danger);color:var(--dsw-alias-state-error-primary)}
+.ss-icon-btn:active:not(:disabled){background:var(--dsw-alias-interactive-bg-active)}
+.ss-icon-btn:focus-visible{outline:none;background:var(--dsw-alias-interactive-bg-hover);color:var(--dsw-alias-label-primary)}
+.ss-icon-btn:disabled{opacity:.4;cursor:not-allowed}
+/* Segmented tabs (§7.3): primary segments and secondary capsules. */
+.ss-segmented{display:inline-flex;align-items:center;gap:2px;padding:0;background:transparent}
+.ss-segmented[data-level="primary"]{gap:0;padding:4px;border-radius:var(--dsw-radius-lg);background:var(--dsw-alias-bg-module-platform)}
+.ss-segment{display:inline-flex;align-items:center;justify-content:center;gap:4px;height:28px;padding:0 10px;border:0;border-radius:14px;background:transparent;color:var(--dsw-alias-label-tertiary);font:inherit;font-size:calc(var(--ds-fs) - 2px);font-weight:500;line-height:18px;white-space:nowrap;cursor:pointer;transition:background 120ms,color 120ms}
+.ss-segmented[data-level="primary"] .ss-segment{height:34px;padding:0 16px;border-radius:var(--dsw-radius-md);font-size:var(--ds-fs)}
+.ss-segment:hover{background:var(--dsw-alias-interactive-bg-hover);color:var(--dsw-alias-label-primary)}
+.ss-segment:active{background:var(--dsw-alias-interactive-bg-active)}
+.ss-segment:focus-visible{outline:none;background:var(--dsw-alias-interactive-bg-hover);color:var(--dsw-alias-label-primary)}
+.ss-segment-active{background:var(--dsw-alias-interactive-bg-hover);color:var(--dsw-alias-label-primary)}
+.ss-segmented[data-level="primary"] .ss-segment-active{background:var(--dsw-alias-bg-layer-3);border:.5px solid var(--dsw-alias-border-l3);font-weight:600}
+/* Badge (§7.9): SsBadge. */
+.ss-badge{display:inline-flex;align-items:center;flex:none;height:20px;padding:0 6px;border-radius:var(--dsw-radius-xs);font-size:calc(var(--ds-fs) - 2px);font-weight:500;line-height:20px;white-space:nowrap;color:var(--dsw-alias-label-secondary);background:var(--dsw-alias-bg-layer-2)}
+.ss-badge[data-tone="warn"]{color:var(--dsw-alias-state-warn-primary);background:color-mix(in srgb,var(--dsw-alias-state-warn-primary) 12%,transparent)}
+.ss-badge[data-tone="success"]{color:var(--dsw-alias-state-success-primary);background:color-mix(in srgb,var(--dsw-alias-state-success-primary) 12%,transparent)}
+.ss-badge[data-tone="error"]{color:var(--dsw-alias-state-error-primary);background:color-mix(in srgb,var(--dsw-alias-state-error-primary) 12%,transparent)}
+/* Empty state (§7.10): SsEmptyState. */
+.ss-empty-state{display:flex;flex-direction:column;align-items:center;justify-content:center;gap:8px;padding:20px 0;text-align:center;color:var(--dsw-alias-label-tertiary)}
+.ss-empty-state[data-roomy="true"]{padding:48px 20px}
+.ss-empty-state[data-tone="error"]{color:var(--dsw-alias-state-error-primary)}
+.ss-empty-state .ss-empty{margin:0;color:var(--dsw-alias-label-secondary);font-size:calc(var(--ds-fs) - 1px);line-height:1.5}
+.ss-empty-state[data-tone="error"] .ss-empty{color:var(--dsw-alias-label-primary)}
+/* Error bar (§7.10): SsErrorBar. */
+.ss-errorbar{display:flex;align-items:center;gap:12px;flex-wrap:wrap;padding:12px 16px;border:.5px solid color-mix(in srgb,var(--dsw-alias-state-error-primary) 35%,transparent);border-radius:var(--dsw-radius-md);background:color-mix(in srgb,var(--dsw-alias-state-error-primary) 12%,transparent);color:var(--dsw-alias-label-primary);font-size:calc(var(--ds-fs) - 1px)}
+.ss-errorbar .ss-icon{flex:none;color:var(--dsw-alias-state-error-primary)}
+.ss-errorbar-text{flex:1;min-width:0}
+/* Tooltip (§7.7): SsTooltip singleton, scoped by its data-plugin container. */
+.ss-tooltip-layer[data-plugin="@chengze/dsh-session-stats"]{--ds-fs:var(--dsh-content-font-size,14px);position:fixed;inset:0;z-index:2000;pointer-events:none;overflow:hidden}
+.ss-tooltip-layer[data-plugin="@chengze/dsh-session-stats"] .ss-tooltip{position:absolute;max-width:min(40vw,290px);padding:4px 8px;border-radius:var(--dsw-radius-sm);background:var(--dsw-alias-tooltip-bg);color:var(--dsw-static-neutral-bluish-00);font-size:calc(var(--ds-fs) - 2px);line-height:1.5;box-shadow:none;opacity:0;visibility:hidden;overflow-wrap:anywhere;transition:none}
+.ss-tooltip-layer[data-plugin="@chengze/dsh-session-stats"] .ss-tooltip[data-visible="true"]{opacity:1;visibility:visible;transition:opacity 120ms}
+.ss-live{position:absolute;width:1px;height:1px;overflow:hidden;clip-path:inset(50%);white-space:nowrap}
 .ss-scroll{flex:1;min-height:0;overflow:auto;scrollbar-gutter:stable;scrollbar-width:thin;scrollbar-color:var(--dsw-alias-scrollbar-bg-l1) transparent}
-.ss-scroll::-webkit-scrollbar,.ss-table-window::-webkit-scrollbar{width:8px;height:8px}
-.ss-scroll::-webkit-scrollbar-thumb,.ss-table-window::-webkit-scrollbar-thumb{background:var(--dsw-alias-scrollbar-bg-l1);border-radius:var(--dsw-radius-xs)}
-.ss-scroll::-webkit-scrollbar-track,.ss-table-window::-webkit-scrollbar-track{background:transparent}
-.ss-content{max-width:960px;margin:0 auto;padding:0 clamp(20px,4vw,48px) 48px}
+.ss-scroll::-webkit-scrollbar,.ss-table-scroll::-webkit-scrollbar,.ss-table-window::-webkit-scrollbar{width:8px;height:8px}
+.ss-scroll::-webkit-scrollbar-thumb,.ss-table-scroll::-webkit-scrollbar-thumb,.ss-table-window::-webkit-scrollbar-thumb{background:var(--dsw-alias-scrollbar-bg-l1);border-radius:var(--dsw-radius-xs)}
+.ss-scroll::-webkit-scrollbar-track,.ss-table-scroll::-webkit-scrollbar-track,.ss-table-window::-webkit-scrollbar-track{background:transparent}
+/* §4.3: the content column itself is 960px; the side gutters sit outside it. */
+.ss-content{max-width:calc(960px + 2 * clamp(20px,4vw,48px));margin:0 auto;padding:0 clamp(20px,4vw,48px) 48px}
 .ss-heading{display:flex;justify-content:space-between;align-items:center;gap:16px;padding-top:calc(28px + var(--dsh-frame-top-clearance,0px));margin-bottom:24px}
 .ss-heading-text{min-width:0}
 .ss-title{margin:0;font-size:calc(var(--ds-fs) + 6px);font-weight:500;line-height:1.35}
 .ss-heading-actions{display:flex;align-items:center;gap:12px;flex:none}
-.ss-updated{color:var(--dsw-alias-label-tertiary);font-size:calc(var(--ds-fs) - 2px);white-space:nowrap}
-.ss-stale{color:var(--dsw-alias-state-warn-primary);font-size:calc(var(--ds-fs) - 2px);white-space:nowrap}
-.ss-refresh{display:inline-flex;align-items:center;gap:6px;height:32px;padding:0 12px;border-radius:var(--dsw-radius-md);border:.5px solid var(--dsw-alias-border-l2);background:var(--dsw-alias-bg-layer-1);color:var(--dsw-alias-label-primary);font:inherit;font-size:calc(var(--ds-fs) - 1px);line-height:20px;cursor:pointer;transition:background 120ms}
-.ss-refresh:hover{background:var(--dsw-alias-interactive-bg-hover)}
-.ss-refresh:focus-visible,.ss-segment:focus-visible,.ss-state-action:focus-visible{outline:2px solid var(--dsw-focus-ring-color,var(--dsw-alias-state-business-primary));outline-offset:2px}
+.ss-updated{color:var(--dsw-alias-label-caption);font-size:calc(var(--ds-fs) - 2px);white-space:nowrap}
 .ss-sections{display:flex;flex-direction:column;gap:20px}
-.ss-notice{margin:0;padding:12px 16px;border-radius:var(--dsw-radius-md);background:var(--dsw-alias-bg-layer-1);color:var(--dsw-alias-label-secondary);font-size:var(--ds-fs)}
 .ss-card{margin:0;padding:16px 18px;border:.5px solid var(--dsw-alias-border-l3);border-radius:var(--dsw-radius-lg);background:var(--dsw-alias-bg-layer-1);min-width:0}
 .ss-card-head{display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap;margin-bottom:12px}
 .ss-card-title{margin:0;font-size:calc(var(--ds-fs) + 2px);font-weight:500;line-height:1.35;color:var(--dsw-alias-label-primary)}
@@ -234,54 +299,64 @@ window.__ModuleLoader__.load({
 .ss-card-sub{margin:2px 0 0;color:var(--dsw-alias-label-tertiary);font-size:calc(var(--ds-fs) - 2px);line-height:1.5}
 .ss-legend{display:flex;flex-wrap:wrap;gap:4px 6px;color:var(--dsw-alias-label-secondary);font-size:calc(var(--ds-fs) - 2px);margin:0 0 12px}
 .ss-legend-item{display:inline-flex;align-items:center;gap:6px}
-.ss-swatch{display:inline-block;width:10px;height:10px;border-radius:var(--dsw-radius-xs);flex:none}
-.ss-legend-button{max-width:240px;padding:2px 8px;border:0;border-radius:var(--dsw-radius-sm);background:transparent;color:inherit;font:inherit;font-size:calc(var(--ds-fs) - 2px);line-height:18px;cursor:pointer}
-.ss-legend-button:hover{background:var(--dsw-alias-interactive-bg-hover)}
-.ss-legend-button:focus-visible{outline:2px solid var(--dsw-focus-ring-color,var(--dsw-alias-state-business-primary));outline-offset:1px}
-.ss-legend-off{opacity:.4}
-.ss-legend-dot{display:inline-block;width:8px;height:8px;border-radius:50%;flex:none}
+.ss-swatch{display:inline-block;width:8px;height:8px;border-radius:var(--dsw-radius-xs);flex:none}
+.ss-legend-button{max-width:240px;justify-content:flex-start;color:var(--dsw-alias-label-secondary)}
+.ss-legend-inner{display:inline-flex;align-items:center;gap:6px;min-width:0}
+/* A hidden series is still interactive, so its state is a text tier, not opacity (§8.5). */
+.ss-legend-off .ss-legend-text{color:var(--dsw-alias-label-tertiary)}
+.ss-legend-dot{display:inline-block;width:8px;height:8px;border-radius:var(--dsw-radius-xs);flex:none;background:var(--ss-series)}
 .ss-legend-text{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .ss-trend{display:flex;flex-direction:column;gap:6px}
 .ss-trend-body{display:flex;gap:12px;align-items:stretch}
-.ss-yaxis{position:relative;flex:none;width:46px;height:200px;color:var(--dsw-alias-label-tertiary);font-size:calc(var(--ds-fs) - 3px);line-height:1.5;font-variant-numeric:tabular-nums}
+.ss-yaxis{position:relative;flex:none;width:48px;height:200px;color:var(--dsw-alias-label-tertiary);font-size:calc(var(--ds-fs) - 3px);line-height:1.5;font-variant-numeric:tabular-nums}
 .ss-yaxis-label{position:absolute;right:0;white-space:nowrap}
 .ss-plot-wrap{position:relative;flex:1;min-width:0;height:200px}
 .ss-plot{display:block;width:100%;height:100%;overflow:visible}
 .ss-grid-line{stroke:var(--dsw-alias-border-l4);stroke-width:1}
 .ss-grid-base{stroke:var(--dsw-alias-border-l3)}
-.ss-series-line{fill:none;stroke-width:2;stroke-linecap:round;stroke-linejoin:round}
+.ss-series-line{fill:none;stroke:var(--ss-series);stroke-width:2;stroke-linecap:round;stroke-linejoin:round}
 .ss-hits{position:absolute;inset:0;pointer-events:none}
-.ss-hit{position:absolute;top:0;bottom:0;padding:0;border:0;background:transparent;color:inherit;font:inherit;text-align:left;appearance:none;pointer-events:auto;cursor:crosshair}
-.ss-hit:focus-visible{outline:2px solid var(--dsw-focus-ring-color,var(--dsw-alias-state-business-primary));outline-offset:-2px;border-radius:var(--dsw-radius-xs)}
+/* Chart hit region: an invisible SsButton stretched over one day's column. */
+.ss-btn.ss-hit{position:absolute;top:0;bottom:0;display:block;height:auto;padding:0;border:0;background:transparent;color:inherit;font:inherit;text-align:left;appearance:none;pointer-events:auto;cursor:crosshair}
+.ss-btn.ss-hit:focus-visible{outline:2px solid var(--dsw-focus-ring-color,var(--dsw-alias-state-business-primary));outline-offset:-2px;border-radius:var(--dsw-radius-xs);background:transparent;color:inherit}
 .ss-hit:focus-visible .ss-guide,.ss-hit:focus-visible .ss-dot,.ss-hit:focus-visible .ss-tip{opacity:1;visibility:visible}
 .ss-guide{position:absolute;top:0;bottom:0;width:0;border-left:.5px dashed var(--dsw-alias-border-l2);opacity:0;transition:opacity 120ms;pointer-events:none}
-.ss-dot{position:absolute;width:8px;height:8px;border-radius:50%;transform:translate(-50%,-50%);border:.5px solid var(--dsw-alias-bg-layer-1);opacity:0;transition:opacity 120ms;pointer-events:none}
+.ss-dot{position:absolute;width:8px;height:8px;border-radius:var(--dsw-radius-xs);transform:translate(-50%,-50%);border:.5px solid var(--dsw-alias-bg-layer-1);background:var(--ss-series);opacity:0;transition:opacity 120ms;pointer-events:none}
 .ss-hit:hover .ss-guide,.ss-hit:hover .ss-dot,.ss-hit:hover .ss-tip{opacity:1;visibility:visible}
-.ss-tip{position:absolute;top:6px;min-width:170px;max-width:min(40vw,290px);padding:4px 8px;border-radius:var(--dsw-radius-sm);border:.5px solid var(--dsw-alias-border-l2);background:var(--dsw-alias-bg-layer-2);box-shadow:none;color:var(--dsw-alias-label-primary);font-size:calc(var(--ds-fs) - 2px);line-height:1.5;opacity:0;visibility:hidden;transition:opacity 120ms;pointer-events:none;z-index:5}
-.ss-tip-date{margin:0 0 4px;color:var(--dsw-alias-label-tertiary);font-size:calc(var(--ds-fs) - 3px)}
+/* Chart tooltip: the §7.7 dark surface, so every inner text tier derives from the white token. */
+.ss-tip{position:absolute;top:6px;min-width:170px;max-width:min(40vw,290px);margin-left:12px;padding:4px 8px;border-radius:var(--dsw-radius-sm);border:0;background:var(--dsw-alias-tooltip-bg);box-shadow:none;color:var(--dsw-static-neutral-bluish-00);font-size:calc(var(--ds-fs) - 2px);line-height:1.5;opacity:0;visibility:hidden;transition:opacity 120ms;pointer-events:none;z-index:5}
+.ss-tip-right{margin-left:0;margin-right:12px}
+.ss-tip-date{margin:0 0 4px;color:color-mix(in srgb,var(--dsw-static-neutral-bluish-00) 70%,transparent);font-size:calc(var(--ds-fs) - 3px)}
 .ss-tip-total{display:flex;justify-content:space-between;gap:12px;margin:0 0 6px;font-size:calc(var(--ds-fs) - 2px)}
 .ss-tip-total strong,.ss-tip-value{font-variant-numeric:tabular-nums}
 .ss-tip-list{list-style:none;margin:0;padding:0;display:flex;flex-direction:column;gap:4px}
 .ss-tip-list li{display:flex;align-items:center;gap:6px;min-width:0}
-.ss-tip-dot{display:inline-block;width:7px;height:7px;border-radius:50%;flex:none}
-.ss-tip-name{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:var(--dsw-alias-label-secondary)}
+.ss-tip-dot{display:inline-block;width:8px;height:8px;border-radius:var(--dsw-radius-xs);flex:none;background:var(--ss-series)}
+.ss-tip-name{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:color-mix(in srgb,var(--dsw-static-neutral-bluish-00) 80%,transparent)}
 .ss-tip-value{white-space:nowrap}
-.ss-tip-foot{margin:6px 0 0;padding-top:6px;border-top:.5px solid var(--dsw-alias-border-l4);color:var(--dsw-alias-label-tertiary);font-size:calc(var(--ds-fs) - 3px)}
-.ss-xaxis{position:relative;height:18px;margin-left:56px;color:var(--dsw-alias-label-tertiary);font-size:calc(var(--ds-fs) - 3px);line-height:18px}
+.ss-tip-foot{margin:6px 0 0;padding-top:6px;border-top:.5px solid color-mix(in srgb,var(--dsw-static-neutral-bluish-00) 20%,transparent);color:color-mix(in srgb,var(--dsw-static-neutral-bluish-00) 70%,transparent);font-size:calc(var(--ds-fs) - 3px)}
+.ss-xaxis{position:relative;height:18px;margin-left:calc(48px + 12px);color:var(--dsw-alias-label-tertiary);font-size:calc(var(--ds-fs) - 3px);line-height:18px}
 .ss-xlabel{position:absolute;top:0;transform:translateX(-50%);white-space:nowrap}
 .ss-xlabel-first{transform:translateX(0)}
 .ss-xlabel-last{transform:translateX(-100%)}
 .ss-mini-trend{display:block;width:100%;height:28px;margin-top:auto}
-.ss-mini-area{fill-opacity:.14;stroke:none}
-.ss-mini-line{fill:none;stroke-width:1.5;stroke-linecap:round;stroke-linejoin:round}
+.ss-mini-area{fill:var(--ss-series);fill-opacity:.14;stroke:none}
+.ss-mini-line{fill:none;stroke:var(--ss-series);stroke-width:1.5;stroke-linecap:round;stroke-linejoin:round}
 .ss-num-main{display:block}
 .ss-row-bar{display:block;height:4px;border-radius:var(--dsw-radius-xs);background:var(--dsw-alias-bg-layer-2);margin-top:4px;overflow:hidden}
 .ss-row-bar-fill{display:block;height:100%;border-radius:var(--dsw-radius-xs);background:var(--ss-series-1)}
 .ss-log-bar{display:block;height:4px;border-radius:var(--dsw-radius-xs);background:var(--dsw-alias-bg-layer-2);margin-top:4px;overflow:hidden}
-.ss-log-bar-fill{display:block;height:100%;border-radius:var(--dsw-radius-xs)}
-.ss-table-scroll{overflow-x:auto;margin:0 -6px}
+.ss-log-bar-fill{display:block;height:100%;border-radius:var(--dsw-radius-xs);background:var(--ss-series)}
+.ss-table-scroll{overflow-x:auto;margin:0 -6px;scrollbar-width:thin;scrollbar-color:var(--dsw-alias-scrollbar-bg-l1) transparent}
 /* Expanded session table: a fixed ten-row window (SESSIONS_WINDOW_ROWS in the
-   component), with a sticky header and its own vertical scrollbar. */
+   component), with a sticky header and its own vertical scrollbar.
+   Row/head heights derive from --ds-fs so ten rows survive host type scaling
+   (14/16/20px → 56.6/62.4/74 and 33/36/42). Box model: the session cell stacks
+   a 1.5×fs title line plus a 1.5×(fs−3)+2px id line (~3×fs−2.5), and the window
+   cell adds 6+6px padding + .5px border, so the 2.9×fs+16px row stays just above
+   content height; thead th is 1.5×(fs−2)+6+6+.5 (~1.5×fs+9.5), rounded up to
+   1.5×fs+12. max-height is exactly 10 rows + the header, so the sticky header
+   plus ten rows fill the window with no clipping or overlap. */
 .ss-table-window{max-height:calc(var(--ss-session-row,56px) * 10 + var(--ss-table-head,33px));overflow-y:auto;scrollbar-gutter:stable;overscroll-behavior:contain}
 .ss-table-window thead th{position:sticky;top:0;z-index:1;background:var(--dsw-alias-bg-layer-1)}
 .ss-table-window tbody tr{height:var(--ss-session-row,56px)}
@@ -296,45 +371,39 @@ window.__ModuleLoader__.load({
 .ss-session-head{display:flex;align-items:flex-start;gap:6px;min-width:0}
 .ss-session-title{display:block;flex:1 1 auto;min-width:0;color:var(--dsw-alias-label-primary);font-weight:500;overflow-wrap:anywhere}
 .ss-session-id{display:block;color:var(--dsw-alias-label-caption);font-size:calc(var(--ds-fs) - 3px);line-height:1.5;margin-top:2px;overflow-wrap:anywhere}
-/* Archived marker: a quiet warm chip at the title's top-right. */
-.ss-archived-badge{flex:none;display:inline-flex;align-items:center;height:20px;margin-top:4px;padding:0 6px;border-radius:var(--dsw-radius-xs);font-size:calc(var(--ds-fs) - 2px);font-weight:500;line-height:20px;white-space:nowrap;color:var(--dsw-alias-state-warn-primary);background:color-mix(in srgb,var(--dsw-alias-state-warn-primary) 12%,transparent);border:.5px solid color-mix(in srgb,var(--dsw-alias-state-warn-primary) 35%,transparent)}
+/* Archived marker: a quiet warm badge at the title's top-right. */
+.ss-archived-badge{margin-top:2px}
 .ss-split{color:var(--dsw-alias-label-secondary);white-space:normal}
-.ss-segmented{display:inline-flex;gap:2px;padding:2px;border-radius:var(--dsw-radius-lg);background:var(--dsw-alias-bg-layer-2)}
-.ss-segment{display:inline-flex;align-items:center;gap:4px;height:26px;padding:0 10px;border:0;border-radius:var(--dsw-radius-sm);background:transparent;color:var(--dsw-alias-label-tertiary);font:inherit;font-size:calc(var(--ds-fs) - 2px);line-height:18px;cursor:pointer}
-.ss-segment:hover{color:var(--dsw-alias-label-primary)}
-.ss-segment-active{background:var(--dsw-alias-bg-base);color:var(--dsw-alias-label-primary)}
 .ss-sort-arrow{font-size:calc(var(--ds-fs) - 2px);line-height:1}
 .ss-table-foot{display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap;margin-top:8px}
 .ss-table-note{margin:0;color:var(--dsw-alias-label-tertiary);font-size:calc(var(--ds-fs) - 2px)}
-.ss-more{display:inline-flex;align-items:center;gap:4px;height:28px;padding:0 10px;border:.5px solid var(--dsw-alias-border-l2);border-radius:var(--dsw-radius-sm);background:var(--dsw-alias-bg-layer-1);color:var(--dsw-alias-label-secondary);font:inherit;font-size:calc(var(--ds-fs) - 2px);line-height:18px;cursor:pointer;transition:background 120ms}
-.ss-more:hover{background:var(--dsw-alias-interactive-bg-hover);color:var(--dsw-alias-label-primary)}
-.ss-more:focus-visible{outline:2px solid var(--dsw-focus-ring-color,var(--dsw-alias-state-business-primary));outline-offset:2px}
 .ss-more-arrow{font-size:calc(var(--ds-fs) - 2px);line-height:1}
 .ss-model-list{list-style:none;margin:0;padding:0;display:flex;flex-direction:column;gap:12px}
 .ss-model{display:grid;grid-template-columns:auto minmax(0,1fr) 96px;gap:12px;align-items:start;min-width:0}
-.ss-model-mark{width:8px;height:8px;border-radius:50%;margin-top:8px}
+.ss-model-mark{width:8px;height:8px;border-radius:var(--dsw-radius-xs);margin-top:8px;background:var(--ss-series)}
 .ss-model-main{display:flex;flex-direction:column;gap:6px;min-width:0}
 .ss-model-spark{display:block;width:96px;height:28px;margin-top:4px;overflow:visible}
-.ss-model-spark-line{fill:none;stroke-width:1.5;stroke-linecap:round;stroke-linejoin:round;opacity:.9}
+.ss-model-spark-line{fill:none;stroke:var(--ss-series);stroke-width:1.5;stroke-linecap:round;stroke-linejoin:round}
 .ss-model-head{display:flex;justify-content:space-between;gap:12px;align-items:baseline}
 .ss-model-name{font-size:var(--ds-fs);overflow-wrap:anywhere}
 .ss-model-share{color:var(--dsw-alias-label-secondary);font-size:calc(var(--ds-fs) - 2px);white-space:nowrap;font-variant-numeric:tabular-nums}
 .ss-model-meta{display:flex;flex-wrap:wrap;gap:4px 12px;color:var(--dsw-alias-label-tertiary);font-size:calc(var(--ds-fs) - 2px)}
 .ss-share-bar{height:6px;border-radius:var(--dsw-radius-xs);background:var(--dsw-alias-bg-layer-2);overflow:hidden}
-.ss-share-fill{height:100%;border-radius:var(--dsw-radius-xs);background:var(--dsw-alias-state-business-primary)}
+.ss-share-fill{height:100%;border-radius:var(--dsw-radius-xs);background:var(--ss-series)}
 .ss-stats{display:grid;grid-template-columns:repeat(auto-fit,minmax(160px,1fr));gap:12px 20px;margin:0}
 .ss-stat{min-width:0;margin:0}
 .ss-stat-label{margin:0;color:var(--dsw-alias-label-tertiary);font-size:calc(var(--ds-fs) - 2px);line-height:1.5}
 .ss-stat-value{margin:0;font-size:var(--ds-fs);font-weight:500;line-height:1.5;font-variant-numeric:tabular-nums;overflow-wrap:anywhere}
 .ss-stat-note{display:block;color:var(--dsw-alias-label-caption);font-size:calc(var(--ds-fs) - 3px);font-weight:400;line-height:1.5}
-.ss-subhead{margin:16px 0 6px;color:var(--dsw-alias-label-tertiary);font-size:calc(var(--ds-fs) - 2px);font-weight:400}
+.ss-subhead{margin:16px 0 6px;color:var(--dsw-alias-label-secondary);font-size:calc(var(--ds-fs) - 2px);font-weight:400}
 .ss-spark-plot{display:block;width:100%;height:56px;background:var(--dsw-alias-bg-base);border-radius:var(--dsw-radius-sm);padding:2px}
-.ss-spark-process{fill:none;stroke:var(--dsw-alias-brand-primary);stroke-width:1.5}
-.ss-spark-system{fill:none;stroke:var(--dsw-alias-state-warn-primary);stroke-width:1.5}
+/* CPU history is a chart series, so it uses series colors, not status colors (§2.6/§2.10). */
+.ss-spark-process{fill:none;stroke:var(--ss-series-1);stroke-width:1.5}
+.ss-spark-system{fill:none;stroke:var(--ss-series-3);stroke-width:1.5}
 .ss-spark-legend{display:flex;gap:16px;align-items:center;margin-top:6px;color:var(--dsw-alias-label-tertiary);font-size:calc(var(--ds-fs) - 2px)}
 .ss-spark-peak{margin-left:auto;white-space:nowrap}
-.ss-spark-swatch-process{background:var(--dsw-alias-brand-primary)}
-.ss-spark-swatch-system{background:var(--dsw-alias-state-warn-primary)}
+.ss-spark-swatch-process{background:var(--ss-series-1)}
+.ss-spark-swatch-system{background:var(--ss-series-3)}
 .ss-logs{display:flex;flex-direction:column;gap:12px}
 .ss-log-entry{border-bottom:.5px solid var(--dsw-alias-border-l4);padding-bottom:8px}
 .ss-log-entry:last-child{border-bottom:0;padding-bottom:0}
@@ -348,27 +417,40 @@ window.__ModuleLoader__.load({
 .ss-log-name{overflow-wrap:anywhere}
 .ss-log-bytes{white-space:nowrap;font-variant-numeric:tabular-nums}
 .ss-log-home{margin:0 0 12px;color:var(--dsw-alias-label-caption);font-size:calc(var(--ds-fs) - 3px);overflow-wrap:anywhere}
-.ss-chip{display:inline-flex;align-items:center;height:20px;padding:0 6px;border-radius:var(--dsw-radius-xs);background:var(--dsw-alias-bg-layer-2);color:var(--dsw-alias-label-secondary);font-size:calc(var(--ds-fs) - 2px)}
 .ss-state-wrap{display:flex;flex-direction:column;gap:16px}
-.ss-state{display:flex;flex-direction:column;align-items:center;justify-content:center;gap:8px;padding:48px 20px;text-align:center;color:var(--dsw-alias-label-tertiary)}
-.ss-state-title{margin:0;font-size:calc(var(--ds-fs) + 2px);font-weight:500;line-height:1.35;color:var(--dsw-alias-label-secondary)}
-.ss-state-message{margin:0;font-size:calc(var(--ds-fs) - 2px)}
-.ss-state-action{height:32px;padding:0 12px;border-radius:var(--dsw-radius-md);border:.5px solid var(--dsw-alias-border-l2);background:var(--dsw-alias-bg-layer-1);color:var(--dsw-alias-label-primary);font:inherit;font-size:calc(var(--ds-fs) - 1px);line-height:20px;cursor:pointer}
-.ss-state-action:hover{background:var(--dsw-alias-interactive-bg-hover)}
 .ss-skeleton-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:12px}
-.ss-skeleton{height:96px;border-radius:var(--dsw-radius-lg);border:.5px solid var(--dsw-alias-border-l4);background:var(--dsw-alias-bg-layer-1);animation:ss-pulse 1.4s ease-in-out infinite}
+/* §7.10: the first-load skeleton mirrors the tallest summary card
+   (label / value / hint / progress / hint), so its height follows the host
+   font size and the swap to real cards does not jump. */
+.ss-skeleton{display:flex;flex-direction:column;gap:6px;animation:ss-pulse 1.4s ease-in-out infinite}
+.ss-skeleton-row{display:block;border-radius:var(--dsw-radius-xs);background:var(--dsw-alias-bg-layer-2)}
+.ss-skeleton-label{width:40%;height:1.5em;font-size:calc(var(--ds-fs) - 2px)}
+.ss-skeleton-value{width:64%;height:1.35em;font-size:calc(var(--ds-fs) + 6px)}
+.ss-skeleton-hint{width:85%;height:1.5em;font-size:calc(var(--ds-fs) - 2px)}
+.ss-skeleton-bar{width:100%;height:6px;margin:4px 0}
+.ss-skeleton-line{height:56px;border-radius:var(--dsw-radius-md);border:.5px solid var(--dsw-alias-border-l4);background:var(--dsw-alias-bg-layer-1)}
 @keyframes ss-pulse{0%,100%{opacity:.6}50%{opacity:1}}
-.ss-empty{margin:0;padding:20px 0;text-align:center;color:var(--dsw-alias-label-tertiary);font-size:var(--ds-fs)}
+@keyframes ss-spin{to{transform:rotate(360deg)}}
+.ss-spin{animation:ss-spin .9s linear infinite}
 .ss-icon{display:block}
 .ss-icon-accent{fill:var(--dsw-alias-brand-primary);stroke:var(--dsw-alias-brand-primary)}
-.ss-footer-entry{--ds-fs:var(--dsh-content-font-size,14px);display:flex;align-items:center;gap:8px;width:100%;height:36px;padding:0 10px;margin:0;border:0;border-radius:var(--dsw-radius-sm);background:transparent;color:var(--dsw-alias-label-secondary);font:inherit;font-size:calc(var(--ds-fs) - 1px);line-height:20px;cursor:pointer;transition:background 120ms,color 120ms}
-.ss-footer-entry:hover{background:var(--dsw-alias-interactive-bg-hover);color:var(--dsw-alias-label-primary)}
-.ss-footer-entry[data-active="true"]{background:var(--dsw-alias-bg-layer-2);color:var(--dsw-alias-label-primary)}
-.ss-footer-entry:focus-visible{outline:2px solid var(--dsw-focus-ring-color,var(--dsw-alias-state-business-primary));outline-offset:-2px}
-.ss-footer-entry[data-collapsed="true"]{width:36px;padding:0;justify-content:center}
+/* Sidebar foot entry (§4.1/§7.1): a host row keeps its 36px height; the lg
+   button's own type and line-height come from .ss-btn[data-size="lg"]. */
+.ss-footer-entry{--ds-fs:var(--dsh-content-font-size,14px)}
+.ss-btn.ss-footer-entry{width:100%;height:36px;padding:0 10px;border:0;border-radius:var(--dsw-radius-sm);background:transparent;color:var(--dsw-alias-label-secondary);justify-content:flex-start}
+.ss-btn.ss-footer-entry:hover{background:var(--dsw-alias-interactive-bg-hover);color:var(--dsw-alias-label-primary)}
+/* The host cell is 36px tall; the icon button keeps the §7.2 32×32 hit area and
+   centers inside the row instead of stretching to 36×36. */
+.ss-icon-btn.ss-footer-entry{width:32px;height:32px;align-self:center;color:var(--dsw-alias-label-secondary)}
+.ss-icon-btn.ss-footer-entry:hover{background:var(--dsw-alias-interactive-bg-hover);color:var(--dsw-alias-label-primary)}
+/* Selected shares the hover fill (§2.5), only the label color is promoted; the
+   more specific .ss-btn/.ss-icon-btn :hover rules above still win on hover. */
+.ss-footer-entry[data-active="true"]{background:var(--dsw-alias-interactive-bg-hover);color:var(--dsw-alias-label-primary)}
 .ss-footer-label{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
-@media (max-width:720px){.ss-table th:nth-child(5),.ss-table td:nth-child(5){display:none}.ss-heading{align-items:flex-start;flex-wrap:wrap}.ss-model{grid-template-columns:auto minmax(0,1fr)}.ss-model-spark{display:none}.ss-yaxis{width:38px}.ss-xaxis{margin-left:48px}.ss-plot-wrap,.ss-yaxis{height:170px}}
-@media (prefers-reduced-motion:reduce){.ss-guide,.ss-dot,.ss-tip,.ss-refresh,.ss-more,.ss-footer-entry,.ss-progress-fill,.ss-skeleton{transition:none;animation:none}}
+@media (max-width:960px){.ss-summary-grid{grid-template-columns:repeat(2,minmax(0,1fr))}.ss-stats{grid-template-columns:repeat(2,minmax(0,1fr))}}
+@media (max-width:720px){.ss-table th:nth-child(5),.ss-table td:nth-child(5){display:none}.ss-heading{align-items:flex-start;flex-wrap:wrap}.ss-heading-actions{flex-wrap:wrap}.ss-summary-grid{grid-template-columns:1fr}.ss-stats{grid-template-columns:1fr}.ss-model{grid-template-columns:auto minmax(0,1fr)}.ss-model-spark{display:none}.ss-yaxis{width:32px}.ss-xaxis{margin-left:calc(32px + 12px)}.ss-plot-wrap,.ss-yaxis{height:170px}}
+@media (max-width:520px){.ss-session-id{display:none}.ss-log-home{display:none}.ss-updated{display:none}.ss-heading-actions{gap:8px}}
+@media (prefers-reduced-motion:reduce){.ss-guide,.ss-dot,.ss-tip,.ss-btn,.ss-icon-btn,.ss-segment,.ss-footer-entry,.ss-progress-fill,.ss-skeleton,.ss-spin,.ss-tooltip-layer[data-plugin="@chengze/dsh-session-stats"] .ss-tooltip{transition:none;animation:none}}
 `
 
     /* ------------------------------------------------------------------ *
@@ -643,9 +725,9 @@ window.__ModuleLoader__.load({
         // still refreshes it right away, so the visible numbers stay current.
         const warm = warmPayloads.get(path)
         if (warm !== undefined) {
-          return { status: 'ready', data: warm.data, error: null, unauthorized: false, updatedAt: warm.at }
+          return { status: 'ready', data: warm.data, error: null, unauthorized: false, updatedAt: warm.at, refreshing: false }
         }
-        return { status: 'loading', data: null, error: null, unauthorized: false, updatedAt: 0 }
+        return { status: 'loading', data: null, error: null, unauthorized: false, updatedAt: 0, refreshing: false }
       })
       useEffect(() => {
         let stopped = false
@@ -655,21 +737,25 @@ window.__ModuleLoader__.load({
           if (controller !== null) controller.abort()
           const current = new AbortController()
           controller = current
+          // Only a manual refresh shows the busy affordance; polling stays silent.
+          if (force) {
+            setState((previous) => (previous.refreshing === true ? previous : Object.assign({}, previous, { refreshing: true })))
+          }
           const target = force ? path + (path.indexOf('?') === -1 ? '?' : '&') + 'refresh=1' : path
           load(target, current.signal).then(
             (data) => {
               if (stopped || current.signal.aborted) return
               if (controller === current) controller = null
-              setState({ status: 'ready', data: data, error: null, unauthorized: false, updatedAt: Date.now() })
+              setState({ status: 'ready', data: data, error: null, unauthorized: false, updatedAt: Date.now(), refreshing: false })
             },
             (error) => {
               if (stopped || current.signal.aborted) return
               if (controller === current) controller = null
               const unauthorized = error !== null && typeof error === 'object' && error.code === 'unauthorized'
               setState((previous) => {
-                if (unauthorized) return { status: 'unauthorized', data: null, error: null, unauthorized: true, updatedAt: previous.updatedAt }
-                if (previous.data !== null) return { status: 'ready', data: previous.data, error: error, unauthorized: false, updatedAt: previous.updatedAt }
-                return { status: 'error', data: null, error: error, unauthorized: false, updatedAt: 0 }
+                if (unauthorized) return { status: 'unauthorized', data: null, error: null, unauthorized: true, updatedAt: previous.updatedAt, refreshing: false }
+                if (previous.data !== null) return { status: 'ready', data: previous.data, error: error, unauthorized: false, updatedAt: previous.updatedAt, refreshing: false }
+                return { status: 'error', data: null, error: error, unauthorized: false, updatedAt: 0, refreshing: false }
               })
             },
           )
@@ -689,13 +775,13 @@ window.__ModuleLoader__.load({
     }
 
     /* ------------------------------------------------------------------ *
-     * Icons (bare SVG, currentColor, no wrapper element).                *
+     * Icons (§8): 24 viewBox, 1.8 stroke, round caps, decorative.         *
+     * Only two sizes exist: 16 (controls) and 20 (empty states).          *
      * ------------------------------------------------------------------ */
 
     function StatsIcon(props) {
       const source = props !== null && typeof props === 'object' ? props : {}
-      const size = typeof source.size === 'number' && Number.isFinite(source.size) && source.size > 0 ? source.size : 18
-      const active = source.active === true
+      const size = source.size === 20 ? 20 : 16
       return h(
         'svg',
         {
@@ -706,10 +792,9 @@ window.__ModuleLoader__.load({
           focusable: 'false',
           fill: 'none',
           stroke: 'currentColor',
-          strokeWidth: 1.5,
+          strokeWidth: 1.8,
           strokeLinecap: 'round',
           strokeLinejoin: 'round',
-          opacity: active ? 1 : 0.72,
           className: 'ss-icon',
         },
         h('rect', { x: 3.5, y: 13, width: 4, height: 7.5, rx: 1.2 }),
@@ -718,12 +803,415 @@ window.__ModuleLoader__.load({
       )
     }
 
+    function RefreshGlyph(props) {
+      const source = props !== null && typeof props === 'object' ? props : {}
+      const spinning = source.spinning === true
+      return h(
+        'svg',
+        {
+          width: 16,
+          height: 16,
+          viewBox: '0 0 24 24',
+          'aria-hidden': 'true',
+          focusable: 'false',
+          fill: 'none',
+          stroke: 'currentColor',
+          strokeWidth: 1.8,
+          strokeLinecap: 'round',
+          strokeLinejoin: 'round',
+          className: spinning ? 'ss-icon ss-spin' : 'ss-icon',
+        },
+        h('path', { d: 'M20 12a8 8 0 1 1-2.34-5.66' }),
+        h('path', { d: 'M20 4v5h-5' }),
+      )
+    }
+
+    function EmptyGlyph(props) {
+      const source = props !== null && typeof props === 'object' ? props : {}
+      const size = source.size === 16 ? 16 : 20
+      return h(
+        'svg',
+        {
+          width: size,
+          height: size,
+          viewBox: '0 0 24 24',
+          'aria-hidden': 'true',
+          focusable: 'false',
+          fill: 'none',
+          stroke: 'currentColor',
+          strokeWidth: 1.8,
+          strokeLinecap: 'round',
+          strokeLinejoin: 'round',
+          className: 'ss-icon',
+        },
+        h('path', { d: 'M4 13.5l2.4-6.4A2 2 0 0 1 8.3 5.8h7.4a2 2 0 0 1 1.9 1.3L20 13.5' }),
+        h('path', { d: 'M4 13.5V17a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-3.5' }),
+        h('path', { d: 'M4 13.5h4l1.5 2h5l1.5-2h4' }),
+      )
+    }
+
+    function AlertGlyph(props) {
+      const source = props !== null && typeof props === 'object' ? props : {}
+      const size = source.size === 20 ? 20 : 16
+      return h(
+        'svg',
+        {
+          width: size,
+          height: size,
+          viewBox: '0 0 24 24',
+          'aria-hidden': 'true',
+          focusable: 'false',
+          fill: 'none',
+          stroke: 'currentColor',
+          strokeWidth: 1.8,
+          strokeLinecap: 'round',
+          strokeLinejoin: 'round',
+          className: 'ss-icon',
+        },
+        h('circle', { cx: 12, cy: 12, r: 8.5 }),
+        h('path', { d: 'M12 7.5v5.5' }),
+        h('path', { d: 'M12 16.5v.01' }),
+      )
+    }
+
+    /* ------------------------------------------------------------------ *
+     * SsTooltip (§7.7): one page-wide singleton on <body>, wrapped in a   *
+     * data-plugin scope container. The font size is read from the owning  *
+     * root each time it is shown, never captured at creation time.        *
+     * ------------------------------------------------------------------ */
+
+    const TOOLTIP_DELAY_MS = 300
+    const TOOLTIP_VIEWPORT_MARGIN = 8
+    let tooltipLayer = null
+    let tooltipBubble = null
+    let tooltipTimer = 0
+    let tooltipAnchor = null
+    let tooltipUsers = 0
+
+    function ensureTooltip() {
+      if (typeof document === 'undefined' || document === null || document.body === null) return null
+      if (tooltipBubble !== null && tooltipLayer !== null && tooltipLayer.parentNode === document.body) return tooltipBubble
+      const layer = document.createElement('div')
+      layer.className = 'ss-tooltip-layer'
+      layer.dataset.plugin = PLUGIN_ID
+      const bubble = document.createElement('div')
+      bubble.className = 'ss-tooltip'
+      bubble.setAttribute('role', 'tooltip')
+      bubble.setAttribute('aria-hidden', 'true')
+      layer.appendChild(bubble)
+      document.body.appendChild(layer)
+      tooltipLayer = layer
+      tooltipBubble = bubble
+      return bubble
+    }
+
+    function destroyTooltip() {
+      if (tooltipTimer !== 0) {
+        clearTimeout(tooltipTimer)
+        tooltipTimer = 0
+      }
+      tooltipAnchor = null
+      if (tooltipLayer !== null && tooltipLayer.parentNode !== null) tooltipLayer.parentNode.removeChild(tooltipLayer)
+      tooltipLayer = null
+      tooltipBubble = null
+    }
+
+    function hideTooltip() {
+      if (tooltipTimer !== 0) {
+        clearTimeout(tooltipTimer)
+        tooltipTimer = 0
+      }
+      tooltipAnchor = null
+      if (tooltipBubble !== null) {
+        tooltipBubble.removeAttribute('data-visible')
+        tooltipBubble.textContent = ''
+      }
+    }
+
+    /** The owning root's live --ds-fs, resolved when the tooltip is shown. */
+    function tooltipFontSize(anchor) {
+      try {
+        if (typeof window === 'undefined' || typeof window.getComputedStyle !== 'function') return ''
+        return window.getComputedStyle(anchor).getPropertyValue('--ds-fs').trim()
+      } catch (error) {
+        return ''
+      }
+    }
+
+    function placeTooltip(bubble, anchor) {
+      if (typeof window === 'undefined') return
+      const root = document.documentElement
+      const viewWidth = window.innerWidth || (root !== null ? root.clientWidth : 0)
+      const viewHeight = window.innerHeight || (root !== null ? root.clientHeight : 0)
+      const rect = anchor.getBoundingClientRect()
+      const width = bubble.offsetWidth
+      const height = bubble.offsetHeight
+      const margin = TOOLTIP_VIEWPORT_MARGIN
+      const maxLeft = Math.max(margin, viewWidth - width - margin)
+      const maxTop = Math.max(margin, viewHeight - height - margin)
+      const centeredLeft = clamp(rect.left + rect.width / 2 - width / 2, margin, maxLeft)
+      const centeredTop = clamp(rect.top + rect.height / 2 - height / 2, margin, maxTop)
+      // Preference order is up, down, right, left; every candidate keeps 8px margins.
+      const candidates = [
+        { left: centeredLeft, top: rect.top - height - margin },
+        { left: centeredLeft, top: rect.bottom + margin },
+        { left: rect.right + margin, top: centeredTop },
+        { left: rect.left - width - margin, top: centeredTop },
+      ]
+      const fits = (candidate) => candidate.left >= margin && candidate.top >= margin
+        && candidate.left + width <= viewWidth - margin && candidate.top + height <= viewHeight - margin
+      let chosen = null
+      for (const candidate of candidates) {
+        if (fits(candidate)) {
+          chosen = candidate
+          break
+        }
+      }
+      if (chosen === null) {
+        // None fit: clamp each side into the viewport and keep the largest visible area.
+        let bestArea = -1
+        for (const candidate of candidates) {
+          const left = clamp(candidate.left, margin, maxLeft)
+          const top = clamp(candidate.top, margin, maxTop)
+          const visibleWidth = Math.max(0, Math.min(viewWidth, left + width) - Math.max(0, left))
+          const visibleHeight = Math.max(0, Math.min(viewHeight, top + height) - Math.max(0, top))
+          const area = visibleWidth * visibleHeight
+          if (area > bestArea) {
+            bestArea = area
+            chosen = { left: left, top: top }
+          }
+        }
+      }
+      bubble.style.left = String(Math.round(chosen.left)) + 'px'
+      bubble.style.top = String(Math.round(chosen.top)) + 'px'
+    }
+
+    function showTooltip(anchor) {
+      const bubble = ensureTooltip()
+      if (bubble === null) return
+      const text = anchor.getAttribute('data-ss-tooltip')
+      if (typeof text !== 'string' || text === '') return
+      bubble.textContent = text
+      const fontSize = tooltipFontSize(anchor)
+      if (tooltipLayer !== null) {
+        if (fontSize !== '') tooltipLayer.style.setProperty('--ds-fs', fontSize)
+        else tooltipLayer.style.removeProperty('--ds-fs')
+      }
+      bubble.removeAttribute('data-visible')
+      placeTooltip(bubble, anchor)
+      tooltipAnchor = anchor
+      bubble.setAttribute('data-visible', 'true')
+    }
+
+    function scheduleTooltip(anchor) {
+      if (tooltipAnchor === anchor && tooltipBubble !== null && tooltipBubble.getAttribute('data-visible') === 'true') return
+      if (tooltipTimer !== 0) {
+        clearTimeout(tooltipTimer)
+        tooltipTimer = 0
+      }
+      if (tooltipAnchor !== null) hideTooltip()
+      tooltipTimer = setTimeout(() => {
+        tooltipTimer = 0
+        showTooltip(anchor)
+      }, TOOLTIP_DELAY_MS)
+    }
+
+    /**
+     * Bind hover/focus tooltip behavior to one anchor. Hover or keyboard focus
+     * waits 300ms; leave, press, scroll and unmount hide immediately. Pointer
+     * focus (a click) never re-triggers the tooltip.
+     */
+    function useTooltip(label) {
+      const ref = useRef(null)
+      useEffect(() => {
+        const node = ref.current
+        if (node === null || typeof node.addEventListener !== 'function') return undefined
+        if (typeof label !== 'string' || label === '') return undefined
+        tooltipUsers += 1
+        const show = () => scheduleTooltip(node)
+        const hide = () => hideTooltip()
+        const onFocus = () => {
+          let visible = true
+          try {
+            visible = node.matches(':focus-visible')
+          } catch (error) {
+            visible = true
+          }
+          if (visible) scheduleTooltip(node)
+        }
+        const onScroll = () => hideTooltip()
+        const onPress = () => hideTooltip()
+        node.addEventListener('mouseenter', show)
+        node.addEventListener('mouseleave', hide)
+        node.addEventListener('focus', onFocus)
+        node.addEventListener('blur', hide)
+        node.addEventListener('pointerdown', onPress)
+        node.addEventListener('click', onPress)
+        window.addEventListener('scroll', onScroll, true)
+        document.addEventListener('pointerdown', onPress, true)
+        return () => {
+          node.removeEventListener('mouseenter', show)
+          node.removeEventListener('mouseleave', hide)
+          node.removeEventListener('focus', onFocus)
+          node.removeEventListener('blur', hide)
+          node.removeEventListener('pointerdown', onPress)
+          node.removeEventListener('click', onPress)
+          window.removeEventListener('scroll', onScroll, true)
+          document.removeEventListener('pointerdown', onPress, true)
+          tooltipUsers -= 1
+          if (tooltipAnchor === node) hideTooltip()
+          if (tooltipUsers <= 0) destroyTooltip()
+        }
+      }, [label])
+      return ref
+    }
+
+    /** Primitive handle for the full-page tooltip singleton (§7.7). */
+    const SsTooltip = { show: showTooltip, hide: hideTooltip, useAnchor: useTooltip }
+
+    /* ------------------------------------------------------------------ *
+     * Primitives (§6.4 / §7). Views never render a bare <button>.         *
+     * ------------------------------------------------------------------ */
+
+    function SsButton(props) {
+      const source = props !== null && typeof props === 'object' ? props : {}
+      const variant = source.variant === 'primary' || source.variant === 'ghost' || source.variant === 'danger'
+        ? source.variant
+        : 'secondary'
+      const size = source.size === 'lg' || source.size === 'sm' ? source.size : 'md'
+      const name = typeof source.name === 'string' && source.name !== '' ? ' ss-' + source.name : ''
+      return h(
+        'button',
+        {
+          type: source.type === 'submit' ? 'submit' : 'button',
+          className: 'ss-btn' + name,
+          'data-variant': variant,
+          'data-size': size,
+          'data-busy': source.busy === true ? 'true' : undefined,
+          'data-active': source.active === true ? 'true' : undefined,
+          disabled: source.disabled === true,
+          'aria-label': source.label,
+          'aria-pressed': source.pressed === undefined ? undefined : (source.pressed === true ? 'true' : 'false'),
+          'aria-expanded': source.expanded === undefined ? undefined : (source.expanded === true ? 'true' : 'false'),
+          'aria-busy': source.busy === true ? 'true' : undefined,
+          title: source.title,
+          tabIndex: source.tabIndex,
+          style: source.style,
+          onClick: typeof source.onClick === 'function' ? source.onClick : undefined,
+        },
+        source.children,
+      )
+    }
+
+    function SsIconButton(props) {
+      const source = props !== null && typeof props === 'object' ? props : {}
+      const label = typeof source.label === 'string' ? source.label : ''
+      const ref = SsTooltip.useAnchor(label)
+      const name = typeof source.name === 'string' && source.name !== '' ? ' ss-' + source.name : ''
+      return h(
+        'button',
+        {
+          type: 'button',
+          ref: ref,
+          className: 'ss-icon-btn' + name,
+          'data-size': source.size === 'sm' ? 'sm' : 'md',
+          'data-variant': source.variant === 'danger' ? 'danger' : 'ghost',
+          'data-active': source.active === true ? 'true' : undefined,
+          'data-ss-tooltip': label,
+          disabled: source.disabled === true,
+          'aria-label': label,
+          'aria-pressed': source.pressed === undefined ? undefined : (source.pressed === true ? 'true' : 'false'),
+          onClick: typeof source.onClick === 'function' ? source.onClick : undefined,
+        },
+        source.children,
+      )
+    }
+
+    function SsSegmented(props) {
+      const source = props !== null && typeof props === 'object' ? props : {}
+      const level = source.level === 'primary' ? 'primary' : 'secondary'
+      return h(
+        'div',
+        {
+          className: 'ss-segmented',
+          'data-level': level,
+          role: 'group',
+          'aria-label': source.label,
+        },
+        toArray(source.items).map((item) => {
+          const record = toObject(item)
+          const active = record.active === true
+          return h(
+            'button',
+            {
+              key: record.id,
+              type: 'button',
+              className: 'ss-segment' + (active ? ' ss-segment-active' : ''),
+              'aria-pressed': active ? 'true' : 'false',
+              onClick: typeof record.onClick === 'function' ? record.onClick : undefined,
+            },
+            record.label,
+            record.suffix === undefined || record.suffix === null
+              ? null
+              : h('span', { className: 'ss-sort-arrow', 'aria-hidden': 'true' }, record.suffix),
+          )
+        }),
+      )
+    }
+
+    function SsBadge(props) {
+      const source = props !== null && typeof props === 'object' ? props : {}
+      const tone = source.tone === 'warn' || source.tone === 'success' || source.tone === 'error' ? source.tone : 'neutral'
+      const name = typeof source.name === 'string' && source.name !== '' ? ' ss-' + source.name : ''
+      return h('span', { className: 'ss-badge' + name, 'data-tone': tone }, source.children)
+    }
+
+    function SsEmptyState(props) {
+      const source = props !== null && typeof props === 'object' ? props : {}
+      const tone = source.tone === 'error' ? 'error' : 'neutral'
+      const Icon = typeof source.icon === 'function' ? source.icon : EmptyGlyph
+      return h(
+        'div',
+        {
+          className: 'ss-empty-state',
+          'data-tone': tone,
+          'data-roomy': source.roomy === true ? 'true' : undefined,
+          role: source.role === undefined ? 'status' : source.role,
+        },
+        h(Icon, { size: 20 }),
+        h('p', { className: 'ss-empty' }, source.message),
+        source.actionLabel === undefined || source.actionLabel === null
+          ? null
+          : h(
+              SsButton,
+              { name: 'state-action', size: 'md', variant: 'secondary', onClick: source.onAction },
+              source.actionLabel,
+            ),
+      )
+    }
+
+    function SsErrorBar(props) {
+      const source = props !== null && typeof props === 'object' ? props : {}
+      return h(
+        'div',
+        { className: 'ss-errorbar', role: 'alert' },
+        h(AlertGlyph, { size: 16 }),
+        h('span', { className: 'ss-errorbar-text' }, source.message),
+        h(
+          SsButton,
+          { size: 'sm', variant: 'secondary', onClick: source.onRetry },
+          source.actionLabel,
+        ),
+      )
+    }
+
     /**
      * Sidebar-foot entry (`sidebar.footer.action`), rendered directly above the
      * account menu at the bottom of the sidebar. The owner hands it only `wide`;
      * the panel title and the navigation callbacks come from the registration.
      * The entry toggles: a second click on the already-open panel returns to the
-     * Conversation (`layout.selectPanel(null)`).
+     * Conversation (`layout.selectPanel(null)`). Collapsed it is a pure icon and
+     * therefore carries the singleton tooltip.
      */
     function FooterEntry(props) {
       const source = props !== null && typeof props === 'object' ? props : {}
@@ -739,74 +1227,57 @@ window.__ModuleLoader__.load({
         if (togglePanel !== null) togglePanel(active)
         else openPanel()
       }
+      const label = t('panel.title')
+      if (!wide) {
+        return h(
+          SsIconButton,
+          { name: 'footer-entry', label: label, pressed: active, active: active, onClick: onClick },
+          h(StatsIcon, null),
+        )
+      }
       return h(
-        'button',
-        {
-          type: 'button',
-          className: 'ss-footer-entry',
-          'data-collapsed': wide ? 'false' : 'true',
-          'data-active': active ? 'true' : 'false',
-          'aria-label': t('panel.title'),
-          'aria-pressed': active,
-          title: wide ? undefined : t('panel.title'),
-          onClick: onClick,
-        },
-        h(StatsIcon, { size: 18, active: active }),
-        wide ? h('span', { className: 'ss-footer-label' }, t('panel.title')) : null,
-      )
-    }
-
-    function RefreshGlyph() {
-      return h(
-        'svg',
-        {
-          width: 14,
-          height: 14,
-          viewBox: '0 0 24 24',
-          'aria-hidden': 'true',
-          focusable: 'false',
-          fill: 'none',
-          stroke: 'currentColor',
-          strokeWidth: 1.8,
-          strokeLinecap: 'round',
-          strokeLinejoin: 'round',
-        },
-        h('path', { d: 'M20 12a8 8 0 1 1-2.34-5.66' }),
-        h('path', { d: 'M20 4v5h-5' }),
+        SsButton,
+        { name: 'footer-entry', size: 'lg', variant: 'ghost', label: label, pressed: active, active: active, onClick: onClick },
+        h(StatsIcon, null),
+        h('span', { className: 'ss-footer-label' }, label),
       )
     }
 
     /* ------------------------------------------------------------------ *
-     * Shared state surfaces.                                              *
+     * Shared state surfaces (§7.10).                                      *
      * ------------------------------------------------------------------ */
 
-    function StatePanel(props) {
-      return h(
-        'div',
-        { className: 'ss-state', role: props.role === undefined ? 'status' : props.role },
-        h('p', { className: 'ss-state-title' }, props.title),
-        props.message === undefined || props.message === null ? null : h('p', { className: 'ss-state-message' }, props.message),
-        props.onAction === undefined
-          ? null
-          : h(
-              'button',
-              {
-                type: 'button',
-                className: 'ss-state-action',
-                onClick: props.onAction,
-                'aria-label': props.actionLabel,
-              },
-              props.actionLabel,
-            ),
-      )
-    }
-
     function SkeletonGrid() {
+      // Mirror the tallest summary card (label / value / hint / progress / hint)
+      // with the same text tiers, so the first-load height follows the host font
+      // size and the swap to real cards does not jump.
       return h(
         'div',
         { className: 'ss-skeleton-grid', 'aria-hidden': 'true' },
-        [0, 1, 2, 3].map((index) => h('div', { key: index, className: 'ss-skeleton' })),
+        [0, 1, 2, 3].map((index) => h(
+          'div',
+          { key: index, className: 'ss-card ss-skeleton' },
+          h('span', { className: 'ss-skeleton-row ss-skeleton-label' }),
+          h('span', { className: 'ss-skeleton-row ss-skeleton-value' }),
+          h('span', { className: 'ss-skeleton-row ss-skeleton-hint' }),
+          h('span', { className: 'ss-skeleton-row ss-skeleton-bar' }),
+          h('span', { className: 'ss-skeleton-row ss-skeleton-hint' }),
+        )),
       )
+    }
+
+    /** First load: a skeleton, but only after 300ms so a fast warm paint never flickers. */
+    function LoadingState() {
+      const [visible, setVisible] = useState(false)
+      useEffect(() => {
+        const timer = setTimeout(() => setVisible(true), 300)
+        return () => clearTimeout(timer)
+      }, [])
+      return h('div', { className: 'ss-state-wrap' }, visible ? h(SkeletonGrid, null) : null)
+    }
+
+    function SectionSkeleton() {
+      return h('div', { className: 'ss-skeleton ss-skeleton-line', 'aria-hidden': 'true' })
     }
 
     function SummaryCard(props) {
@@ -846,8 +1317,8 @@ window.__ModuleLoader__.load({
       // The two headline cards carry a small daily sparkline, so a trend is visible
       // without scrolling to the main chart.
       const dailyBuckets = toArray(toObject(overview.timeline).buckets).map(trendBucketOf)
-      const tokenSpark = miniTrend(dailyBuckets.map((bucket) => bucket.total), seriesColor(0), t('summary.tokensSpark'))
-      const costSpark = miniTrend(dailyBuckets.map((bucket) => bucket.cost), seriesColor(2), t('summary.costSpark'))
+      const tokenSpark = miniTrend(dailyBuckets.map((bucket) => bucket.total), 1, t('summary.tokensSpark'))
+      const costSpark = miniTrend(dailyBuckets.map((bucket) => bucket.cost), 3, t('summary.costSpark'))
 
       const tokensCard = h(
         SummaryCard,
@@ -935,12 +1406,12 @@ window.__ModuleLoader__.load({
      * of the payload.                                                      *
      * ------------------------------------------------------------------ */
 
-    /** Chart series colors, defined as --ss-series-N on .ss-page. */
+    /** Chart series slots map to --ss-series-N on .ss-page via data-series (§2.10). */
     const SERIES_SLOTS = 6
-    const SERIES_OTHER = 'var(--ss-series-8)'
+    const SERIES_OTHER_SLOT = 8
 
-    function seriesColor(index) {
-      return 'var(--ss-series-' + String(index + 1) + ')'
+    function seriesSlot(index) {
+      return index + 1
     }
 
     function modelLabelOf(provider, model) {
@@ -1064,10 +1535,11 @@ window.__ModuleLoader__.load({
     }
 
     /** A one-series sparkline (area + line) for a summary card. */
-    function miniTrend(values, color, label) {
+    function miniTrend(values, slot, label) {
       if (values.length < 2) return null
       const width = values.length - 1
       const line = polylinePath(values, 28)
+      const series = String(slot)
       return h(
         'svg',
         {
@@ -1078,8 +1550,8 @@ window.__ModuleLoader__.load({
           'aria-label': label,
           focusable: 'false',
         },
-        h('path', { className: 'ss-mini-area', d: line + ' L ' + String(width) + ' 28 L 0 28 Z', style: { fill: color } }),
-        h('path', { className: 'ss-mini-line', d: line, style: { stroke: color }, vectorEffect: 'non-scaling-stroke' }),
+        h('path', { className: 'ss-mini-area', d: line + ' L ' + String(width) + ' 28 L 0 28 Z', 'data-series': series }),
+        h('path', { className: 'ss-mini-line', d: line, 'data-series': series, vectorEffect: 'non-scaling-stroke' }),
       )
     }
 
@@ -1139,7 +1611,7 @@ window.__ModuleLoader__.load({
       const rows = top.map((row, index) => ({
         id: row.id,
         label: row.label,
-        color: seriesColor(index),
+        slot: seriesSlot(index),
         tokens: row.tokens,
         cost: row.cost,
         requests: row.requests,
@@ -1153,7 +1625,7 @@ window.__ModuleLoader__.load({
         rows.push({
           id: 'other',
           label: t('chart.other'),
-          color: SERIES_OTHER,
+          slot: SERIES_OTHER_SLOT,
           tokens: Math.max(0, windowTokens - topTokens),
           cost: Math.max(0, windowCost - topCost),
           requests: Math.max(0, windowRequests - topRequests),
@@ -1163,7 +1635,7 @@ window.__ModuleLoader__.load({
       }
       return {
         rows: rows,
-        series: rows.map((row) => ({ id: row.id, label: row.label, color: row.color, values: row.dailyTokens })),
+        series: rows.map((row) => ({ id: row.id, label: row.label, slot: row.slot, values: row.dailyTokens })),
         dayCount: dayCount,
         totalTokens: windowTokens,
         totalCost: windowCost,
@@ -1175,9 +1647,9 @@ window.__ModuleLoader__.load({
     function buildTypeSeries(buckets, t) {
       const values = (key) => buckets.map((bucket) => bucket[key])
       return [
-        { id: 'type:input', label: t('chart.input'), color: seriesColor(0), values: values('input') },
-        { id: 'type:output', label: t('chart.output'), color: seriesColor(1), values: values('output') },
-        { id: 'type:cache', label: t('chart.cacheRead'), color: seriesColor(2), values: values('cacheRead') },
+        { id: 'type:input', label: t('chart.input'), slot: seriesSlot(0), values: values('input') },
+        { id: 'type:output', label: t('chart.output'), slot: seriesSlot(1), values: values('output') },
+        { id: 'type:cache', label: t('chart.cacheRead'), slot: seriesSlot(2), values: values('cacheRead') },
       ]
     }
 
@@ -1188,18 +1660,24 @@ window.__ModuleLoader__.load({
         { className: 'ss-legend ss-trend-legend', role: 'group', 'aria-label': t('chart.legend') },
         props.series.map((entry) => {
           const hidden = props.hidden.indexOf(entry.id) !== -1
+          // The visible label is the accessible name; a native title would only
+          // duplicate it and is not the §7.7 tooltip.
           return h(
-            'button',
+            SsButton,
             {
               key: entry.id,
-              type: 'button',
-              className: 'ss-legend-item ss-legend-button' + (hidden ? ' ss-legend-off' : ''),
-              'aria-pressed': !hidden,
-              title: entry.label,
+              name: 'legend-button',
+              size: 'sm',
+              variant: 'ghost',
+              pressed: !hidden,
               onClick: () => props.onToggle(entry.id),
             },
-            h('span', { className: 'ss-legend-dot', style: { background: entry.color }, 'aria-hidden': 'true' }),
-            h('span', { className: 'ss-legend-text' }, entry.label),
+            h(
+              'span',
+              { className: 'ss-legend-inner' + (hidden ? ' ss-legend-off' : '') },
+              h('span', { className: 'ss-legend-dot', 'data-series': String(entry.slot), 'aria-hidden': 'true' }),
+              h('span', { className: 'ss-legend-text' }, entry.label),
+            ),
           )
         }),
       )
@@ -1242,7 +1720,7 @@ window.__ModuleLoader__.load({
           key: entry.id,
           className: 'ss-series-line',
           d: smoothPath(entry.values.map((value, index) => ({ x: count > 1 ? index : 0, y: yPercent(value) })), plotTop, plotBottom),
-          style: { stroke: entry.color },
+          'data-series': String(entry.slot),
           vectorEffect: 'non-scaling-stroke',
         },
         h('title', null, entry.label),
@@ -1267,14 +1745,15 @@ window.__ModuleLoader__.load({
         const dots = drawOrder.map((entry) => h('span', {
           key: 'dot:' + entry.id,
           className: 'ss-dot',
+          'data-series': String(entry.slot),
           'aria-hidden': 'true',
-          style: { left: offset + '%', top: yPercent(entry.values[index]) + '%', background: entry.color },
+          style: { left: offset + '%', top: yPercent(entry.values[index]) + '%' },
         }))
         const positive = series.filter((entry) => entry.values[index] > 0)
         const tipRows = positive.map((entry) => h(
           'li',
           { key: 'tip:' + entry.id },
-          h('span', { className: 'ss-tip-dot', style: { background: entry.color }, 'aria-hidden': 'true' }),
+          h('span', { className: 'ss-tip-dot', 'data-series': String(entry.slot), 'aria-hidden': 'true' }),
           h('span', { className: 'ss-tip-name' }, entry.label),
           h('strong', { className: 'ss-tip-value' }, fmt.compact(entry.values[index])),
         ))
@@ -1284,13 +1763,14 @@ window.__ModuleLoader__.load({
             ? ''
             : ' · ' + positive.map((entry) => entry.label + ' ' + fmt.compact(entry.values[index])).join(' · '))
         return h(
-          'button',
+          SsButton,
           {
             key: 'hit:' + (bucket.key === '' ? String(index) : bucket.key),
-            type: 'button',
-            className: 'ss-hit',
+            name: 'hit',
+            size: 'sm',
+            variant: 'ghost',
             tabIndex: bucket.total > 0 ? 0 : -1,
-            'aria-label': hitLabel,
+            label: hitLabel,
             style: { left: left + '%', width: hitWidth + '%' },
           },
           h('span', { className: 'ss-guide', style: { left: offset + '%' }, 'aria-hidden': 'true' }),
@@ -1301,8 +1781,8 @@ window.__ModuleLoader__.load({
               className: 'ss-tip' + (tipOnRight ? ' ss-tip-right' : ''),
               'aria-hidden': 'true',
               style: tipOnRight
-                ? { right: (100 - offset) + '%', marginRight: '12px' }
-                : { left: offset + '%', marginLeft: '12px' },
+                ? { right: (100 - offset) + '%' }
+                : { left: offset + '%' },
             },
             h('p', { className: 'ss-tip-date' }, bucketLabel(bucket, fmt)),
             h(
@@ -1386,35 +1866,19 @@ window.__ModuleLoader__.load({
           h('h2', { className: 'ss-card-title' }, t('chart.title')),
           h('p', { className: 'ss-card-sub' }, t('chart.window', { days: days })),
         ),
-        h(
-          'div',
-          { className: 'ss-segmented', role: 'group', 'aria-label': t('chart.title') },
-          h(
-            'button',
-            {
-              type: 'button',
-              className: 'ss-segment' + (mode === 'model' ? ' ss-segment-active' : ''),
-              'aria-pressed': mode === 'model',
-              onClick: () => setMode('model'),
-            },
-            t('chart.modeModel'),
-          ),
-          h(
-            'button',
-            {
-              type: 'button',
-              className: 'ss-segment' + (mode === 'type' ? ' ss-segment-active' : ''),
-              'aria-pressed': mode === 'type',
-              onClick: () => setMode('type'),
-            },
-            t('chart.modeType'),
-          ),
-        ),
+        h(SsSegmented, {
+          level: 'secondary',
+          label: t('chart.title'),
+          items: [
+            { id: 'model', label: t('chart.modeModel'), active: mode === 'model', onClick: () => setMode('model') },
+            { id: 'type', label: t('chart.modeType'), active: mode === 'type', onClick: () => setMode('type') },
+          ],
+        }),
       )
 
       let body
-      if (!hasData) body = h('p', { className: 'ss-empty' }, t('chart.empty'))
-      else if (visible.length === 0) body = h('p', { className: 'ss-empty' }, t('chart.allHidden'))
+      if (!hasData) body = h(SsEmptyState, { message: t('chart.empty') })
+      else if (visible.length === 0) body = h(SsEmptyState, { message: t('chart.allHidden') })
       else body = h(TrendPlot, { t: t, fmt: fmt, buckets: buckets, series: visible, yMax: yMax, mode: mode, days: days })
 
       return h(
@@ -1481,31 +1945,26 @@ window.__ModuleLoader__.load({
         ['tokens', 'table.sortTokens'],
         ['size', 'table.sortSize'],
       ]
-      const controls = h(
-        'div',
-        { className: 'ss-segmented', role: 'group', 'aria-label': t('sessions.title') },
-        sortOptions.map((option) => {
+      const controls = h(SsSegmented, {
+        level: 'secondary',
+        label: t('sessions.title'),
+        items: sortOptions.map((option) => {
           const active = sortKey === option[0]
-          return h(
-            'button',
-            {
-              key: option[0],
-              type: 'button',
-              className: 'ss-segment' + (active ? ' ss-segment-active' : ''),
-              'aria-pressed': active,
-              onClick: () => {
-                if (active) setDescending((value) => !value)
-                else {
-                  setSortKey(option[0])
-                  setDescending(true)
-                }
-              },
+          return {
+            id: option[0],
+            label: t(option[1]),
+            active: active,
+            suffix: active ? (descending ? '\u2193' : '\u2191') : undefined,
+            onClick: () => {
+              if (active) setDescending((value) => !value)
+              else {
+                setSortKey(option[0])
+                setDescending(true)
+              }
             },
-            t(option[1]),
-            active ? h('span', { className: 'ss-sort-arrow', 'aria-hidden': 'true' }, descending ? '\u2193' : '\u2191') : null,
-          )
+          }
         }),
-      )
+      })
 
       const head = h(
         'div',
@@ -1515,7 +1974,7 @@ window.__ModuleLoader__.load({
       )
 
       if (sessions.length === 0) {
-        return h('section', { className: 'ss-card', 'aria-label': t('sessions.title') }, head, h('p', { className: 'ss-empty' }, t('sessions.empty')))
+        return h('section', { className: 'ss-card', 'aria-label': t('sessions.title') }, head, h(SsEmptyState, { message: t('sessions.empty') }))
       }
 
       const maxSessionTokens = sessions.reduce((largest, session) => Math.max(largest, session.total), 0)
@@ -1530,7 +1989,7 @@ window.__ModuleLoader__.load({
               'span',
               { className: 'ss-session-head' },
               h('span', { className: 'ss-session-title' }, session.title === '' ? t('table.untitled') : session.title),
-              session.archived ? h('span', { className: 'ss-archived-badge' }, t('sessions.archived')) : null,
+              session.archived ? h(SsBadge, { name: 'archived-badge', tone: 'warn' }, t('sessions.archived')) : null,
             ),
             h('span', { className: 'ss-session-id' }, shortSessionId(session.id)),
           ),
@@ -1597,11 +2056,12 @@ window.__ModuleLoader__.load({
           h('p', { className: 'ss-table-note' }, t('sessions.showing', { shown: fmt.integer(shown.length), total: fmt.integer(sessions.length) })),
           canExpand
             ? h(
-              'button',
+              SsButton,
               {
-                type: 'button',
-                className: 'ss-more',
-                'aria-expanded': false,
+                name: 'more',
+                size: 'sm',
+                variant: 'secondary',
+                expanded: false,
                 onClick: () => setExpanded(true),
               },
               h('span', null, t('sessions.more')),
@@ -1632,7 +2092,7 @@ window.__ModuleLoader__.load({
         h('path', {
           className: 'ss-model-spark-line',
           d: polylinePath(values, 28),
-          style: { stroke: row.color },
+          'data-series': String(row.slot),
           vectorEffect: 'non-scaling-stroke',
         }),
       )
@@ -1655,7 +2115,7 @@ window.__ModuleLoader__.load({
       )
 
       if (!view.hasData || view.rows.length === 0) {
-        return h('section', { className: 'ss-card', 'aria-label': t('models.title') }, head, h('p', { className: 'ss-empty' }, t('models.empty')))
+        return h('section', { className: 'ss-card', 'aria-label': t('models.title') }, head, h(SsEmptyState, { message: t('models.empty') }))
       }
 
       const rows = view.rows.map((row) => {
@@ -1664,7 +2124,7 @@ window.__ModuleLoader__.load({
         return h(
           'li',
           { className: 'ss-model', key: row.id },
-          h('span', { className: 'ss-model-mark', style: { background: row.color }, 'aria-hidden': 'true' }),
+          h('span', { className: 'ss-model-mark', 'data-series': String(row.slot), 'aria-hidden': 'true' }),
           h(
             'div',
             { className: 'ss-model-main' },
@@ -1691,7 +2151,7 @@ window.__ModuleLoader__.load({
                 'aria-valuemin': 0,
                 'aria-valuemax': 100,
               },
-              h('div', { className: 'ss-share-fill', style: { width: percent + '%', background: row.color } }),
+              h('div', { className: 'ss-share-fill', 'data-series': String(row.slot), style: { width: percent + '%' } }),
             ),
           ),
           modelSparkline(row, t),
@@ -1734,14 +2194,26 @@ window.__ModuleLoader__.load({
       const state = toObject(props.systemState)
       const data = state.data !== null && typeof state.data === 'object' ? state.data : null
       const cpu = data === null ? null : toObject(data.cpu)
+      // A failed poll keeps the last payload (§7.10): show it with an inline
+      // error bar instead of silently presenting stale numbers as current.
+      const staleError = data !== null && state.error !== null && state.error !== undefined
+      const errorBar = staleError
+        ? h(SsErrorBar, { message: t('state.error'), actionLabel: t('state.retry'), onRetry: props.onRetry })
+        : null
 
       const head = h('div', { className: 'ss-card-head' }, h('h2', { className: 'ss-card-title' }, t('runtime.title')))
 
       if (state.status === 'loading' || (data === null && state.status === 'ready')) {
-        return h('section', { className: 'ss-card', 'aria-label': t('runtime.title') }, head, h('p', { className: 'ss-empty' }, t('state.loading')))
+        return h('section', { className: 'ss-card', 'aria-label': t('runtime.title') }, head, h(SectionSkeleton, null))
       }
       if (cpu === null || data === null) {
-        return h('section', { className: 'ss-card', 'aria-label': t('runtime.title') }, head, h('p', { className: 'ss-empty' }, t('runtime.unavailable')))
+        return h(
+          'section',
+          { className: 'ss-card', 'aria-label': t('runtime.title') },
+          head,
+          errorBar,
+          h(SsEmptyState, { message: t('runtime.unavailable') }),
+        )
       }
 
       const processInfo = toObject(cpu.process)
@@ -1829,12 +2301,13 @@ window.__ModuleLoader__.load({
                 h('span', { className: 'ss-spark-peak' }, t('runtime.peak', { value: fmt.percent(peak) })),
               ),
             )
-          : h('p', { className: 'ss-empty' }, t('state.loading'))
+          : h(SsEmptyState, { message: t('runtime.noHistory') })
 
       return h(
         'section',
         { className: 'ss-card', 'aria-label': t('runtime.title') },
         head,
+        errorBar,
         stats,
         h('h3', { className: 'ss-subhead' }, t('runtime.sparkline')),
         sparkline,
@@ -1866,7 +2339,7 @@ window.__ModuleLoader__.load({
           : h(
               'div',
               { className: 'ss-log-bar', role: 'presentation' },
-              h('span', { className: 'ss-log-bar-fill', style: { width: fraction * 100 + '%', background: props.color } }),
+              h('span', { className: 'ss-log-bar-fill', 'data-series': String(props.slot), style: { width: fraction * 100 + '%' } }),
             ),
       )
     }
@@ -1878,19 +2351,30 @@ window.__ModuleLoader__.load({
       const data = state.data !== null && typeof state.data === 'object' ? state.data : null
       const logs = data === null ? null : toObject(data.logs)
       const available = logs !== null && logs.available !== false
+      // Keep the last payload visible when a poll fails, with an inline error bar (§7.10).
+      const staleError = data !== null && state.error !== null && state.error !== undefined
+      const errorBar = staleError
+        ? h(SsErrorBar, { message: t('state.error'), actionLabel: t('state.retry'), onRetry: props.onRetry })
+        : null
 
       const head = h(
         'div',
         { className: 'ss-card-head' },
         h('h2', { className: 'ss-card-title' }, t('logs.title')),
-        available ? h('span', { className: 'ss-chip' }, t('logs.available')) : null,
+        available ? h(SsBadge, { name: 'chip', tone: 'success' }, t('logs.available')) : null,
       )
 
       if (state.status === 'loading' || (data === null && state.status === 'ready')) {
-        return h('section', { className: 'ss-card', 'aria-label': t('logs.title') }, head, h('p', { className: 'ss-empty' }, t('state.loading')))
+        return h('section', { className: 'ss-card', 'aria-label': t('logs.title') }, head, h(SectionSkeleton, null))
       }
       if (logs === null || !available) {
-        return h('section', { className: 'ss-card', 'aria-label': t('logs.title') }, head, h('p', { className: 'ss-empty' }, t('logs.unavailable')))
+        return h(
+          'section',
+          { className: 'ss-card', 'aria-label': t('logs.title') },
+          head,
+          errorBar,
+          h(SsEmptyState, { message: t('logs.unavailable') }),
+        )
       }
 
       const sessionLog = toObject(logs.sessionLog)
@@ -1923,7 +2407,7 @@ window.__ModuleLoader__.load({
           value: fmt.bytes(sessionLog.bytes),
           meta: t('logs.sessions') + ' ' + fmt.integer(sessionLog.count),
           fraction: fractionOf(sessionLog.bytes),
-          color: seriesColor(0),
+          slot: 1,
         }),
       )
       children.push(
@@ -1932,7 +2416,7 @@ window.__ModuleLoader__.load({
           label: t('logs.storage'),
           value: fmt.bytes(storage.bytes),
           fraction: fractionOf(storage.bytes),
-          color: seriesColor(2),
+          slot: 3,
         }),
       )
       if (storageEntries.length > 0) {
@@ -1957,7 +2441,7 @@ window.__ModuleLoader__.load({
           label: t('logs.attachments'),
           value: fmt.bytes(attachments.bytes),
           fraction: fractionOf(attachments.bytes),
-          color: seriesColor(3),
+          slot: 4,
         }),
       )
       children.push(
@@ -1966,7 +2450,7 @@ window.__ModuleLoader__.load({
           label: t('logs.spill'),
           value: fmt.bytes(spill.bytes),
           fraction: fractionOf(spill.bytes),
-          color: seriesColor(4),
+          slot: 5,
         }),
       )
       if (largest.length > 0) {
@@ -1991,7 +2475,13 @@ window.__ModuleLoader__.load({
         )
       }
 
-      return h('section', { className: 'ss-card', 'aria-label': t('logs.title') }, head, h('div', { className: 'ss-logs' }, children))
+      return h(
+        'section',
+        { className: 'ss-card', 'aria-label': t('logs.title') },
+        head,
+        errorBar,
+        h('div', { className: 'ss-logs' }, children),
+      )
     }
 
     /* ------------------------------------------------------------------ *
@@ -2015,9 +2505,24 @@ window.__ModuleLoader__.load({
         [overview, t],
       )
       const days = overview === null ? DAYS : (toNumber(overview.days) > 0 ? toNumber(overview.days) : DAYS)
+      const refreshing = overviewState.refreshing === true
       const refresh = useCallback(() => {
         setRefreshToken((value) => value + 1)
       }, [])
+      const sessionCount = overview === null ? 0 : toNumber(toObject(overview.totals).sessions)
+      // The live region mirrors state changes only (§7.10); the timestamp would
+      // re-announce the status region on every 10s poll.
+      const liveText = overviewState.status === 'loading'
+        ? t('state.loading')
+        : overviewState.status === 'unauthorized'
+          ? t('state.unauthorized')
+          : overviewState.status === 'error'
+            ? t('state.error')
+            : overviewState.error !== null
+              ? t('state.error')
+              : sessionCount === 0
+                ? t('state.empty')
+                : ''
 
       const heading = h(
         'header',
@@ -2033,11 +2538,17 @@ window.__ModuleLoader__.load({
           overviewState.updatedAt > 0
             ? h('span', { className: 'ss-updated' }, t('updated.at', { time: fmt.time(overviewState.updatedAt) }))
             : null,
-          overviewState.error !== null ? h('span', { className: 'ss-stale' }, t('state.error')) : null,
           h(
-            'button',
-            { type: 'button', className: 'ss-refresh', onClick: refresh, 'aria-label': t('action.refresh') },
-            h(RefreshGlyph, null),
+            SsButton,
+            {
+              name: 'refresh',
+              size: 'md',
+              variant: 'secondary',
+              label: t('action.refresh'),
+              busy: refreshing,
+              onClick: refresh,
+            },
+            h(RefreshGlyph, { spinning: refreshing }),
             h('span', null, t('action.refresh')),
           ),
         ),
@@ -2045,30 +2556,49 @@ window.__ModuleLoader__.load({
 
       let body
       if (overviewState.status === 'loading') {
-        body = h('div', { className: 'ss-state-wrap' }, h(StatePanel, { title: t('state.loading') }), h(SkeletonGrid, null))
+        body = h(LoadingState, null)
       } else if (overviewState.status === 'unauthorized') {
-        body = h(StatePanel, { title: t('state.unauthorized'), role: 'alert', actionLabel: t('state.retry'), onAction: refresh })
+        body = h(SsEmptyState, {
+          tone: 'error',
+          icon: AlertGlyph,
+          roomy: true,
+          role: 'alert',
+          message: t('state.unauthorized'),
+          actionLabel: t('state.retry'),
+          onAction: refresh,
+        })
       } else if (overviewState.status === 'error' || overview === null) {
-        body = h(StatePanel, { title: t('state.error'), role: 'alert', actionLabel: t('state.retry'), onAction: refresh })
+        body = h(SsEmptyState, {
+          tone: 'error',
+          icon: AlertGlyph,
+          roomy: true,
+          role: 'alert',
+          message: t('state.error'),
+          actionLabel: t('state.retry'),
+          onAction: refresh,
+        })
       } else {
-        const totals = toObject(overview.totals)
-        const hasSessions = toNumber(totals.sessions) > 0
+        const hasSessions = sessionCount > 0
         body = h(
           'div',
           { className: 'ss-sections' },
-          hasSessions ? null : h('p', { className: 'ss-notice' }, t('state.empty')),
+          overviewState.error === null
+            ? null
+            : h(SsErrorBar, { message: t('state.error'), actionLabel: t('state.retry'), onRetry: refresh }),
+          hasSessions ? null : h(SsEmptyState, { message: t('state.empty') }),
           h(SummarySection, { overview: overview, fmt: fmt, t: t }),
           h(TrendSection, { overview: overview, fmt: fmt, t: t, modelView: modelView }),
           h(ModelsSection, { modelView: modelView, fmt: fmt, t: t, days: days }),
           h(SessionsSection, { overview: overview, fmt: fmt, t: t }),
-          h(RuntimeSection, { systemState: systemState, fmt: fmt, t: t }),
-          h(LogsSection, { systemState: systemState, fmt: fmt, t: t }),
+          h(RuntimeSection, { systemState: systemState, fmt: fmt, t: t, onRetry: refresh }),
+          h(LogsSection, { systemState: systemState, fmt: fmt, t: t, onRetry: refresh }),
         )
       }
 
       return h(
         'section',
         { className: 'ss-page', 'aria-label': t('panel.title') },
+        h('p', { className: 'ss-live', role: 'status', 'aria-live': 'polite' }, liveText),
         h('div', { className: 'ss-scroll' }, h('div', { className: 'ss-content' }, heading, body)),
       )
     }

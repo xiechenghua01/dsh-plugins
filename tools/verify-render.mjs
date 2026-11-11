@@ -318,7 +318,7 @@ async function main() {
     const typeTree = renderState(definition, typePreset)
     const found = collect(typeTree)
     check('type mode renders three series', (found.classCounts.get('ss-series-line') || 0) === 3, `${found.classCounts.get('ss-series-line') || 0} lines`)
-    const typeLegend = elementsByClass(typeTree, 'ss-legend-button').map((node) => String(node.props.title))
+    const typeLegend = elementsByClass(typeTree, 'ss-legend-button').map((node) => textOf(node).trim())
     check('type mode legend lists input/output/cache', typeLegend.join('|') === '输入|输出|缓存读取', typeLegend.join('|'))
     const typeTooltipText = elementsByClass(typeTree, 'ss-tip').map(textOf).join(' ')
     check('type mode tooltip shows the day cost', typeTooltipText.includes('成本'))

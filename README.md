@@ -18,7 +18,7 @@ A monorepo of DeepSeek Harness plugins **and** a plugin market index source that
 
 | 插件 / Plugin | 版本 | 说明 / Description |
 | --- | --- | --- |
-| [`@chengze/dsh-session-stats`](plugins/session-stats) | 1.2.0 | 会话统计面板：token 消耗、会话数、成本与预算、按模型的每日 Token 趋势（可悬停/切换视角）、各会话用量、CPU/内存、日志占用。 Session stats panel: tokens, sessions, cost & budget, per-model daily token trend with hover and view toggle, per-session usage, CPU/memory, log footprint. |
+| [`@chengze/dsh-session-stats`](plugins/session-stats) | 1.3.0 | 会话统计面板：token 消耗、会话数、成本与预算、按模型的每日 Token 趋势（可悬停/切换视角）、各会话用量、CPU/内存、日志占用。 Session stats panel: tokens, sessions, cost & budget, per-model daily token trend with hover and view toggle, per-session usage, CPU/memory, log footprint. |
 
 ## 使用 / Usage
 
@@ -37,13 +37,13 @@ A monorepo of DeepSeek Harness plugins **and** a plugin market index source that
    一个普通的包安装目标，再交给 `plugin_manager`：
 
    ```text
-   @chengze/dsh-session-stats@1.2.0
+   @chengze/dsh-session-stats@1.3.0
    ```
 
 ### 2. 直接把安装目标交给 `plugin_manager`
 
 ```text
-plugin_manager action=install_bundle target=@chengze/dsh-session-stats@1.2.0
+plugin_manager action=install_bundle target=@chengze/dsh-session-stats@1.3.0
 ```
 
 当前版本对应的完整 target 见索引 JSON 的 `versions[].source`，或运行 `pnpm run validate` 打印。
