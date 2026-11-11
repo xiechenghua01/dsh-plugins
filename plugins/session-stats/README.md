@@ -49,7 +49,7 @@ usage, CPU/memory runtime, and log footprint.
 插件已发布到 npm，可把下面的 target 交给 `plugin_manager`：
 
 ```text
-plugin_manager action=install_bundle target=@chengze/dsh-session-stats@1.1.12
+plugin_manager action=install_bundle target=@chengze/dsh-session-stats@1.2.0
 ```
 
 `pnpm run release` 会打印当前版本对应的完整 target。
