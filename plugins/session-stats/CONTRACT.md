@@ -46,6 +46,33 @@ Host pages also use these non-alias tokens freely (they are theme-defined):
 `--dsw-alias-state-business-primary`, `--dsw-focus-ring-color`, `--dsw-radius-sm`,
 `--dsw-font-family`, `--dsh-frame-top-clearance`. Prefer the `--dsw-alias-*` ones.
 
+### 2.1 字号接入（font-size integration）
+
+- **唯一字号源**：字号只来自 `--ds-fs`，定义固定为
+  `--ds-fs: var(--dsh-content-font-size, 14px)`。页面根节点 `.ss-page` 与侧栏入口根节点
+  `.ss-footer-entry` 各自定义同名变量，均指向同一宿主变量；所有字号由 `--ds-fs` 派生
+  （design.md §3.3），组件规则中不得出现固定 px 字号。
+- **宿主契约**：宿主主题运行时把 `ctx.theme.getTheme().fontSizes.text`（10–22，默认 14）
+  写入 `document.body.style['--dsh-content-font-size']`，并在 `theme/change` 时更新。
+  插件不通过 Host 路由读取字号，也不轮询 profile，只消费该继承变量；宿主改字号后已挂载的
+  页面与浮层直接跟随，无需重开面板。
+- **七档阶梯**（`fs` = `--ds-fs`）：
+
+  | 档位 | 用途 |
+  | --- | --- |
+  | `fs + 6px` | 页面主标题 |
+  | `fs + 2px` | 区块标题 |
+  | `fs + 1px` | 弹窗 / 抽屉标题 |
+  | `fs` | 正文、大号按钮、Tab、表单 Label |
+  | `fs - 1px` | 次要：列表副标题、输入框、菜单项 |
+  | `fs - 2px` | 辅助：徽章、时间、摘要、Tooltip |
+  | `fs - 3px` | 弱化：图表轴标签、极弱提示 |
+
+- **浮层**：Tooltip 等挂到 `<body>` 的浮层在显示前从所属根节点读取当前 `--ds-fs`，
+  不得使用创建时的快照；显示期间持续跟随宿主字号（design.md §3.7）。
+- **侧栏入口**：`sidebar.footer.action` 的 owner 只传 `wide`，不传 `size`；入口图标固定
+  16×16，仅 `wide` 为真时渲染标题文字。
+
 ## 3. Host half (`index.js`) — required shape
 
 ```js
@@ -370,20 +397,22 @@ refreshes right away. Keep the warm fetch inside a try/catch: the headless rende
 ### 7.1 Page layout (copy the host page shell)
 
 ```
-section.ss-page  (width:100%; min-width:0; height:100%; min-height:0; display:flex;
+section.ss-page  (--ds-fs:var(--dsh-content-font-size,14px);
+                  width:100%; min-width:0; height:100%; min-height:0; display:flex;
                   overflow:hidden; background:var(--dsw-alias-bg-base);
-                  color:var(--dsw-alias-label-primary); font-size:14px; line-height:1.6)
-  div.ss-scroll (flex:1; min-height:0; overflow:auto; scrollbar-gutter:stable)
-    div.ss-content (max-width:1040px; margin:0 auto; padding:0 clamp(24px,4vw,48px) 48px)
+                  color:var(--dsw-alias-label-primary); font-size:var(--ds-fs); line-height:1.5)
+  div.ss-scroll (flex:1; min-height:0; overflow:auto; scrollbar-gutter:stable;
+                 scrollbar-width:thin; scrollbar-color:var(--dsw-alias-scrollbar-bg-l1) transparent)
+    div.ss-content (max-width:960px; margin:0 auto; padding:0 clamp(20px,4vw,48px) 48px)
       header.ss-heading (display:flex; justify-content:space-between; align-items:center;
-                         gap:16px; flex-wrap:wrap; padding-top:28px; margin-bottom:24px)
-        h1 (font-size:20px; font-weight:500; line-height:28px; margin:0)
+                         gap:16px; padding-top:calc(28px + var(--dsh-frame-top-clearance, 0px));
+                         margin-bottom:24px)
+        h1 (font-size:calc(var(--ds-fs) + 6px); font-weight:500; line-height:1.35; margin:0)
         right side: last-updated text + Refresh button
       ...sections...
 ```
-Add `[data-platform=darwin]` top clearance exactly like the host page:
-`@media` is not needed — a plain rule
-`[data-platform='darwin'] .ss-heading { padding-top: calc(28px + var(--dsh-frame-top-clearance, 0px)) }`.
+The top inset is unconditional: `--dsh-frame-top-clearance` is 0 outside the desktop frame,
+so do not gate it behind `[data-platform='darwin']`.
 
 Sections required (each a `section.ss-card` or heading + grid):
 1. **Summary cards** (responsive grid, 4 cards): 总 token / 会话数 / 估算成本 / 预算.
@@ -430,13 +459,13 @@ The `locale/*.json` files feed the plugin manager's metadata only; the client re
 dictionaries in `client.js`. Both halves must use the same key set. Use these keys:
 
 ```
-panel.title  panel.description  action.refresh  state.loading  state.error
+panel.title  action.refresh  state.loading  state.error
 state.retry  state.unauthorized  state.empty  updated.at  summary.tokens
 summary.tokensHint  summary.tokensSpark  summary.costSpark  summary.sessions
 summary.sessionsHint  summary.cost  summary.costHint  summary.budget
 summary.budgetHint  summary.budgetUsedRemaining  summary.budgetDynamic  summary.noBudget
 chart.title  chart.window
-chart.modeModel  chart.modeType  chart.total  chart.other  chart.legend  chart.hint
+chart.modeModel  chart.modeType  chart.total  chart.other  chart.legend
 chart.empty  chart.allHidden  chart.input  chart.output  chart.cacheRead
 sessions.title  sessions.empty  sessions.showing  sessions.more  sessions.archived
 table.session  table.created
