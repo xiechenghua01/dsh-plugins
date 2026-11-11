@@ -11,7 +11,8 @@ usage, CPU/memory runtime, and log footprint.
 - 面板入口：侧边栏底部、账号菜单上方「会话统计」按钮（`sidebar.footer.action`，order 10）→ 主面板 `main` / key `session-stats`
 - 数据来源：`ctx.sessionQuery` 读取的会话日志 + `ctx.sessionPersistence` 的日志体积 + `process`/`os` 采样
 - 两个受连接鉴权保护的路由：`GET /session-stats/overview`、`GET /session-stats/system`
-- 零 npm 依赖、无构建步骤；Host 半边只 import `node:` 内置模块
+- 零 npm 依赖；浏览器半边由 `src/client/*.js` 分片经 `scripts/build-client.mjs` 拼接为单文件
+  `client.js`，`pnpm test` 会校验产物与来源一致；Host 半边只 import `node:` 内置模块
 - `engines.dsh`：`>=0.2.1-rc.5 <0.3.0`
 
 ## 界面与交互
@@ -56,7 +57,7 @@ usage, CPU/memory runtime, and log footprint.
 插件已发布到 npm，可把下面的 target 交给 `plugin_manager`：
 
 ```text
-plugin_manager action=install_bundle target=@chengze/dsh-session-stats@1.3.0
+plugin_manager action=install_bundle target=@chengze/dsh-session-stats@1.4.0
 ```
 
 `pnpm run release` 会打印当前版本对应的完整 target。
@@ -112,6 +113,17 @@ plugin_manager action=install_bundle target=/absolute/path/to/dsh-plugins/plugin
   20k 条目 / 2 秒上限，超出部分不计入。
 - 归档标记读取 `~/.dsh/storages/workspace.json` 的 `global.archivedSessionIds`；
   文件缺失或格式不符时按「无归档会话」处理，不影响面板其余数据。
+
+## 开发与构建
+
+浏览器半边按职责拆在 `src/client/*.js`，由构建脚本按文件名顺序拼接为 `client.js`；
+`client.js` 是生成产物，不要手改。
+
+```bash
+node scripts/build-client.mjs          # 生成 client.js
+node scripts/build-client.mjs --check  # 校验产物与来源一致
+node tools/verify-render.mjs           # 本地真实会话渲染验证
+```
 
 ## 验证
 

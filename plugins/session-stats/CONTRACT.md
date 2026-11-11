@@ -334,7 +334,13 @@ Deep-merge `config` over `DEFAULTS` (shallow per sub-object is fine). Accept
 `budget.amount` is only the initial reference for the dynamic estimate (see §4); the reported
 `budget.amount` is recalculated from the period's usage every build.
 
-## 7. Client half (`client.js`) — required shape
+## 7. 源码组织与构建（source layout and build）
+
+- 浏览器半边按职责拆为 `src/client/*.js`，由 `scripts/build-client.mjs` 按文件名排序拼接为单文件 `client.js`。分片共享同一 factory 作用域，禁止使用 import/export；浏览器半边只允许 `require('react')`。
+- `scripts/build-client.mjs` 是唯一构建入口：不带参数生成 `client.js`，`--check` 校验产物与来源一致。仓库 `pnpm test` 对存在该脚本的插件执行 `--check`（design.md §11.4 产物与来源一致）。
+- `client.js` 是生成产物，不手工编辑；发布包只含 `client.js`，不含 `src/` 与 `scripts/`。
+
+## 8. Client half (`client.js`) — required shape
 
 ```js
 window.__ModuleLoader__.load({
@@ -394,7 +400,7 @@ seed the polled state from that map so the first open paints immediately; the ef
 refreshes right away. Keep the warm fetch inside a try/catch: the headless renderer has no
 `fetch`.
 
-### 7.1 Page layout (copy the host page shell)
+### 8.1 Page layout (copy the host page shell)
 
 ```
 section.ss-page  (--ds-fs:var(--dsh-content-font-size,14px);
@@ -443,7 +449,7 @@ Number formatting: use `Intl.NumberFormat` from the current locale (`ctx.locale.
 gives the active id — or just use `document.documentElement.lang` fallback `zh-CN`); compact
 token counts (`1.2M`), 2-4 decimals for USD (`$0.0123`).
 
-### 7.2 Accessibility / behaviour
+### 8.2 Accessibility / behaviour
 - The page is a `section` with `aria-label={t('panel.title')}`.
 - The Refresh button is a real `<button type="button">` with `aria-label`.
 - Trend hit regions are focusable `<button>`s carrying an `aria-label` with the day total
@@ -453,7 +459,7 @@ token counts (`1.2M`), 2-4 decimals for USD (`$0.0123`).
 - No keyboard traps; no focus stealing on poll.
 - Light and dark must both work: only tokens, no literal colors.
 
-## 8. Locale keys
+## 9. Locale keys
 
 The `locale/*.json` files feed the plugin manager's metadata only; the client registers its own
 dictionaries in `client.js`. Both halves must use the same key set. Use these keys:
@@ -479,7 +485,7 @@ logs.attachments  logs.spill  logs.available  logs.unavailable  unit.tokens  uni
 unit.seconds
 ```
 
-## 9. Verification
+## 10. Verification
 
 ```bash
 node --check index.js
