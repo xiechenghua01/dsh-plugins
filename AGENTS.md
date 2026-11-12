@@ -11,13 +11,13 @@ Instructions for anyone (human or agent) changing this repository. Read
 
 `index.json` is generated. Never hand-edit it; run `pnpm run release` instead.
 
-## UI: read `design.md` first
+## UI: read `DESIGN.md` first
 
-[`design.md`](design.md) is the single source of truth for every UI plugin: design tokens,
+[`DESIGN.md`](DESIGN.md) is the single source of truth for every UI plugin: design tokens,
 font scale, page skeleton, buttons/icon buttons/tabs/dialogs/tooltips, the icon set, interaction
 states, copy and the pre-flight checklist. It wins over a plugin's own `DESIGN.md` when the two
 disagree. Do not invent a second button, tooltip or dialog implementation — copy the spec from
-`design.md` and keep `--dsw-*` tokens only.
+`DESIGN.md` and keep `--dsw-*` tokens only.
 
 ## Commands
 

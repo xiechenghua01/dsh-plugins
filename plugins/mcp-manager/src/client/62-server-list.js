@@ -32,7 +32,7 @@
       const rows = Array.isArray(props.rows) ? props.rows : []
       const filteredRows = filterRows(rows, props.query)
       const [expanded, setExpanded] = useState({})
-      // 首载骨架 >300ms 才显示，避免快速返回时闪一下（design.md §7.10）。
+      // 首载骨架 >300ms 才显示，避免快速返回时闪一下（根 DESIGN.md §7.10）。
       const [skeletonReady, setSkeletonReady] = useState(false)
       useEffect(() => {
         if (props.loading !== true || props.hasData === true) {

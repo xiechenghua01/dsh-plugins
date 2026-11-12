@@ -57,7 +57,7 @@ plugin_manager action=install_bundle target=/absolute/path/to/dsh-plugins/plugin
 ## 仓库结构 / Layout
 
 ```text
-design.md                       # 插件设计规范：token、字号、组件、图标、交互（UI 插件必读）
+DESIGN.md                       # 插件设计规范：token、字号、组件、图标、交互（UI 插件必读）
 market.json                     # 索引标题、分类、标签、仓库地址（索引生成的输入）
 index.json                      # 生成的插件索引（format 1）；不要手改
 plugins/<slug>/                 # 一个插件一个目录，目录本身就是包根
@@ -124,7 +124,7 @@ trusted publisher（指向本仓库与 `publish.yml`），然后删掉这个 sec
 
 新增插件：复制一个 `plugins/<slug>/` 为模板，改 `package.json` / `market.json` /
 `cordis.patch.yml` / `client.js` 里的包名与行 id，补 `engines.dsh`，然后提交并用
-`pnpm run release` 发布首版。带 UI 的插件必须先读 [design.md](design.md) 并遵守其中的
+`pnpm run release` 发布首版。带 UI 的插件必须先读 [DESIGN.md](DESIGN.md) 并遵守其中的
 token、字号、按钮/弹窗/Tooltip 与图标规格，不要自创第二套样式。详细约定见
 [AGENTS.md](AGENTS.md) 与各插件的 `CONTRACT.md`。
 

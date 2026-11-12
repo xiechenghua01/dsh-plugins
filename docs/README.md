@@ -10,7 +10,7 @@
 
 通用文档（不属于单个插件）：
 
-- [../design.md](../design.md) —— **插件设计规范**：token、字号阶梯、页面骨架、按钮/弹窗/Tooltip、图标集、交互态、文案与开工清单（UI 插件必读，权威性高于单插件 DESIGN）
+- [../DESIGN.md](../DESIGN.md) —— **插件设计规范**：token、字号阶梯、页面骨架、按钮/弹窗/Tooltip、图标集、交互态、文案与开工清单（UI 插件必读，权威性高于单插件 DESIGN）
 - [plugin-ui-playbook.md](plugin-ui-playbook.md) —— UI 实现手册：字号联动、Tooltip 层级、事件与槽位陷阱
 - [agent-iteration-playbook.md](agent-iteration-playbook.md) —— 多 agent 迭代流程与提速
 

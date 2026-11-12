@@ -105,7 +105,7 @@ h('div', {
 ```css
 .mm-root { --ds-fs: var(--dsh-content-font-size, 14px); font-size: var(--ds-fs); }
 
-/* 阶梯表（基准 14px，实际取值随设置变化；完整七档见 design.md §3.3） */
+/* 阶梯表（基准 14px，实际取值随设置变化；完整七档见 DESIGN.md §3.3） */
 .font-20 { font-size: calc(var(--ds-fs) + 6px); }   /* 页面主标题 */
 .font-16 { font-size: calc(var(--ds-fs) + 2px); }   /* 区块标题 */
 .font-15 { font-size: calc(var(--ds-fs) + 1px); }   /* 弹窗标题 */
@@ -136,7 +136,7 @@ patch 文件里可能有 `{{SECRET_xxx}}` 这类 flow 写法，自研的 YAML �
 Tooltip 是挂在 `<body>` 末尾的（不能放在页面容器内，否则被 `overflow:hidden` 裁掉），
 而 `--ds-fs` 定义在 `.mm-root` 上 → tooltip 拿不到变量，字号不生效。
 
-→ 每次显示前把当前比例同步过去，不要只在创建节点时复制一次（否则字号快照会过期，见 design.md §3.7）：
+→ 每次显示前把当前比例同步过去，不要只在创建节点时复制一次（否则字号快照会过期，见 DESIGN.md §3.7）：
 
 ```js
 function syncFontSize(node) {
@@ -153,9 +153,9 @@ function syncFontSize(node) {
 插件不保证在设置面板内渲染，`var(--ds-fs)` 可能为空。
 → 定义时给默认值：`--ds-fs: var(--dsh-content-font-size, 14px);`
 
-### 1.4 字号层级：与 design.md §3.3 的七档对齐
+### 1.4 字号层级：与 DESIGN.md §3.3 的七档对齐
 
-不要所有文字一个尺寸，也不要自建四层/五层体系。层级固定为 design.md §3.3 的七档，
+不要所有文字一个尺寸，也不要自建四层/五层体系。层级固定为 DESIGN.md §3.3 的七档，
 不允许半像素：
 
 | 档位 | 计算 | 基准 14px 时 | 用途 |
@@ -168,7 +168,7 @@ function syncFontSize(node) {
 | 辅助 | `fs - 2px` | 12px | 徽章、时间、URL 摘要、小号按钮、**Tooltip** |
 | 弱化 | `fs - 3px` | 11px | 图表轴标签、极弱提示 |
 
-**Tooltip 用辅助档 `fs - 2px`**，不是 `fs - 4px`；字号只影响文本，不缩放控件（design.md §3.6）。
+**Tooltip 用辅助档 `fs - 2px`**，不是 `fs - 4px`；字号只影响文本，不缩放控件（DESIGN.md §3.6）。
 
 ---
 
@@ -203,7 +203,7 @@ Tooltip 是**辅助信息**，不是正文。它必须看起来"轻"，否则会
 ### 2.2 交互规范
 
 - **触发**：悬停或键盘聚焦 **300ms** 后显示（1000ms 太慢，用户会以为没反应）；移出/按下/滚动/切换视图立即隐藏。
-- **不加点击触发**：点击通常有自己的动作（打开弹窗、切换状态），叠一个浮层会互相打断；点击引起的聚焦也不得重新触发，键盘聚焦仍须可用（design.md §7.7）。
+- **不加点击触发**：点击通常有自己的动作（打开弹窗、切换状态），叠一个浮层会互相打断；点击引起的聚焦也不得重新触发，键盘聚焦仍须可用（DESIGN.md §7.7）。
 - **单个实例**：全页面只有一个 tooltip 节点，切换目标时复用。
 - **边缘处理**：靠近视口边缘时翻转/夹紧，不能超出屏幕。
 - **层级**：`z-index` 要高于弹窗（本项目用 2000，弹窗 1200）。
@@ -226,13 +226,13 @@ rgba(255,255,255,0.2) 0 0 0 0.5px, rgba(0,0,0,0.04) 0 3px 8px, rgba(0,0,0,0.05) 
 style: { boxShadow: 'none' }
 ```
 
-同时 tooltip 也不要阴影、不要边框——整体保持"平面 + .5px 边框"的语言（design.md §2.4 / §7.7）。
+同时 tooltip 也不要阴影、不要边框——整体保持"平面 + .5px 边框"的语言（DESIGN.md §2.4 / §7.7）。
 
 ### 3.2 标准弹窗固定档位，覆盖宿主必须显式选择
 
 弹窗分 `standard`（默认）与 `cover-host` 两种模式；不能按「非确认即覆盖」自动推断。
 
-标准档位按 design.md §7.6，宽度统一夹到视口内：
+标准档位按 DESIGN.md §7.6，宽度统一夹到视口内：
 
 | 档位 | 宽度 | 圆角 | 用途 |
 | --- | --- | --- | --- |
@@ -258,7 +258,7 @@ style: { boxShadow: 'none' }
 .mm-dialog-embedded { background: var(--dsw-alias-bg-layer-2); }
 ```
 
-**不要用 `--dsw-static-neutral-bluish-850` 充当主题背景。** 它是固定深色（#2c2c2e），浅色主题下会变成深底深字（对比度约 1.36:1），无法阅读。design.md §2.2/§7.6 已统一为：弹窗、抽屉与设置页内嵌一律 `--dsw-alias-bg-layer-2`，850 不再是弹窗档位的背景。
+**不要用 `--dsw-static-neutral-bluish-850` 充当主题背景。** 它是固定深色（#2c2c2e），浅色主题下会变成深底深字（对比度约 1.36:1），无法阅读。DESIGN.md §2.2/§7.6 已统一为：弹窗、抽屉与设置页内嵌一律 `--dsw-alias-bg-layer-2`，850 不再是弹窗档位的背景。
 
 遮罩按入口区分：
 - 设置页内嵌弹窗（含 `cover-host`）：`background: transparent`，不要压暗下面的设置面板；
@@ -282,7 +282,7 @@ style: { boxShadow: 'none' }
 .mm-root-embedded .mm-list { width: 100%; max-width: 640px; margin-left: auto; margin-right: auto; }
 ```
 
-这里的 640px 是**设置页内容列宽度**（design.md §4.4），不是弹窗档位，也不是 `cover-host` 的外框宽度；覆盖外框始终按宿主矩形测量，640 只是测量无效时的回退宽度。
+这里的 640px 是**设置页内容列宽度**（DESIGN.md §4.4），不是弹窗档位，也不是 `cover-host` 的外框宽度；覆盖外框始终按宿主矩形测量，640 只是测量无效时的回退宽度。
 
 ---
 

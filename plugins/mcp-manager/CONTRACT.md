@@ -543,14 +543,14 @@ phase changes when HMR applies a patch), and refetch immediately after every mut
 - The Host `state.fontSize` (read from the `ui-theme` patch row) is a **fallback only**: use it
   when the theme service or `fontSizes.text` is unavailable.
 - The page root sets `--ds-fs: <fontSize>px`. Every font size in the plugin derives from
-  `--ds-fs` via the seven-step scale in design.md §3.3; `--dsh-content-font-size` may only appear
+  `--ds-fs` via the seven-step scale in [root DESIGN.md](../../DESIGN.md) §3.3; `--dsh-content-font-size` may only appear
   as the fallback in the `--ds-fs` definition.
 - Detached layers (the tooltip layer and any future overlay) copy the current `--ds-fs` when
-  created and keep following the plugin's current font size while visible (design.md §3.7).
+  created and keep following the plugin's current font size while visible ([root DESIGN.md](../../DESIGN.md) §3.7).
 
 ### 8.2 UI surfaces
 
-- Page: settings-embedded content column (design.md §4.4). Header = title + help + search +
+- Page: settings-embedded content column ([root DESIGN.md](../../DESIGN.md) §4.4). Header = title + help + search +
   "refresh" icon button + "test all" icon button + "add" primary button; warning/error banners;
   list; toasts.
 - The page is **single-profile**: the list renders every row the Host returns, including
@@ -564,17 +564,17 @@ phase changes when HMR applies a patch), and refetch immediately after every mut
   Line 1 carries status/name/chips/tool count; line 2 carries the command/URL summary. Row height
   follows content (no fixed tier), and the expanded tool-badge area is an additional block that
   grows independently. Row and skeleton separators follow the same semantic rule as the equivalent
-  host settings row (design.md §2.4 / §7.9); token values stay in design.md.
+  host settings row ([root DESIGN.md](../../DESIGN.md) §2.4 / §7.9); token values stay in [root DESIGN.md](../../DESIGN.md).
   There is **no** per-row test button; testing is available from the editor's "test connectivity"
   button and the header's "test all".
 - Editor dialog (create/edit): form and JSON tabs; fields, validation, clean-config and tool
   permission rules live in DESIGN.md §1.3 / §2.5. It passes `mode: 'cover-host'` to the shared
   Dialog.
 - Delete confirmation: uses `mode: 'standard'`; it must not measure or follow the host panel.
-  Tier and scoping details live in design.md §7.6.
+  Tier and scoping details live in [root DESIGN.md](../../DESIGN.md) §7.6.
 - Tooltip: one page-wide instance; hover or keyboard focus, **300ms** delay; hidden on
-  leave/press/scroll/view switch. Visual specs: design.md §7.7.
-- Dialog stacking, Escape and focus return: design.md §7.6 / §9.3.
+  leave/press/scroll/view switch. Visual specs: [root DESIGN.md](../../DESIGN.md) §7.7.
+- Dialog stacking, Escape and focus return: [root DESIGN.md](../../DESIGN.md) §7.6 / §9.3.
 
 Dialog runtime (`src/client/16-dialog.js`):
 
@@ -583,13 +583,13 @@ Dialog runtime (`src/client/16-dialog.js`):
 - `'cover-host'` measures the nearest enclosing `[role="dialog"]` settings panel and follows its
   position and dimensions within the viewport. Host/viewport changes trigger a re-measure, and
   listeners/observers are removed on unmount. With no measurable host it uses the centered fallback
-  specified in design.md §7.6. It must never produce negative or non-finite dimensions. A confirm
+  specified in [root DESIGN.md](../../DESIGN.md) §7.6. It must never produce negative or non-finite dimensions. A confirm
   dialog always resolves to `'standard'`, even if passed `'cover-host'`.
 - Surface colors, radii, exact sizes, and the transparent settings-hosted backdrop are owned by
-  design.md §2.2 / §7.6; this contract only fixes the mode behavior and cleanup.
+  [root DESIGN.md](../../DESIGN.md) §2.2 / §7.6; this contract only fixes the mode behavior and cleanup.
 
 Visual specs (colors, radii, spacing, icon sizes, hover/pressed states) are **not** part of this
-contract: see design.md §2, §7, §9 and DESIGN.md for the business mapping.
+contract: see [root DESIGN.md](../../DESIGN.md) §2, §7, §9 and DESIGN.md for the business mapping.
 
 ### 8.3 Shared rules
 

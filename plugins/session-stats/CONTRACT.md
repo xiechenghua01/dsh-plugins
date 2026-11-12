@@ -50,13 +50,13 @@ Host pages also use these non-alias tokens freely (they are theme-defined):
 
 - **唯一字号源**：字号只来自 `--ds-fs`，定义固定为
   `--ds-fs: var(--dsh-content-font-size, 14px)`，只定义在页面根节点 `.ss-page` 上；
-  所有字号由 `--ds-fs` 派生（design.md §3.3），组件规则中不得出现固定 px 字号。
+  所有字号由 `--ds-fs` 派生（[根 DESIGN.md](../../DESIGN.md) §3.3），组件规则中不得出现固定 px 字号。
 - **宿主契约**：宿主主题运行时把 `ctx.theme.getTheme().fontSizes.text`（10–22，默认 14）
   写入 `document.body.style['--dsh-content-font-size']`，并在 `theme/change` 时更新。
   插件不通过 Host 路由读取字号，也不轮询 profile，只消费该继承变量；宿主改字号后已挂载的
   页面与浮层直接跟随，无需重开面板。
-- **字号阶梯**（`fs` = `--ds-fs`）：本面板按用户要求整体比 design.md §3.3 的默认档位
-  下移一档；偏离范围与到期条件登记在 design.md §13.2。
+- **字号阶梯**（`fs` = `--ds-fs`）：本面板按用户要求整体比 [根 DESIGN.md](../../DESIGN.md) §3.3 的默认档位
+  下移一档；偏离范围与到期条件登记在 [根 DESIGN.md](../../DESIGN.md) §13.2。
 
   | 档位 | 用途 |
   | --- | --- |
@@ -67,7 +67,7 @@ Host pages also use these non-alias tokens freely (they are theme-defined):
   | `fs - 3px` | 弱化：表头、图表轴标签、极弱提示 |
 
 - **浮层**：Tooltip 等挂到 `<body>` 的浮层在显示前从所属根节点读取当前 `--ds-fs`，
-  不得使用创建时的快照；显示期间持续跟随宿主字号（design.md §3.7）。
+  不得使用创建时的快照；显示期间持续跟随宿主字号（[根 DESIGN.md](../../DESIGN.md) §3.7）。
 - **侧栏入口**：注册在 `sidebar.panellist`（id 等于主面板 key `session-stats`，order 30）。
   宿主渲染整行按钮、文字与字号（与「技能」等全局面板一致）；插件只提供 `{ size, active }`
   图标，`size` 为 16、折叠态 18。`active` 为真时在宿主按钮上以捕获阶段接管 click，调用
@@ -337,7 +337,7 @@ Deep-merge `config` over `DEFAULTS` (shallow per sub-object is fine). Accept
 ## 7. 源码组织与构建（source layout and build）
 
 - 浏览器半边按职责拆为 `src/client/*.js`，由 `scripts/build-client.mjs` 按文件名排序拼接为单文件 `client.js`。分片共享同一 factory 作用域，禁止使用 import/export；浏览器半边只允许 `require('react')`。
-- `scripts/build-client.mjs` 是唯一构建入口：不带参数生成 `client.js`，`--check` 校验产物与来源一致。仓库 `pnpm test` 对存在该脚本的插件执行 `--check`（design.md §11.4 产物与来源一致）。
+- `scripts/build-client.mjs` 是唯一构建入口：不带参数生成 `client.js`，`--check` 校验产物与来源一致。仓库 `pnpm test` 对存在该脚本的插件执行 `--check`（[根 DESIGN.md](../../DESIGN.md) §11.4 产物与来源一致）。
 - `client.js` 是生成产物，不手工编辑；发布包只含 `client.js`，不含 `src/` 与 `scripts/`。
 
 ## 8. Client half (`client.js`) — required shape
