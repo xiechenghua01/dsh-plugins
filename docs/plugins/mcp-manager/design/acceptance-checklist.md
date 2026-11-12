@@ -30,3 +30,12 @@
 ## 收敛预算
 
 2 轮：实现 → Codex 验收 → 主 agent ego lite 走查；P0/P1 清零即收敛，P2 记录不阻塞。
+
+## C. 编辑弹窗覆盖设置面板（2026-11-12 追加）
+
+| 编号 | 判据 | 证据要求 |
+|---|---|---|
+| C1 | `size !== 'confirm'` 的编辑弹窗测量外层 `[role="dialog"]`，宽高与设置面板一致（限制在视口 - 32px 内），并设 `max-width: none` / `max-height: none` | `src/client/16-dialog.js` 行号；浏览器 `.mm-dialog` 与宿主 `[role="dialog"]` 的 `getBoundingClientRect()` |
+| C2 | 确认弹窗仍为固定 480px，不随宿主面板变化 | 浏览器删除确认弹窗宽度 |
+| C3 | 窄视口/窗口 resize 时弹窗重新测量，不溢出视口；编辑内容仍可滚动 | `resize` 后测量 + 截图 |
+| C4 | 文档同步：DESIGN/CONTRACT 写明编辑弹窗贴合设置面板，确认弹窗 480 | 文件行号 |

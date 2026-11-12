@@ -39,7 +39,9 @@
     }
 
     /**
-     * Fixed-size modal (§7.6). Width comes from the size tier, never from the host panel.
+     * Modal dialog. The confirm tier stays fixed at 480px. The editor tier covers the layer
+     * beneath: it measures the enclosing settings panel and follows its size, clamped to the
+     * viewport (an explicit user requirement that supersedes the fixed tier in design.md §7.6).
      * The body is the only scroll region; Escape and the backdrop dismiss the topmost dialog.
      */
     function Dialog(props) {
@@ -105,6 +107,29 @@
         }
       }, [])
 
+      // The editor dialog covers the layer beneath: size it to the enclosing settings panel.
+      // Even though the dialog renders inside the fixed `.mm-backdrop` layer, the React tree
+      // stays under the host panel, so `closest` can find it from the dialog node.
+      const [hostBox, setHostBox] = useState(null)
+      useLayoutEffect(() => {
+        if (props.size === 'confirm') return undefined
+        const measure = () => {
+          const node = boxRef.current
+          if (node === null || node.parentElement === null) return
+          const host = node.parentElement.closest('[role="dialog"]')
+          if (host === null) return
+          const rect = host.getBoundingClientRect()
+          const width = Math.round(Math.min(rect.width, window.innerWidth - 32))
+          const height = Math.round(Math.min(rect.height, window.innerHeight - 32))
+          if (width > 0 && height > 0) setHostBox({ width: width, height: height })
+        }
+        measure()
+        window.addEventListener('resize', measure)
+        return () => {
+          window.removeEventListener('resize', measure)
+        }
+      }, [])
+
       return h(
         'div',
         {
@@ -126,7 +151,16 @@
             'aria-label': props.title,
             tabIndex: -1,
             ref: boxRef,
-            style: { boxShadow: 'none' },
+            style:
+              hostBox === null
+                ? { boxShadow: 'none' }
+                : {
+                    width: hostBox.width + 'px',
+                    height: hostBox.height + 'px',
+                    maxWidth: 'none',
+                    maxHeight: 'none',
+                    boxShadow: 'none',
+                  },
           },
           h(
             'div',

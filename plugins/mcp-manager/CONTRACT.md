@@ -559,8 +559,8 @@ phase changes when HMR applies a patch), and refetch immediately after every mut
   There is **no** per-row test button; testing is available from the editor's "test connectivity"
   button and the header's "test all".
 - Editor dialog (create/edit): form and JSON tabs; fields, validation, clean-config and tool
-  permission rules live in DESIGN.md §1.3 / §2.5. It uses the settings-page-embedded dialog tier:
-  **640px** max width, clamped to the viewport.
+  permission rules live in DESIGN.md §1.3 / §2.5. It matches the enclosing settings panel
+  (width/height follow the host panel, clamped to the viewport).
 - Delete confirmation: confirm dialog tier: **480px** max width, clamped to the viewport.
 - Tooltip: one page-wide instance; hover or keyboard focus, **300ms** delay; hidden on
   leave/press/scroll/view switch. Visual specs: design.md §7.7.
