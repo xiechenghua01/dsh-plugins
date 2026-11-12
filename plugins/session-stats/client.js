@@ -251,7 +251,7 @@ window.__ModuleLoader__.load({
 .ss-segment-active{background:var(--dsw-alias-interactive-bg-hover);color:var(--dsw-alias-label-primary)}
 .ss-segmented[data-level="primary"] .ss-segment-active{background:var(--dsw-alias-bg-layer-3);border:.5px solid var(--dsw-alias-border-l3);font-weight:600}
 /* Badge (§7.9): SsBadge. */
-.ss-badge{display:inline-flex;align-items:center;flex:none;height:20px;padding:0 6px;border-radius:var(--dsw-radius-xs);font-size:calc(var(--ds-fs) - 3px);font-weight:500;line-height:20px;white-space:nowrap;color:var(--dsw-alias-label-secondary);background:var(--dsw-alias-bg-layer-2)}
+.ss-badge{display:inline-flex;align-items:center;flex:none;min-height:calc(var(--ds-fs) + 4px);padding:0 6px;border-radius:var(--dsw-radius-xs);font-size:calc(var(--ds-fs) - 3px);font-weight:500;line-height:normal;white-space:nowrap;color:var(--dsw-alias-label-secondary);background:var(--dsw-alias-bg-layer-2)}
 .ss-badge[data-tone="warn"]{color:var(--dsw-alias-state-warn-primary);background:color-mix(in srgb,var(--dsw-alias-state-warn-primary) 12%,transparent)}
 .ss-badge[data-tone="success"]{color:var(--dsw-alias-state-success-primary);background:color-mix(in srgb,var(--dsw-alias-state-success-primary) 12%,transparent)}
 .ss-badge[data-tone="error"]{color:var(--dsw-alias-state-error-primary);background:color-mix(in srgb,var(--dsw-alias-state-error-primary) 12%,transparent)}

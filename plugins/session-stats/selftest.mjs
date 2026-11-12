@@ -62,6 +62,42 @@ function sameNumber(actual, expected, label, report) {
 }
 
 /**
+ * The badge shrinks its text by 3px against `--ds-fs`; a fixed height and the
+ * matching fixed line-height clip the label once the host font-size grows, so
+ * the rule must scale with the token instead of pinning pixels.
+ */
+async function testBadgeVerticalFit(report) {
+  const { readFileSync } = await import('node:fs')
+  const source = readFileSync(new URL('./src/client/00-2-styles.js', import.meta.url), 'utf8')
+  const rule = source.split('\n').find((line) => line.startsWith('.ss-badge{')) || ''
+  if (rule === '') {
+    report('00-2-styles.js must define .ss-badge')
+    return
+  }
+  const body = rule.slice(rule.indexOf('{') + 1, rule.lastIndexOf('}'))
+  const declarations = new Map()
+  const duplicates = []
+  for (const segment of body.split(';')) {
+    const declaration = segment.trim()
+    if (declaration === '') continue
+    const at = declaration.indexOf(':')
+    if (at === -1) continue
+    const name = declaration.slice(0, at).trim()
+    if (declarations.has(name)) duplicates.push(name)
+    declarations.set(name, declaration.slice(at + 1).trim())
+  }
+  if (duplicates.length > 0) report(`.ss-badge must not redeclare properties: ${duplicates.join(', ')}`)
+  if (declarations.get('font-size') !== 'calc(var(--ds-fs) - 3px)') report('.ss-badge must keep the auxiliary font size')
+  if (declarations.get('min-height') !== 'calc(var(--ds-fs) + 4px)') {
+    report(`.ss-badge min-height must scale with --ds-fs (got ${String(declarations.get('min-height'))})`)
+  }
+  if (declarations.get('height') !== undefined) report('.ss-badge must not pin a fixed height')
+  if (declarations.get('line-height') !== 'normal') {
+    report(`.ss-badge must not pin line-height (got ${String(declarations.get('line-height'))})`)
+  }
+}
+
+/**
  * @param {(message: string) => void} report - called with one problem per failed check.
  */
 export async function run(report) {
@@ -232,4 +268,7 @@ export async function run(report) {
       if (!Number.isFinite(day.tokens) || day.tokens < 0) report(`model ${row.model} has an invalid daily token count`)
     }
   }
+
+  // ---- badge vertical fit: the badge must scale with --ds-fs, not pin pixels --
+  await testBadgeVerticalFit(report)
 }
