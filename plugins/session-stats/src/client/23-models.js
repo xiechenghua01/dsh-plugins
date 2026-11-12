@@ -29,6 +29,8 @@
       const fmt = props.fmt
       const view = props.modelView
       const days = props.days
+      /** The list starts collapsed; every "more" press reveals another fixed batch. */
+      const [visibleCount, setVisibleCount] = useState(MODELS_COLLAPSED_ROWS)
       const head = h(
         'div',
         { className: 'ss-card-head' },
@@ -44,7 +46,33 @@
         return h('section', { className: 'ss-card', 'aria-label': t('models.title') }, head, h(SsEmptyState, { message: t('models.empty') }))
       }
 
-      const rows = view.rows.map((row) => {
+      // Preset or stale state may not be numeric; fall back to the collapsed batch.
+      const shownCount = typeof visibleCount === 'number' && Number.isFinite(visibleCount)
+        ? Math.min(Math.max(visibleCount, MODELS_COLLAPSED_ROWS), view.rows.length)
+        : Math.min(MODELS_COLLAPSED_ROWS, view.rows.length)
+      const shownRows = view.rows.slice(0, shownCount)
+      const more = shownCount < view.rows.length
+        ? h(
+            'div',
+            { className: 'ss-model-foot' },
+            h(
+              SsButton,
+              {
+                name: 'models-more',
+                size: 'sm',
+                variant: 'secondary',
+                expanded: shownCount > MODELS_COLLAPSED_ROWS,
+                onClick: () => setVisibleCount((count) => (
+                  (typeof count === 'number' && Number.isFinite(count) ? count : MODELS_COLLAPSED_ROWS) + MODELS_COLLAPSED_ROWS
+                )),
+              },
+              h('span', null, t('sessions.more')),
+              h('span', { className: 'ss-more-arrow', 'aria-hidden': 'true' }, '\u2193'),
+            ),
+          )
+        : null
+
+      const rows = shownRows.map((row) => {
         const share = view.totalTokens > 0 ? clamp01(row.tokens / view.totalTokens) : 0
         const percent = clamp(share * 100, 0, 100)
         return h(
@@ -89,6 +117,7 @@
         { className: 'ss-card', 'aria-label': t('models.title') },
         head,
         h('ul', { className: 'ss-model-list' }, rows),
+        more,
       )
     }
 

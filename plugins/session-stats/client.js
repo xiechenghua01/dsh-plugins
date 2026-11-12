@@ -23,6 +23,8 @@ window.__ModuleLoader__.load({
     /** Collapsed session table rows; the expanded table is a fixed ten-row window. */
     const SESSIONS_COLLAPSED_ROWS = 5
     const SESSIONS_WINDOW_ROWS = 10
+    /** The model list shows this many rows at first; each "more" click adds another batch. */
+    const MODELS_COLLAPSED_ROWS = 5
     const DEFAULT_LOCALE = 'zh-CN'
     const DASH = '\u2014'
 
@@ -74,7 +76,6 @@ window.__ModuleLoader__.load({
       'table.created': '创建时间',
       'table.requests': '请求数',
       'table.tokens': 'Token',
-      'table.split': '输入 / 输出 / 缓存',
       'table.cost': '成本',
       'table.logSize': '日志大小',
       'table.sortCost': '按成本',
@@ -157,7 +158,6 @@ window.__ModuleLoader__.load({
       'table.created': 'Created',
       'table.requests': 'Requests',
       'table.tokens': 'Tokens',
-      'table.split': 'Input / output / cache',
       'table.cost': 'Cost',
       'table.logSize': 'Log size',
       'table.sortCost': 'Cost',
@@ -203,7 +203,7 @@ window.__ModuleLoader__.load({
 
     const CSS = `
 .ss-page,.ss-page *{box-sizing:border-box}
-.ss-page{--ds-fs:var(--dsh-content-font-size,14px);--ss-series-1:#4d93f8;--ss-series-2:#22c55e;--ss-series-3:#8b5cf6;--ss-series-4:#f59e0b;--ss-series-5:#ef4444;--ss-series-6:#06b6d4;--ss-series-7:#ec4899;--ss-series-8:#9aa0a6;--ss-session-row:calc(var(--ds-fs) * 2.9 + 16px);--ss-table-head:calc(var(--ds-fs) * 1.5 + 12px);width:100%;min-width:0;height:100%;min-height:0;display:flex;overflow:hidden;background:var(--dsw-alias-bg-base);color:var(--dsw-alias-label-primary);font-family:var(--dsw-font-family,inherit);font-size:var(--ds-fs);line-height:1.5}
+.ss-page{--ds-fs:var(--dsh-content-font-size,14px);--ss-series-1:#4d93f8;--ss-series-2:#22c55e;--ss-series-3:#8b5cf6;--ss-series-4:#f59e0b;--ss-series-5:#ef4444;--ss-series-6:#06b6d4;--ss-series-7:#ec4899;--ss-series-8:#9aa0a6;--ss-session-row:calc(var(--ds-fs) * 3 + 16px);--ss-table-head:calc(var(--ds-fs) * 1.5 + 12px);width:100%;min-width:0;height:100%;min-height:0;display:flex;overflow:hidden;background:var(--dsw-alias-bg-base);color:var(--dsw-alias-label-primary);font-family:var(--dsw-font-family,inherit);font-size:calc(var(--ds-fs) - 1px);line-height:1.5}
 /* The eight --ss-series-* colors are data-visualization series colors, not theme
    surface colors: charts need several distinguishable hues in both color schemes. */
 .ss-page [data-series="1"]{--ss-series:var(--ss-series-1)}
@@ -216,9 +216,9 @@ window.__ModuleLoader__.load({
 .ss-page [data-series="8"]{--ss-series:var(--ss-series-8)}
 /* Buttons (§7.1): SsButton. Hover changes only the interactive background. */
 .ss-btn{display:inline-flex;align-items:center;justify-content:center;gap:6px;box-sizing:border-box;white-space:nowrap;font-family:inherit;font-weight:500;border:.5px solid transparent;background:transparent;color:var(--dsw-alias-label-primary);cursor:pointer;transition:background 120ms,color 120ms}
-.ss-btn[data-size="lg"]{height:36px;padding:0 14px;border-radius:var(--dsw-radius-md);font-size:var(--ds-fs);line-height:22px}
-.ss-btn[data-size="md"]{height:32px;padding:0 12px;border-radius:var(--dsw-radius-md);font-size:calc(var(--ds-fs) - 1px);line-height:20px}
-.ss-btn[data-size="sm"]{height:28px;padding:0 10px;border-radius:var(--dsw-radius-sm);font-size:calc(var(--ds-fs) - 2px);line-height:18px}
+.ss-btn[data-size="lg"]{height:36px;padding:0 14px;border-radius:var(--dsw-radius-md);font-size:calc(var(--ds-fs) - 1px);line-height:22px}
+.ss-btn[data-size="md"]{height:32px;padding:0 12px;border-radius:var(--dsw-radius-md);font-size:calc(var(--ds-fs) - 2px);line-height:20px}
+.ss-btn[data-size="sm"]{height:28px;padding:0 10px;border-radius:var(--dsw-radius-sm);font-size:calc(var(--ds-fs) - 3px);line-height:18px}
 .ss-btn[data-variant="primary"]{background:var(--dsw-alias-button-primary-fill);color:var(--dsw-alias-label-primary-foreground);border-color:transparent}
 .ss-btn[data-variant="primary"]:hover{background:var(--dsw-alias-button-primary-hover)}
 .ss-btn[data-variant="secondary"]{background:var(--dsw-alias-bg-layer-1);border-color:var(--dsw-alias-border-l2)}
@@ -243,15 +243,15 @@ window.__ModuleLoader__.load({
 /* Segmented tabs (§7.3): primary segments and secondary capsules. */
 .ss-segmented{display:inline-flex;align-items:center;gap:2px;padding:0;background:transparent}
 .ss-segmented[data-level="primary"]{gap:0;padding:4px;border-radius:var(--dsw-radius-lg);background:var(--dsw-alias-bg-module-platform)}
-.ss-segment{display:inline-flex;align-items:center;justify-content:center;gap:4px;height:28px;padding:0 10px;border:0;border-radius:14px;background:transparent;color:var(--dsw-alias-label-tertiary);font:inherit;font-size:calc(var(--ds-fs) - 2px);font-weight:500;line-height:18px;white-space:nowrap;cursor:pointer;transition:background 120ms,color 120ms}
-.ss-segmented[data-level="primary"] .ss-segment{height:34px;padding:0 16px;border-radius:var(--dsw-radius-md);font-size:var(--ds-fs)}
+.ss-segment{display:inline-flex;align-items:center;justify-content:center;gap:4px;height:28px;padding:0 10px;border:0;border-radius:14px;background:transparent;color:var(--dsw-alias-label-tertiary);font:inherit;font-size:calc(var(--ds-fs) - 3px);font-weight:500;line-height:18px;white-space:nowrap;cursor:pointer;transition:background 120ms,color 120ms}
+.ss-segmented[data-level="primary"] .ss-segment{height:34px;padding:0 16px;border-radius:var(--dsw-radius-md);font-size:calc(var(--ds-fs) - 1px)}
 .ss-segment:hover{background:var(--dsw-alias-interactive-bg-hover);color:var(--dsw-alias-label-primary)}
 .ss-segment:active{background:var(--dsw-alias-interactive-bg-active)}
 .ss-segment:focus-visible{outline:none;background:var(--dsw-alias-interactive-bg-hover);color:var(--dsw-alias-label-primary)}
 .ss-segment-active{background:var(--dsw-alias-interactive-bg-hover);color:var(--dsw-alias-label-primary)}
 .ss-segmented[data-level="primary"] .ss-segment-active{background:var(--dsw-alias-bg-layer-3);border:.5px solid var(--dsw-alias-border-l3);font-weight:600}
 /* Badge (§7.9): SsBadge. */
-.ss-badge{display:inline-flex;align-items:center;flex:none;height:20px;padding:0 6px;border-radius:var(--dsw-radius-xs);font-size:calc(var(--ds-fs) - 2px);font-weight:500;line-height:20px;white-space:nowrap;color:var(--dsw-alias-label-secondary);background:var(--dsw-alias-bg-layer-2)}
+.ss-badge{display:inline-flex;align-items:center;flex:none;height:20px;padding:0 6px;border-radius:var(--dsw-radius-xs);font-size:calc(var(--ds-fs) - 3px);font-weight:500;line-height:20px;white-space:nowrap;color:var(--dsw-alias-label-secondary);background:var(--dsw-alias-bg-layer-2)}
 .ss-badge[data-tone="warn"]{color:var(--dsw-alias-state-warn-primary);background:color-mix(in srgb,var(--dsw-alias-state-warn-primary) 12%,transparent)}
 .ss-badge[data-tone="success"]{color:var(--dsw-alias-state-success-primary);background:color-mix(in srgb,var(--dsw-alias-state-success-primary) 12%,transparent)}
 .ss-badge[data-tone="error"]{color:var(--dsw-alias-state-error-primary);background:color-mix(in srgb,var(--dsw-alias-state-error-primary) 12%,transparent)}
@@ -259,15 +259,15 @@ window.__ModuleLoader__.load({
 .ss-empty-state{display:flex;flex-direction:column;align-items:center;justify-content:center;gap:8px;padding:20px 0;text-align:center;color:var(--dsw-alias-label-tertiary)}
 .ss-empty-state[data-roomy="true"]{padding:48px 20px}
 .ss-empty-state[data-tone="error"]{color:var(--dsw-alias-state-error-primary)}
-.ss-empty-state .ss-empty{margin:0;color:var(--dsw-alias-label-secondary);font-size:calc(var(--ds-fs) - 1px);line-height:1.5}
+.ss-empty-state .ss-empty{margin:0;color:var(--dsw-alias-label-secondary);font-size:calc(var(--ds-fs) - 2px);line-height:1.5}
 .ss-empty-state[data-tone="error"] .ss-empty{color:var(--dsw-alias-label-primary)}
 /* Error bar (§7.10): SsErrorBar. */
-.ss-errorbar{display:flex;align-items:center;gap:12px;flex-wrap:wrap;padding:12px 16px;border:.5px solid color-mix(in srgb,var(--dsw-alias-state-error-primary) 35%,transparent);border-radius:var(--dsw-radius-md);background:color-mix(in srgb,var(--dsw-alias-state-error-primary) 12%,transparent);color:var(--dsw-alias-label-primary);font-size:calc(var(--ds-fs) - 1px)}
+.ss-errorbar{display:flex;align-items:center;gap:12px;flex-wrap:wrap;padding:12px 16px;border:.5px solid color-mix(in srgb,var(--dsw-alias-state-error-primary) 35%,transparent);border-radius:var(--dsw-radius-md);background:color-mix(in srgb,var(--dsw-alias-state-error-primary) 12%,transparent);color:var(--dsw-alias-label-primary);font-size:calc(var(--ds-fs) - 2px)}
 .ss-errorbar .ss-icon{flex:none;color:var(--dsw-alias-state-error-primary)}
 .ss-errorbar-text{flex:1;min-width:0}
 /* Tooltip (§7.7): SsTooltip singleton, scoped by its data-plugin container. */
 .ss-tooltip-layer[data-plugin="@chengze/dsh-session-stats"]{--ds-fs:var(--dsh-content-font-size,14px);position:fixed;inset:0;z-index:2000;pointer-events:none;overflow:hidden}
-.ss-tooltip-layer[data-plugin="@chengze/dsh-session-stats"] .ss-tooltip{position:absolute;max-width:min(40vw,290px);padding:4px 8px;border-radius:var(--dsw-radius-sm);background:var(--dsw-alias-tooltip-bg);color:var(--dsw-static-neutral-bluish-00);font-size:calc(var(--ds-fs) - 2px);line-height:1.5;box-shadow:none;opacity:0;visibility:hidden;overflow-wrap:anywhere;transition:none}
+.ss-tooltip-layer[data-plugin="@chengze/dsh-session-stats"] .ss-tooltip{position:absolute;max-width:min(40vw,290px);padding:4px 8px;border-radius:var(--dsw-radius-sm);background:var(--dsw-alias-tooltip-bg);color:var(--dsw-static-neutral-bluish-00);font-size:calc(var(--ds-fs) - 3px);line-height:1.5;box-shadow:none;opacity:0;visibility:hidden;overflow-wrap:anywhere;transition:none}
 .ss-tooltip-layer[data-plugin="@chengze/dsh-session-stats"] .ss-tooltip[data-visible="true"]{opacity:1;visibility:visible;transition:opacity 120ms}
 .ss-live{position:absolute;width:1px;height:1px;overflow:hidden;clip-path:inset(50%);white-space:nowrap}
 .ss-scroll{flex:1;min-height:0;overflow:auto;scrollbar-gutter:stable;scrollbar-width:thin;scrollbar-color:var(--dsw-alias-scrollbar-bg-l1) transparent}
@@ -278,26 +278,26 @@ window.__ModuleLoader__.load({
 .ss-content{max-width:calc(960px + 2 * clamp(20px,4vw,48px));margin:0 auto;padding:0 clamp(20px,4vw,48px) 48px}
 .ss-heading{display:flex;justify-content:space-between;align-items:center;gap:16px;padding-top:calc(28px + var(--dsh-frame-top-clearance,0px));margin-bottom:24px}
 .ss-heading-text{min-width:0}
-.ss-title{margin:0;font-size:calc(var(--ds-fs) + 6px);font-weight:500;line-height:1.35}
+.ss-title{margin:0;font-size:calc(var(--ds-fs) + 2px);font-weight:500;line-height:1.35}
 .ss-heading-actions{display:flex;align-items:center;gap:12px;flex:none}
-.ss-updated{color:var(--dsw-alias-label-caption);font-size:calc(var(--ds-fs) - 2px);white-space:nowrap}
-.ss-sections{display:flex;flex-direction:column;gap:20px}
+.ss-updated{color:var(--dsw-alias-label-caption);font-size:calc(var(--ds-fs) - 3px);white-space:nowrap}
+.ss-sections{display:flex;flex-direction:column;gap:24px}
 .ss-card{margin:0;padding:16px 18px;border:.5px solid var(--dsw-alias-border-l3);border-radius:var(--dsw-radius-lg);background:var(--dsw-alias-bg-layer-1);min-width:0}
 .ss-card-head{display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap;margin-bottom:12px}
-.ss-card-title{margin:0;font-size:calc(var(--ds-fs) + 2px);font-weight:500;line-height:1.35;color:var(--dsw-alias-label-primary)}
-.ss-summary-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:12px}
+.ss-card-title{margin:0;font-size:var(--ds-fs);font-weight:500;line-height:1.35;color:var(--dsw-alias-label-primary)}
+.ss-summary-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:16px}
 .ss-summary{display:flex;flex-direction:column;gap:6px;padding:16px 18px}
-.ss-summary-label{margin:0;color:var(--dsw-alias-label-tertiary);font-size:calc(var(--ds-fs) - 2px);font-weight:400;line-height:1.5}
-.ss-summary-value{margin:0;font-size:calc(var(--ds-fs) + 6px);font-weight:500;line-height:1.35;font-variant-numeric:tabular-nums;white-space:nowrap}
-.ss-summary-unit{color:var(--dsw-alias-label-tertiary);font-size:calc(var(--ds-fs) - 2px);font-weight:400;margin-left:6px}
-.ss-summary-hint{margin:0;color:var(--dsw-alias-label-tertiary);font-size:calc(var(--ds-fs) - 2px);line-height:1.5;overflow-wrap:anywhere}
+.ss-summary-label{margin:0;color:var(--dsw-alias-label-tertiary);font-size:calc(var(--ds-fs) - 3px);font-weight:400;line-height:1.5}
+.ss-summary-value{margin:0;font-size:calc(var(--ds-fs) + 2px);font-weight:500;line-height:1.35;font-variant-numeric:tabular-nums;white-space:nowrap}
+.ss-summary-unit{color:var(--dsw-alias-label-tertiary);font-size:calc(var(--ds-fs) - 3px);font-weight:400;margin-left:6px}
+.ss-summary-hint{margin:0;color:var(--dsw-alias-label-tertiary);font-size:calc(var(--ds-fs) - 3px);line-height:1.5;overflow-wrap:anywhere}
 .ss-progress{height:6px;border-radius:var(--dsw-radius-xs);background:var(--dsw-alias-bg-layer-2);overflow:hidden;margin:4px 0}
 .ss-progress-fill{height:100%;border-radius:var(--dsw-radius-xs);background:var(--dsw-alias-brand-primary);transition:width 120ms}
 .ss-tone-warn{background:var(--dsw-alias-state-warn-primary)}
 .ss-tone-danger{background:var(--dsw-alias-state-error-primary)}
 .ss-card-head-main{min-width:0}
-.ss-card-sub{margin:2px 0 0;color:var(--dsw-alias-label-tertiary);font-size:calc(var(--ds-fs) - 2px);line-height:1.5}
-.ss-legend{display:flex;flex-wrap:wrap;gap:4px 6px;color:var(--dsw-alias-label-secondary);font-size:calc(var(--ds-fs) - 2px);margin:0 0 12px}
+.ss-card-sub{margin:2px 0 0;color:var(--dsw-alias-label-tertiary);font-size:calc(var(--ds-fs) - 3px);line-height:1.5}
+.ss-legend{display:flex;flex-wrap:wrap;gap:4px 6px;color:var(--dsw-alias-label-secondary);font-size:calc(var(--ds-fs) - 3px);margin:0 0 12px}
 .ss-legend-item{display:inline-flex;align-items:center;gap:6px}
 .ss-swatch{display:inline-block;width:8px;height:8px;border-radius:var(--dsw-radius-xs);flex:none}
 .ss-legend-button{max-width:240px;justify-content:flex-start;color:var(--dsw-alias-label-secondary)}
@@ -324,10 +324,10 @@ window.__ModuleLoader__.load({
 .ss-dot{position:absolute;width:8px;height:8px;border-radius:var(--dsw-radius-xs);transform:translate(-50%,-50%);border:.5px solid var(--dsw-alias-bg-layer-1);background:var(--ss-series);opacity:0;transition:opacity 120ms;pointer-events:none}
 .ss-hit:hover .ss-guide,.ss-hit:hover .ss-dot,.ss-hit:hover .ss-tip{opacity:1;visibility:visible}
 /* Chart tooltip: the §7.7 dark surface, so every inner text tier derives from the white token. */
-.ss-tip{position:absolute;top:6px;min-width:170px;max-width:min(40vw,290px);margin-left:12px;padding:4px 8px;border-radius:var(--dsw-radius-sm);border:0;background:var(--dsw-alias-tooltip-bg);box-shadow:none;color:var(--dsw-static-neutral-bluish-00);font-size:calc(var(--ds-fs) - 2px);line-height:1.5;opacity:0;visibility:hidden;transition:opacity 120ms;pointer-events:none;z-index:5}
+.ss-tip{position:absolute;top:6px;min-width:170px;max-width:min(40vw,290px);margin-left:12px;padding:4px 8px;border-radius:var(--dsw-radius-sm);border:0;background:var(--dsw-alias-tooltip-bg);box-shadow:none;color:var(--dsw-static-neutral-bluish-00);font-size:calc(var(--ds-fs) - 3px);line-height:1.5;opacity:0;visibility:hidden;transition:opacity 120ms;pointer-events:none;z-index:5}
 .ss-tip-right{margin-left:0;margin-right:12px}
 .ss-tip-date{margin:0 0 4px;color:color-mix(in srgb,var(--dsw-static-neutral-bluish-00) 70%,transparent);font-size:calc(var(--ds-fs) - 3px)}
-.ss-tip-total{display:flex;justify-content:space-between;gap:12px;margin:0 0 6px;font-size:calc(var(--ds-fs) - 2px)}
+.ss-tip-total{display:flex;justify-content:space-between;gap:12px;margin:0 0 6px;font-size:calc(var(--ds-fs) - 3px)}
 .ss-tip-total strong,.ss-tip-value{font-variant-numeric:tabular-nums}
 .ss-tip-list{list-style:none;margin:0;padding:0;display:flex;flex-direction:column;gap:4px}
 .ss-tip-list li{display:flex;align-items:center;gap:6px;min-width:0}
@@ -351,10 +351,11 @@ window.__ModuleLoader__.load({
 /* Expanded session table: a fixed ten-row window (SESSIONS_WINDOW_ROWS in the
    component), with a sticky header and its own vertical scrollbar.
    Row/head heights derive from --ds-fs so ten rows survive host type scaling
-   (14/16/20px → 56.6/62.4/74 and 33/36/42). Box model: the session cell stacks
-   a 1.5×fs title line plus a 1.5×(fs−3)+2px id line (~3×fs−2.5), and the window
-   cell adds 6+6px padding + .5px border, so the 2.9×fs+16px row stays just above
-   content height; thead th is 1.5×(fs−2)+6+6+.5 (~1.5×fs+9.5), rounded up to
+   (14/16/20px → 58/64/76 and 33/36/42). Box model: the session cell stacks a
+   1.5×(fs−1) title line plus a 1.5×(fs−3)+2px id line, and the token cell stacks
+   a 1.5×(fs−1) value, a 1.5×(fs−3) split line and its 4+4px bar; the window cell
+   adds 6+6px padding + .5px border, so the 3×fs+16px row stays just above the
+   tallest (token) content height. thead th is 1.5×(fs−3)+6+6+.5, rounded up to
    1.5×fs+12. max-height is exactly 10 rows + the header, so the sticky header
    plus ten rows fill the window with no clipping or overlap. */
 .ss-table-window{max-height:calc(var(--ss-session-row,56px) * 10 + var(--ss-table-head,33px));overflow-y:auto;scrollbar-gutter:stable;overscroll-behavior:contain}
@@ -362,8 +363,8 @@ window.__ModuleLoader__.load({
 .ss-table-window tbody tr{height:var(--ss-session-row,56px)}
 .ss-table-window tbody td{height:var(--ss-session-row,56px);padding-top:6px;padding-bottom:6px;vertical-align:middle}
 .ss-table-window .ss-session-title{display:-webkit-box;-webkit-line-clamp:1;-webkit-box-orient:vertical;overflow:hidden}
-.ss-table{width:100%;border-collapse:collapse;font-size:var(--ds-fs);line-height:1.5}
-.ss-table th{color:var(--dsw-alias-label-tertiary);font-weight:400;text-align:left;padding:6px;border-bottom:.5px solid var(--dsw-alias-border-l3);white-space:nowrap;font-size:calc(var(--ds-fs) - 2px)}
+.ss-table{width:100%;border-collapse:collapse;font-size:calc(var(--ds-fs) - 1px);line-height:1.5}
+.ss-table th{color:var(--dsw-alias-label-tertiary);font-weight:400;text-align:left;padding:6px;border-bottom:.5px solid var(--dsw-alias-border-l3);white-space:nowrap;font-size:calc(var(--ds-fs) - 3px)}
 .ss-table td{padding:8px 6px;border-bottom:.5px solid var(--dsw-alias-border-l4);vertical-align:top}
 .ss-table tbody tr:last-child td{border-bottom:0}
 .ss-table tbody tr:hover{background:var(--dsw-alias-interactive-bg-hover)}
@@ -373,11 +374,11 @@ window.__ModuleLoader__.load({
 .ss-session-id{display:block;color:var(--dsw-alias-label-caption);font-size:calc(var(--ds-fs) - 3px);line-height:1.5;margin-top:2px;overflow-wrap:anywhere}
 /* Archived marker: a quiet warm badge at the title's top-right. */
 .ss-archived-badge{margin-top:2px}
-.ss-split{color:var(--dsw-alias-label-secondary);white-space:normal}
-.ss-sort-arrow{font-size:calc(var(--ds-fs) - 2px);line-height:1}
+.ss-split{display:block;color:var(--dsw-alias-label-caption);font-size:calc(var(--ds-fs) - 3px);line-height:1.5;white-space:normal}
+.ss-sort-arrow{font-size:calc(var(--ds-fs) - 3px);line-height:1}
 .ss-table-foot{display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap;margin-top:8px}
-.ss-table-note{margin:0;color:var(--dsw-alias-label-tertiary);font-size:calc(var(--ds-fs) - 2px)}
-.ss-more-arrow{font-size:calc(var(--ds-fs) - 2px);line-height:1}
+.ss-table-note{margin:0;color:var(--dsw-alias-label-tertiary);font-size:calc(var(--ds-fs) - 3px)}
+.ss-more-arrow{font-size:calc(var(--ds-fs) - 3px);line-height:1}
 .ss-model-list{list-style:none;margin:0;padding:0;display:flex;flex-direction:column;gap:12px}
 .ss-model{display:grid;grid-template-columns:auto minmax(0,1fr) 96px;gap:12px;align-items:start;min-width:0}
 .ss-model-mark{width:8px;height:8px;border-radius:var(--dsw-radius-xs);margin-top:8px;background:var(--ss-series)}
@@ -385,22 +386,23 @@ window.__ModuleLoader__.load({
 .ss-model-spark{display:block;width:96px;height:28px;margin-top:4px;overflow:visible}
 .ss-model-spark-line{fill:none;stroke:var(--ss-series);stroke-width:1.5;stroke-linecap:round;stroke-linejoin:round}
 .ss-model-head{display:flex;justify-content:space-between;gap:12px;align-items:baseline}
-.ss-model-name{font-size:var(--ds-fs);overflow-wrap:anywhere}
-.ss-model-share{color:var(--dsw-alias-label-secondary);font-size:calc(var(--ds-fs) - 2px);white-space:nowrap;font-variant-numeric:tabular-nums}
-.ss-model-meta{display:flex;flex-wrap:wrap;gap:4px 12px;color:var(--dsw-alias-label-tertiary);font-size:calc(var(--ds-fs) - 2px)}
+.ss-model-name{font-size:calc(var(--ds-fs) - 1px);overflow-wrap:anywhere}
+.ss-model-share{color:var(--dsw-alias-label-secondary);font-size:calc(var(--ds-fs) - 3px);white-space:nowrap;font-variant-numeric:tabular-nums}
+.ss-model-meta{display:flex;flex-wrap:wrap;gap:4px 12px;color:var(--dsw-alias-label-tertiary);font-size:calc(var(--ds-fs) - 3px)}
+.ss-model-foot{display:flex;justify-content:center;margin-top:12px}
 .ss-share-bar{height:6px;border-radius:var(--dsw-radius-xs);background:var(--dsw-alias-bg-layer-2);overflow:hidden}
 .ss-share-fill{height:100%;border-radius:var(--dsw-radius-xs);background:var(--ss-series)}
 .ss-stats{display:grid;grid-template-columns:repeat(auto-fit,minmax(160px,1fr));gap:12px 20px;margin:0}
 .ss-stat{min-width:0;margin:0}
-.ss-stat-label{margin:0;color:var(--dsw-alias-label-tertiary);font-size:calc(var(--ds-fs) - 2px);line-height:1.5}
-.ss-stat-value{margin:0;font-size:var(--ds-fs);font-weight:500;line-height:1.5;font-variant-numeric:tabular-nums;overflow-wrap:anywhere}
+.ss-stat-label{margin:0;color:var(--dsw-alias-label-tertiary);font-size:calc(var(--ds-fs) - 3px);line-height:1.5}
+.ss-stat-value{margin:0;font-size:calc(var(--ds-fs) - 1px);font-weight:500;line-height:1.5;font-variant-numeric:tabular-nums;overflow-wrap:anywhere}
 .ss-stat-note{display:block;color:var(--dsw-alias-label-caption);font-size:calc(var(--ds-fs) - 3px);font-weight:400;line-height:1.5}
-.ss-subhead{margin:16px 0 6px;color:var(--dsw-alias-label-secondary);font-size:calc(var(--ds-fs) - 2px);font-weight:400}
+.ss-subhead{margin:16px 0 6px;color:var(--dsw-alias-label-secondary);font-size:calc(var(--ds-fs) - 3px);font-weight:400}
 .ss-spark-plot{display:block;width:100%;height:56px;background:var(--dsw-alias-bg-base);border-radius:var(--dsw-radius-sm);padding:2px}
 /* CPU history is a chart series, so it uses series colors, not status colors (§2.6/§2.10). */
 .ss-spark-process{fill:none;stroke:var(--ss-series-1);stroke-width:1.5}
 .ss-spark-system{fill:none;stroke:var(--ss-series-3);stroke-width:1.5}
-.ss-spark-legend{display:flex;gap:16px;align-items:center;margin-top:6px;color:var(--dsw-alias-label-tertiary);font-size:calc(var(--ds-fs) - 2px)}
+.ss-spark-legend{display:flex;gap:16px;align-items:center;margin-top:6px;color:var(--dsw-alias-label-tertiary);font-size:calc(var(--ds-fs) - 3px)}
 .ss-spark-peak{margin-left:auto;white-space:nowrap}
 .ss-spark-swatch-process{background:var(--ss-series-1)}
 .ss-spark-swatch-system{background:var(--ss-series-3)}
@@ -408,49 +410,35 @@ window.__ModuleLoader__.load({
 .ss-log-entry{border-bottom:.5px solid var(--dsw-alias-border-l4);padding-bottom:8px}
 .ss-log-entry:last-child{border-bottom:0;padding-bottom:0}
 .ss-log-row{display:flex;justify-content:space-between;gap:16px;align-items:baseline}
-.ss-log-label{color:var(--dsw-alias-label-tertiary);font-size:calc(var(--ds-fs) - 2px);flex:none}
-.ss-log-value{font-variant-numeric:tabular-nums;font-size:var(--ds-fs);text-align:right;min-width:0;overflow-wrap:anywhere}
+.ss-log-label{color:var(--dsw-alias-label-tertiary);font-size:calc(var(--ds-fs) - 3px);flex:none}
+.ss-log-value{font-variant-numeric:tabular-nums;font-size:calc(var(--ds-fs) - 1px);text-align:right;min-width:0;overflow-wrap:anywhere}
 .ss-log-meta{color:var(--dsw-alias-label-caption);font-size:calc(var(--ds-fs) - 3px);display:block}
 .ss-log-block{display:flex;flex-direction:column;gap:4px}
 .ss-log-list{list-style:none;margin:0;padding:0;display:flex;flex-direction:column;gap:4px}
-.ss-log-list li{display:flex;justify-content:space-between;gap:12px;color:var(--dsw-alias-label-secondary);font-size:calc(var(--ds-fs) - 2px)}
+.ss-log-list li{display:flex;justify-content:space-between;gap:12px;color:var(--dsw-alias-label-secondary);font-size:calc(var(--ds-fs) - 3px)}
 .ss-log-name{overflow-wrap:anywhere}
 .ss-log-bytes{white-space:nowrap;font-variant-numeric:tabular-nums}
 .ss-log-home{margin:0 0 12px;color:var(--dsw-alias-label-caption);font-size:calc(var(--ds-fs) - 3px);overflow-wrap:anywhere}
 .ss-state-wrap{display:flex;flex-direction:column;gap:16px}
-.ss-skeleton-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:12px}
+.ss-skeleton-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:16px}
 /* §7.10: the first-load skeleton mirrors the tallest summary card
    (label / value / hint / progress / hint), so its height follows the host
    font size and the swap to real cards does not jump. */
 .ss-skeleton{display:flex;flex-direction:column;gap:6px;animation:ss-pulse 1.4s ease-in-out infinite}
 .ss-skeleton-row{display:block;border-radius:var(--dsw-radius-xs);background:var(--dsw-alias-bg-layer-2)}
-.ss-skeleton-label{width:40%;height:1.5em;font-size:calc(var(--ds-fs) - 2px)}
-.ss-skeleton-value{width:64%;height:1.35em;font-size:calc(var(--ds-fs) + 6px)}
-.ss-skeleton-hint{width:85%;height:1.5em;font-size:calc(var(--ds-fs) - 2px)}
+.ss-skeleton-label{width:40%;height:1.5em;font-size:calc(var(--ds-fs) - 3px)}
+.ss-skeleton-value{width:64%;height:1.35em;font-size:calc(var(--ds-fs) + 2px)}
+.ss-skeleton-hint{width:85%;height:1.5em;font-size:calc(var(--ds-fs) - 3px)}
 .ss-skeleton-bar{width:100%;height:6px;margin:4px 0}
 .ss-skeleton-line{height:56px;border-radius:var(--dsw-radius-md);border:.5px solid var(--dsw-alias-border-l4);background:var(--dsw-alias-bg-layer-1)}
 @keyframes ss-pulse{0%,100%{opacity:.6}50%{opacity:1}}
 @keyframes ss-spin{to{transform:rotate(360deg)}}
 .ss-spin{animation:ss-spin .9s linear infinite}
 .ss-icon{display:block}
-.ss-icon-accent{fill:var(--dsw-alias-brand-primary);stroke:var(--dsw-alias-brand-primary)}
-/* Sidebar foot entry (§4.1/§7.1): a host row keeps its 36px height; the lg
-   button's own type and line-height come from .ss-btn[data-size="lg"]. */
-.ss-footer-entry{--ds-fs:var(--dsh-content-font-size,14px)}
-.ss-btn.ss-footer-entry{width:100%;height:36px;padding:0 10px;border:0;border-radius:var(--dsw-radius-sm);background:transparent;color:var(--dsw-alias-label-secondary);justify-content:flex-start}
-.ss-btn.ss-footer-entry:hover{background:var(--dsw-alias-interactive-bg-hover);color:var(--dsw-alias-label-primary)}
-/* The host cell is 36px tall; the icon button keeps the §7.2 32×32 hit area and
-   centers inside the row instead of stretching to 36×36. */
-.ss-icon-btn.ss-footer-entry{width:32px;height:32px;align-self:center;color:var(--dsw-alias-label-secondary)}
-.ss-icon-btn.ss-footer-entry:hover{background:var(--dsw-alias-interactive-bg-hover);color:var(--dsw-alias-label-primary)}
-/* Selected shares the hover fill (§2.5), only the label color is promoted; the
-   more specific .ss-btn/.ss-icon-btn :hover rules above still win on hover. */
-.ss-footer-entry[data-active="true"]{background:var(--dsw-alias-interactive-bg-hover);color:var(--dsw-alias-label-primary)}
-.ss-footer-label{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 @media (max-width:960px){.ss-summary-grid{grid-template-columns:repeat(2,minmax(0,1fr))}.ss-stats{grid-template-columns:repeat(2,minmax(0,1fr))}}
-@media (max-width:720px){.ss-table th:nth-child(5),.ss-table td:nth-child(5){display:none}.ss-heading{align-items:flex-start;flex-wrap:wrap}.ss-heading-actions{flex-wrap:wrap}.ss-summary-grid{grid-template-columns:1fr}.ss-stats{grid-template-columns:1fr}.ss-model{grid-template-columns:auto minmax(0,1fr)}.ss-model-spark{display:none}.ss-yaxis{width:32px}.ss-xaxis{margin-left:calc(32px + 12px)}.ss-plot-wrap,.ss-yaxis{height:170px}}
+@media (max-width:720px){.ss-table th:nth-child(6),.ss-table td:nth-child(6){display:none}.ss-heading{align-items:flex-start;flex-wrap:wrap}.ss-heading-actions{flex-wrap:wrap}.ss-summary-grid{grid-template-columns:1fr}.ss-stats{grid-template-columns:1fr}.ss-model{grid-template-columns:auto minmax(0,1fr)}.ss-model-spark{display:none}.ss-yaxis{width:32px}.ss-xaxis{margin-left:calc(32px + 12px)}.ss-plot-wrap,.ss-yaxis{height:170px}}
 @media (max-width:520px){.ss-session-id{display:none}.ss-log-home{display:none}.ss-updated{display:none}.ss-heading-actions{gap:8px}}
-@media (prefers-reduced-motion:reduce){.ss-guide,.ss-dot,.ss-tip,.ss-btn,.ss-icon-btn,.ss-segment,.ss-footer-entry,.ss-progress-fill,.ss-skeleton,.ss-spin,.ss-tooltip-layer[data-plugin="@chengze/dsh-session-stats"] .ss-tooltip{transition:none;animation:none}}
+@media (prefers-reduced-motion:reduce){.ss-guide,.ss-dot,.ss-tip,.ss-btn,.ss-icon-btn,.ss-segment,.ss-progress-fill,.ss-skeleton,.ss-spin,.ss-tooltip-layer[data-plugin="@chengze/dsh-session-stats"] .ss-tooltip{transition:none;animation:none}}
 `
 
     /* ------------------------------------------------------------------ *
@@ -776,12 +764,40 @@ window.__ModuleLoader__.load({
 
     /* ------------------------------------------------------------------ *
      * Icons (§8): 24 viewBox, 1.8 stroke, round caps, decorative.         *
-     * Only two sizes exist: 16 (controls) and 20 (empty states).          *
+     * Sizes are 16 (controls), 18 (collapsed sidebar rail) and 20 (empty  *
+     * states); the panellist icon lets the host pick 16 or 18.            *
      * ------------------------------------------------------------------ */
 
-    function StatsIcon(props) {
+    /**
+     * Sidebar panellist glyph (`sidebar.panellist`). The host owns the row,
+     * its label and its colors; this component renders only the SVG and
+     * returns to the Conversation when the active panel is clicked again.
+     * The click is intercepted in the capture phase on the host button, so
+     * the host's own open-panel handler never runs for an active entry.
+     */
+    function PanellistIcon(props) {
       const source = props !== null && typeof props === 'object' ? props : {}
-      const size = source.size === 20 ? 20 : 16
+      // The owner asks for 16px in the wide sidebar and 18px in the collapsed rail.
+      const size = source.size === 18 ? 18 : 16
+      const active = source.active === true
+      const togglePanel = typeof source.togglePanel === 'function' ? source.togglePanel : null
+      const ref = useRef(null)
+      useEffect(() => {
+        const node = ref.current
+        if (node === null || node === undefined || typeof node.closest !== 'function') return undefined
+        const button = node.closest('button')
+        if (button === null) return undefined
+        const onClick = (event) => {
+          if (!active) return
+          event.preventDefault()
+          event.stopPropagation()
+          if (togglePanel !== null) togglePanel(true)
+        }
+        button.addEventListener('click', onClick, true)
+        return () => {
+          button.removeEventListener('click', onClick, true)
+        }
+      }, [active, togglePanel])
       return h(
         'svg',
         {
@@ -799,7 +815,7 @@ window.__ModuleLoader__.load({
         },
         h('rect', { x: 3.5, y: 13, width: 4, height: 7.5, rx: 1.2 }),
         h('rect', { x: 10, y: 9, width: 4, height: 11.5, rx: 1.2 }),
-        h('rect', { x: 16.5, y: 4.5, width: 4, height: 16, rx: 1.2, className: 'ss-icon-accent' }),
+        h('rect', { ref: ref, x: 16.5, y: 4.5, width: 4, height: 16, rx: 1.2 }),
       )
     }
 
@@ -1204,45 +1220,6 @@ window.__ModuleLoader__.load({
         ),
       )
     }
-
-    /**
-     * Sidebar-foot entry (`sidebar.footer.action`), rendered directly above the
-     * account menu at the bottom of the sidebar. The owner hands it only `wide`;
-     * the panel title and the navigation callbacks come from the registration.
-     * The entry toggles: a second click on the already-open panel returns to the
-     * Conversation (`layout.selectPanel(null)`). Collapsed it is a pure icon and
-     * therefore carries the singleton tooltip.
-     */
-    function FooterEntry(props) {
-      const source = props !== null && typeof props === 'object' ? props : {}
-      const wide = source.wide === true
-      const t = typeof source.t === 'function' ? source.t : (key) => key
-      const openPanel = typeof source.openPanel === 'function' ? source.openPanel : () => {}
-      const togglePanel = typeof source.togglePanel === 'function' ? source.togglePanel : null
-      const usePanelInfo = source.usePanelInfo
-      const active = typeof usePanelInfo === 'function'
-        ? usePanelInfo((info) => info !== null && typeof info === 'object' && info.activePanelId === PANEL_ID) === true
-        : false
-      const onClick = () => {
-        if (togglePanel !== null) togglePanel(active)
-        else openPanel()
-      }
-      const label = t('panel.title')
-      if (!wide) {
-        return h(
-          SsIconButton,
-          { name: 'footer-entry', label: label, pressed: active, active: active, onClick: onClick },
-          h(StatsIcon, null),
-        )
-      }
-      return h(
-        SsButton,
-        { name: 'footer-entry', size: 'lg', variant: 'ghost', label: label, pressed: active, active: active, onClick: onClick },
-        h(StatsIcon, null),
-        h('span', { className: 'ss-footer-label' }, label),
-      )
-    }
-
     /* ------------------------------------------------------------------ *
      * Shared state surfaces (§7.10).                                      *
      * ------------------------------------------------------------------ */
@@ -2001,17 +1978,17 @@ window.__ModuleLoader__.load({
             h('span', { className: 'ss-num-main' }, fmt.compact(session.total)),
             h(
               'span',
+              { className: 'ss-split' },
+              fmt.compact(session.input) + ' / ' + fmt.compact(session.output) + ' / ' + fmt.compact(session.cacheRead),
+            ),
+            h(
+              'span',
               { className: 'ss-row-bar', 'aria-hidden': 'true' },
               h('span', {
                 className: 'ss-row-bar-fill',
                 style: { width: (maxSessionTokens > 0 ? clamp01(session.total / maxSessionTokens) * 100 : 0) + '%' },
               }),
             ),
-          ),
-          h(
-            'td',
-            { className: 'ss-num ss-split' },
-            fmt.compact(session.input) + ' / ' + fmt.compact(session.output) + ' / ' + fmt.compact(session.cacheRead),
           ),
           h('td', { className: 'ss-num' }, fmt.money(session.cost)),
           h('td', { className: 'ss-num' }, fmt.bytes(session.logBytes)),
@@ -2036,7 +2013,6 @@ window.__ModuleLoader__.load({
               h('th', { scope: 'col' }, t('table.created')),
               h('th', { scope: 'col', className: 'ss-num' }, t('table.requests')),
               h('th', { scope: 'col', className: 'ss-num' }, t('table.tokens')),
-              h('th', { scope: 'col', className: 'ss-num' }, t('table.split')),
               h('th', { scope: 'col', className: 'ss-num' }, t('table.cost')),
               h('th', { scope: 'col', className: 'ss-num' }, t('table.logSize')),
             ),
@@ -2103,6 +2079,8 @@ window.__ModuleLoader__.load({
       const fmt = props.fmt
       const view = props.modelView
       const days = props.days
+      /** The list starts collapsed; every "more" press reveals another fixed batch. */
+      const [visibleCount, setVisibleCount] = useState(MODELS_COLLAPSED_ROWS)
       const head = h(
         'div',
         { className: 'ss-card-head' },
@@ -2118,7 +2096,33 @@ window.__ModuleLoader__.load({
         return h('section', { className: 'ss-card', 'aria-label': t('models.title') }, head, h(SsEmptyState, { message: t('models.empty') }))
       }
 
-      const rows = view.rows.map((row) => {
+      // Preset or stale state may not be numeric; fall back to the collapsed batch.
+      const shownCount = typeof visibleCount === 'number' && Number.isFinite(visibleCount)
+        ? Math.min(Math.max(visibleCount, MODELS_COLLAPSED_ROWS), view.rows.length)
+        : Math.min(MODELS_COLLAPSED_ROWS, view.rows.length)
+      const shownRows = view.rows.slice(0, shownCount)
+      const more = shownCount < view.rows.length
+        ? h(
+            'div',
+            { className: 'ss-model-foot' },
+            h(
+              SsButton,
+              {
+                name: 'models-more',
+                size: 'sm',
+                variant: 'secondary',
+                expanded: shownCount > MODELS_COLLAPSED_ROWS,
+                onClick: () => setVisibleCount((count) => (
+                  (typeof count === 'number' && Number.isFinite(count) ? count : MODELS_COLLAPSED_ROWS) + MODELS_COLLAPSED_ROWS
+                )),
+              },
+              h('span', null, t('sessions.more')),
+              h('span', { className: 'ss-more-arrow', 'aria-hidden': 'true' }, '\u2193'),
+            ),
+          )
+        : null
+
+      const rows = shownRows.map((row) => {
         const share = view.totalTokens > 0 ? clamp01(row.tokens / view.totalTokens) : 0
         const percent = clamp(share * 100, 0, 100)
         return h(
@@ -2163,6 +2167,7 @@ window.__ModuleLoader__.load({
         { className: 'ss-card', 'aria-label': t('models.title') },
         head,
         h('ul', { className: 'ss-model-list' }, rows),
+        more,
       )
     }
 
@@ -2647,25 +2652,18 @@ window.__ModuleLoader__.load({
 
         ctx.effect(
           () =>
-            ctx.slots.inject('sidebar.footer.action', () =>
-              ctx.slots.register(
-                {
-                  name: 'sidebar.footer.action',
-                  id: PANEL_ID,
-                  order: 10,
-                  locale: NS,
-                  label: () => t('panel.title'),
-                  inject: () => ({
-                    t: t,
-                    openPanel: () => ctx.layout.selectPanel(PANEL_ID),
-                    // `null` returns to the Conversation, so the same entry closes the panel.
-                    togglePanel: (active) => ctx.layout.selectPanel(active ? null : PANEL_ID),
-                  }),
-                },
-                FooterEntry,
-              ),
+            ctx.slots.inject('sidebar.panellist', () =>
+              ctx.slots.register({
+                name: 'sidebar.panellist',
+                id: PANEL_ID,
+                order: 30,
+                locale: NS,
+                label: () => t('panel.title'),
+                // `null` returns to the Conversation, so the icon can close its own panel.
+                inject: () => ({ togglePanel: (active) => ctx.layout.selectPanel(active ? null : PANEL_ID) }),
+              }, PanellistIcon),
             ),
-          'session-stats: sidebar footer entry',
+          'session-stats: sidebar panel entry',
         )
 
         // Warm both payloads as soon as the panel's module is live: the first open

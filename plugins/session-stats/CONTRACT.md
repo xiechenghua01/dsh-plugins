@@ -49,29 +49,29 @@ Host pages also use these non-alias tokens freely (they are theme-defined):
 ### 2.1 字号接入（font-size integration）
 
 - **唯一字号源**：字号只来自 `--ds-fs`，定义固定为
-  `--ds-fs: var(--dsh-content-font-size, 14px)`。页面根节点 `.ss-page` 与侧栏入口根节点
-  `.ss-footer-entry` 各自定义同名变量，均指向同一宿主变量；所有字号由 `--ds-fs` 派生
-  （design.md §3.3），组件规则中不得出现固定 px 字号。
+  `--ds-fs: var(--dsh-content-font-size, 14px)`，只定义在页面根节点 `.ss-page` 上；
+  所有字号由 `--ds-fs` 派生（design.md §3.3），组件规则中不得出现固定 px 字号。
 - **宿主契约**：宿主主题运行时把 `ctx.theme.getTheme().fontSizes.text`（10–22，默认 14）
   写入 `document.body.style['--dsh-content-font-size']`，并在 `theme/change` 时更新。
   插件不通过 Host 路由读取字号，也不轮询 profile，只消费该继承变量；宿主改字号后已挂载的
   页面与浮层直接跟随，无需重开面板。
-- **七档阶梯**（`fs` = `--ds-fs`）：
+- **字号阶梯**（`fs` = `--ds-fs`）：本面板按用户要求整体比 design.md §3.3 的默认档位
+  下移一档；偏离范围与到期条件登记在 design.md §13.2。
 
   | 档位 | 用途 |
   | --- | --- |
-  | `fs + 6px` | 页面主标题 |
-  | `fs + 2px` | 区块标题 |
-  | `fs + 1px` | 弹窗 / 抽屉标题 |
-  | `fs` | 正文、大号按钮、Tab、表单 Label |
-  | `fs - 1px` | 次要：列表副标题、输入框、菜单项 |
-  | `fs - 2px` | 辅助：徽章、时间、摘要、Tooltip |
-  | `fs - 3px` | 弱化：图表轴标签、极弱提示 |
+  | `fs + 2px` | 页面主标题、摘要数值 |
+  | `fs` | 区块标题、正文、大号按钮、Tab、表单 Label |
+  | `fs - 1px` | 次要：表格正文、列表副标题、输入框、菜单项 |
+  | `fs - 2px` | 辅助：徽章、时间、摘要标签、Tooltip |
+  | `fs - 3px` | 弱化：表头、图表轴标签、极弱提示 |
 
 - **浮层**：Tooltip 等挂到 `<body>` 的浮层在显示前从所属根节点读取当前 `--ds-fs`，
   不得使用创建时的快照；显示期间持续跟随宿主字号（design.md §3.7）。
-- **侧栏入口**：`sidebar.footer.action` 的 owner 只传 `wide`，不传 `size`；入口图标固定
-  16×16，仅 `wide` 为真时渲染标题文字。
+- **侧栏入口**：注册在 `sidebar.panellist`（id 等于主面板 key `session-stats`，order 30）。
+  宿主渲染整行按钮、文字与字号（与「技能」等全局面板一致）；插件只提供 `{ size, active }`
+  图标，`size` 为 16、折叠态 18。`active` 为真时在宿主按钮上以捕获阶段接管 click，调用
+  `layout.selectPanel(null)` 返回 Conversation；否则由宿主打开面板。
 
 ## 3. Host half (`index.js`) — required shape
 
@@ -367,26 +367,20 @@ ctx.slots.inject('main', () => ctx.slots.register({
   inject: () => ({ t, load: fetchJson }),
 }, StatsPage))
 ```
-5. Register the sidebar-foot entry (id **must** equal the main key). The account menu
-   (`settings.launcher`) has no list extension point, so the entry lives in
-   `sidebar.footer.action`, directly above the account menu at the sidebar foot:
+5. Register the sidebar entry into `sidebar.panellist` (id **must** equal the main key). The
+   sidebar owns the row button, its label and its font size; the plugin renders the icon only:
 ```js
-ctx.slots.inject('sidebar.footer.action', () => ctx.slots.register({
-  name: 'sidebar.footer.action', id: 'session-stats', order: 10,
+ctx.slots.inject('sidebar.panellist', () => ctx.slots.register({
+  name: 'sidebar.panellist', id: 'session-stats', order: 30,
   locale: 'session-stats', label: () => t('panel.title'),
-  inject: () => ({
-    t,
-    openPanel: () => ctx.layout.selectPanel('session-stats'),
-    togglePanel: (active) => ctx.layout.selectPanel(active ? null : 'session-stats'),
-  }),
-}, FooterEntry))
+  inject: () => ({ togglePanel: (active) => ctx.layout.selectPanel(active ? null : 'session-stats') }),
+}, PanellistIcon))
 ```
-The client plugin therefore injects `layout` in addition to `slots` and `locale`.
-`FooterEntry` receives the owner's `{ wide }` plus `{ t, openPanel, togglePanel }` and the
-standard `usePanelInfo` hook: wide renders the icon and the panel title, the 56px rail renders
-the icon only. The entry is a toggle — `usePanelInfo((info) => info.activePanelId === 'session-stats')`
-drives `aria-pressed`/`data-active`, and a second click calls `layout.selectPanel(null)` to
-return to the Conversation instead of re-selecting the same panel.
+`PanellistIcon` receives the owner's `{ size, active }` plus `{ togglePanel }`: it renders a
+16×16 SVG (18 in the collapsed rail) and nothing else. When `active` is true it intercepts the
+host row's click in the capture phase (`closest('button')`, `preventDefault` + `stopPropagation`)
+and calls `togglePanel(true)`, so a second click returns to the Conversation; otherwise the host
+opens the panel. The client injects `layout` in addition to `slots` and `locale`.
 
 Data loading: `fetch('session-stats/overview?days=' + days)` — **relative** URL, no leading
 slash (the document mount prefix is preserved), `headers: { accept: 'application/json' }`.
@@ -413,7 +407,7 @@ section.ss-page  (--ds-fs:var(--dsh-content-font-size,14px);
       header.ss-heading (display:flex; justify-content:space-between; align-items:center;
                          gap:16px; padding-top:calc(28px + var(--dsh-frame-top-clearance, 0px));
                          margin-bottom:24px)
-        h1 (font-size:calc(var(--ds-fs) + 6px); font-weight:500; line-height:1.35; margin:0)
+        h1 (font-size:calc(var(--ds-fs) + 2px); font-weight:500; line-height:1.35; margin:0)
         right side: last-updated text + Refresh button
       ...sections...
 ```
@@ -475,7 +469,7 @@ chart.modeModel  chart.modeType  chart.total  chart.other  chart.legend
 chart.empty  chart.allHidden  chart.input  chart.output  chart.cacheRead
 sessions.title  sessions.empty  sessions.showing  sessions.more  sessions.archived
 table.session  table.created
-table.requests  table.tokens  table.split  table.cost  table.logSize  table.sortCost
+table.requests  table.tokens  table.cost  table.logSize  table.sortCost
 table.sortTokens  table.sortSize  table.untitled  models.title  models.empty
 models.share  models.window  models.shareTokens  models.sparkline  runtime.title
 runtime.process  runtime.system  runtime.cores  runtime.load  runtime.rss

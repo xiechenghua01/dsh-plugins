@@ -1,11 +1,39 @@
     /* ------------------------------------------------------------------ *
      * Icons (§8): 24 viewBox, 1.8 stroke, round caps, decorative.         *
-     * Only two sizes exist: 16 (controls) and 20 (empty states).          *
+     * Sizes are 16 (controls), 18 (collapsed sidebar rail) and 20 (empty  *
+     * states); the panellist icon lets the host pick 16 or 18.            *
      * ------------------------------------------------------------------ */
 
-    function StatsIcon(props) {
+    /**
+     * Sidebar panellist glyph (`sidebar.panellist`). The host owns the row,
+     * its label and its colors; this component renders only the SVG and
+     * returns to the Conversation when the active panel is clicked again.
+     * The click is intercepted in the capture phase on the host button, so
+     * the host's own open-panel handler never runs for an active entry.
+     */
+    function PanellistIcon(props) {
       const source = props !== null && typeof props === 'object' ? props : {}
-      const size = source.size === 20 ? 20 : 16
+      // The owner asks for 16px in the wide sidebar and 18px in the collapsed rail.
+      const size = source.size === 18 ? 18 : 16
+      const active = source.active === true
+      const togglePanel = typeof source.togglePanel === 'function' ? source.togglePanel : null
+      const ref = useRef(null)
+      useEffect(() => {
+        const node = ref.current
+        if (node === null || node === undefined || typeof node.closest !== 'function') return undefined
+        const button = node.closest('button')
+        if (button === null) return undefined
+        const onClick = (event) => {
+          if (!active) return
+          event.preventDefault()
+          event.stopPropagation()
+          if (togglePanel !== null) togglePanel(true)
+        }
+        button.addEventListener('click', onClick, true)
+        return () => {
+          button.removeEventListener('click', onClick, true)
+        }
+      }, [active, togglePanel])
       return h(
         'svg',
         {
@@ -23,7 +51,7 @@
         },
         h('rect', { x: 3.5, y: 13, width: 4, height: 7.5, rx: 1.2 }),
         h('rect', { x: 10, y: 9, width: 4, height: 11.5, rx: 1.2 }),
-        h('rect', { x: 16.5, y: 4.5, width: 4, height: 16, rx: 1.2, className: 'ss-icon-accent' }),
+        h('rect', { ref: ref, x: 16.5, y: 4.5, width: 4, height: 16, rx: 1.2 }),
       )
     }
 

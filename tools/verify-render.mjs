@@ -250,7 +250,9 @@ async function main() {
     check('one tooltip per day', (found.classCounts.get('ss-tip') || 0) === buckets.length)
     check('series lines rendered', (found.classCounts.get('ss-series-line') || 0) === expected.count, `${found.classCounts.get('ss-series-line') || 0} lines, expected ${expected.count}`)
     check('legend entries rendered', (found.classCounts.get('ss-legend-button') || 0) === expected.count)
-    check('model rows and sparklines rendered', (found.classCounts.get('ss-model') || 0) === expected.count && (found.classCounts.get('ss-model-spark') || 0) === expected.count)
+    const collapsedModels = Math.min(5, expected.count)
+    check('model list starts with five rows', (found.classCounts.get('ss-model') || 0) === collapsedModels && (found.classCounts.get('ss-model-spark') || 0) === collapsedModels, `${found.classCounts.get('ss-model') || 0} rows of ${expected.count}`)
+    check('model list offers show-more while rows remain', (found.classCounts.get('ss-models-more') || 0) === (expected.count > 5 ? 1 : 0))
     check('session table starts with five rows', sessionRowCount(tree) === Math.min(5, payloads.sessions), `${sessionRowCount(tree)} rows of ${payloads.sessions}`)
     check(
       'collapsed table offers show-more only when more rows exist',
@@ -278,6 +280,20 @@ async function main() {
     check('tooltips show the total label', tooltipText.includes('总计'))
     check('no untranslated key leaked into the DOM', !/\b(panel|summary|chart|models|table|runtime|logs)\.[a-zA-Z]+\b/.test(found.text), (found.text.match(/\b(panel|summary|chart|models|table|runtime|logs)\.[a-zA-Z]+\b/) || [''])[0])
     check('no NaN / undefined / [object Object] in text', !/NaN|undefined|\[object Object\]/.test(found.text))
+  }
+
+  console.log('\n== 3b. expanded model list')
+  const modelsExpandedPreset = readyPreset(payloads)
+  modelsExpandedPreset[PRESET_INDEX.chartMode] = 'model'
+  modelsExpandedPreset[PRESET_INDEX.hiddenSeries] = []
+  modelsExpandedPreset[PRESET_INDEX.modelsVisibleCount] = 999
+  try {
+    const modelsTree = renderState(definition, modelsExpandedPreset)
+    const found = collect(modelsTree)
+    check('expanded model list renders every model', (found.classCounts.get('ss-model') || 0) === expected.count, `${found.classCounts.get('ss-model') || 0} rows of ${expected.count}`)
+    check('expanded model list hides show-more', (found.classCounts.get('ss-models-more') || 0) === 0)
+  } catch (error) {
+    bad('expanded model list renders', error.message)
   }
 
   console.log('\n== 4. expanded session table')

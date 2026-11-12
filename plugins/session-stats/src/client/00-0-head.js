@@ -12,6 +12,8 @@
     /** Collapsed session table rows; the expanded table is a fixed ten-row window. */
     const SESSIONS_COLLAPSED_ROWS = 5
     const SESSIONS_WINDOW_ROWS = 10
+    /** The model list shows this many rows at first; each "more" click adds another batch. */
+    const MODELS_COLLAPSED_ROWS = 5
     const DEFAULT_LOCALE = 'zh-CN'
     const DASH = '\u2014'
 

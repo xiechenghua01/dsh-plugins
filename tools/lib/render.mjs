@@ -9,10 +9,10 @@ import { join } from 'node:path'
 /**
  * Positions of the values a hook preset feeds, in the order the components consume
  * them: StatsPage takes three useState (refresh token, overview state, system state)
- * before TrendSection takes its mode and hidden-series state, then SessionsSection
- * takes its sort key, sort direction and expanded state. Tests and the preview use
- * these names so adding a hook above a section fails visibly instead of silently
- * shifting the preset.
+ * before TrendSection takes its mode and hidden-series state, then ModelsSection takes
+ * its visible-row count, then SessionsSection takes its sort key, sort direction and
+ * expanded state. Tests and the preview use these names so adding a hook above a
+ * section fails visibly instead of silently shifting the preset.
  */
 export const PRESET_INDEX = {
   refreshToken: 0,
@@ -20,9 +20,10 @@ export const PRESET_INDEX = {
   systemState: 2,
   chartMode: 3,
   hiddenSeries: 4,
-  sessionsSortKey: 5,
-  sessionsDescending: 6,
-  sessionsExpanded: 7,
+  modelsVisibleCount: 5,
+  sessionsSortKey: 6,
+  sessionsDescending: 7,
+  sessionsExpanded: 8,
 }
 
 export function makeReact(preset) {

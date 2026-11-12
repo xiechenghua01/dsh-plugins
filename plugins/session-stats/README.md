@@ -8,7 +8,7 @@ logs: token usage, session counts, estimated cost and budget, a token timeline, 
 usage, CPU/memory runtime, and log footprint.
 
 - 包名：`@chengze/dsh-session-stats`，属于 [dsh-plugins](../../README.md) 仓库与插件索引源
-- 面板入口：侧边栏底部、账号菜单上方「会话统计」按钮（`sidebar.footer.action`，order 10）→ 主面板 `main` / key `session-stats`
+- 面板入口：侧边栏全局面板「技能」下方「会话统计」按钮（`sidebar.panellist`，order 30）→ 主面板 `main` / key `session-stats`
 - 数据来源：`ctx.sessionQuery` 读取的会话日志 + `ctx.sessionPersistence` 的日志体积 + `process`/`os` 采样
 - 两个受连接鉴权保护的路由：`GET /session-stats/overview`、`GET /session-stats/system`
 - 零 npm 依赖；浏览器半边由 `src/client/*.js` 分片经 `scripts/build-client.mjs` 拼接为单文件
@@ -18,18 +18,18 @@ usage, CPU/memory runtime, and log footprint.
 ## 界面与交互
 
 - 页头只保留标题与刷新操作，不设副标题；图表无固定说明文字，每日明细由 Tooltip 承担。
-- 字号跟随宿主设置（10–22，默认 14）：页面、图表、侧栏入口与 Tooltip 同步变化，无需重开面板。
+- 字号跟随宿主设置（10–22，默认 14）；面板文本整体比宿主基准下移一档，页面、图表与 Tooltip 同步变化，无需重开面板。侧栏入口的文字与字号由宿主渲染，与「技能」一致。
 - **每日 Token 趋势**：按模型的多曲线图（Top 6 + 其他），Y 轴自适应刻度、图例可点击
   隐藏/显示曲线；悬停（或 Tab 聚焦到某一天）显示当天总计与各模型明细（纯 CSS 交互，无需额外脚本）。
   图表模式 **按模型 / 按类型**（输入、输出、缓存读取）为二级胶囊控件。
 - **模型用量**：按近 30 天 Token 排序，颜色与趋势图一致，含请求数、成本、占比条与
-  每日迷你走势。
+  每日迷你走势；默认只列前 5 个模型，底部「查看更多」每次展开 5 行。
 - **概览卡**：总 Token 与估算成本卡内置每日迷你走势；预算卡按「周期已用 + 剩余天数 ×
   近 7 天日均」动态重算预算金额（配置金额只作初始参考），剩余不会长期为负，进度条展示
   已用占动态预算的比例。
 - **会话用量**：默认只列前 5 个会话，底部「查看更多」一次展开；展开后表格固定
-  10 行窗口高度，超出部分在表内滚动（表头吸顶）。排序（成本 / Token / 大小）为二级胶囊控件，
-  Token 列附加相对占比条，一眼看出各会话量级。
+  10 行窗口高度，超出部分在表内滚动（表头吸顶）。排序（成本 / Token / 大小）为二级胶囊控件；
+  表格为 6 列，Token 列附加相对占比条，输入/输出/缓存作为数值下方的小字保留。
   已归档会话在名称右上角显示橙色「已归档」小徽章（数据来自 `storages/workspace.json`），
   未归档会话不显示标记。
 - **运行状态 / 日志占用**：CPU 走势附峰值；日志四类占用各带相对占比条。
@@ -57,7 +57,7 @@ usage, CPU/memory runtime, and log footprint.
 插件已发布到 npm，可把下面的 target 交给 `plugin_manager`：
 
 ```text
-plugin_manager action=install_bundle target=@chengze/dsh-session-stats@1.4.0
+plugin_manager action=install_bundle target=@chengze/dsh-session-stats@1.5.0
 ```
 
 `pnpm run release` 会打印当前版本对应的完整 target。
@@ -133,7 +133,7 @@ node -e "import('./index.js').then(m => console.log(Object.keys(m).sort()))"
 ```
 
 安装后在 Harness 会话里用 `cordis_inspect_query`（Client `Slots.listSubTree`）确认
-`main` 槽位有 `session-stats` 占用者、`sidebar.footer.action` 有 `id: session-stats`；
+`main` 槽位有 `session-stats` 占用者、`sidebar.panellist` 有 `id: session-stats`（order 30）；
 用未鉴权的 `curl` 访问 `/session-stats/overview` 应返回 `401`（已注册且被鉴权门保护），
 未安装时是 `404`。
 

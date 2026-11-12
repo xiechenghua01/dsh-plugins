@@ -109,17 +109,17 @@
             h('span', { className: 'ss-num-main' }, fmt.compact(session.total)),
             h(
               'span',
+              { className: 'ss-split' },
+              fmt.compact(session.input) + ' / ' + fmt.compact(session.output) + ' / ' + fmt.compact(session.cacheRead),
+            ),
+            h(
+              'span',
               { className: 'ss-row-bar', 'aria-hidden': 'true' },
               h('span', {
                 className: 'ss-row-bar-fill',
                 style: { width: (maxSessionTokens > 0 ? clamp01(session.total / maxSessionTokens) * 100 : 0) + '%' },
               }),
             ),
-          ),
-          h(
-            'td',
-            { className: 'ss-num ss-split' },
-            fmt.compact(session.input) + ' / ' + fmt.compact(session.output) + ' / ' + fmt.compact(session.cacheRead),
           ),
           h('td', { className: 'ss-num' }, fmt.money(session.cost)),
           h('td', { className: 'ss-num' }, fmt.bytes(session.logBytes)),
@@ -144,7 +144,6 @@
               h('th', { scope: 'col' }, t('table.created')),
               h('th', { scope: 'col', className: 'ss-num' }, t('table.requests')),
               h('th', { scope: 'col', className: 'ss-num' }, t('table.tokens')),
-              h('th', { scope: 'col', className: 'ss-num' }, t('table.split')),
               h('th', { scope: 'col', className: 'ss-num' }, t('table.cost')),
               h('th', { scope: 'col', className: 'ss-num' }, t('table.logSize')),
             ),

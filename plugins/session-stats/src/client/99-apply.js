@@ -42,25 +42,18 @@
 
         ctx.effect(
           () =>
-            ctx.slots.inject('sidebar.footer.action', () =>
-              ctx.slots.register(
-                {
-                  name: 'sidebar.footer.action',
-                  id: PANEL_ID,
-                  order: 10,
-                  locale: NS,
-                  label: () => t('panel.title'),
-                  inject: () => ({
-                    t: t,
-                    openPanel: () => ctx.layout.selectPanel(PANEL_ID),
-                    // `null` returns to the Conversation, so the same entry closes the panel.
-                    togglePanel: (active) => ctx.layout.selectPanel(active ? null : PANEL_ID),
-                  }),
-                },
-                FooterEntry,
-              ),
+            ctx.slots.inject('sidebar.panellist', () =>
+              ctx.slots.register({
+                name: 'sidebar.panellist',
+                id: PANEL_ID,
+                order: 30,
+                locale: NS,
+                label: () => t('panel.title'),
+                // `null` returns to the Conversation, so the icon can close its own panel.
+                inject: () => ({ togglePanel: (active) => ctx.layout.selectPanel(active ? null : PANEL_ID) }),
+              }, PanellistIcon),
             ),
-          'session-stats: sidebar footer entry',
+          'session-stats: sidebar panel entry',
         )
 
         // Warm both payloads as soon as the panel's module is live: the first open
