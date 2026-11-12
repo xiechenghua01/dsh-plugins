@@ -46,8 +46,8 @@ Verified against DeepSeek Harness `0.2.1-rc.5` (the `dsh` tree shipped inside th
   a second or two — no restart, no explicit reload call.
 
 - A patch entry is either an `insert` list item (a new row) or an override (same `id` as an
-  existing row). This plugin only ever writes `insert` items, plus `disabled` overrides on its own
-  inserts.
+  existing row). This plugin only ever writes MCP-client `insert` items (including a `disabled` key
+  on them); it does not write override entries or touch non-MCP rows.
 
 - Loader row ids are globally unique in the composition. This plugin names its rows
   `mcp-g-<slug>` (global) and `mcp-w-<slug>` (workspace), where `<slug>` is the lowercased
@@ -281,7 +281,10 @@ out of `probeServer`; a rejected promise from a sub-step becomes `ok: false`. Th
 must be killed on every path (success, error, timeout, abort) and its `exit`/`close` awaited
 briefly so no orphan process survives.
 
-`toolNames` is capped at 50 entries. `instructions` is capped at 500 characters. A failed probe
+The direct probe retains at most 400 entries in `toolNames` and `tools`; `toolCount` counts all
+reported tools across the pages it reads. This defensive response-summary cap does not limit
+DSH's registered or callable tools, and `registeredTools` is not capped here. `instructions`
+is capped at 500 characters. A failed probe
 keeps `durationMs` from the attempt and reports `null` for every unknown field (`toolCount`,
 `protocolVersion`, `serverInfo`, `capabilities`, `instructions`), `toolNames: []`, and a classified
 `error`; a server that answers `tools/list` with `-32601` is reachable with `toolCount: 0`.
@@ -413,18 +416,14 @@ layer for the read-only config viewer (comments and other plugins' rows included
 
 ### `probe`
 
-args `{ id?, level?, config?, timeoutMs? }` → `{ ok: true, result: ProbeResult }`.
-`ProbeResult.tools` is `[{ name, description }]` (description truncated to 240 chars) so the editor's
-tool-permission selector can list real tool names without a second round-trip.
-
-> 单层直管：界面不再区分全局/工作区。新增行写入当前 profile 层（`level: 'workspace'`），
-> 编辑/删除沿用行自身的 `level`（home 层里已有的行仍可管理）。
-
-### `probe`
-
 args `{ id?, level?, config?, timeoutMs? }` → `{ ok: true, result: ProbeResult }`. With `config`
-it probes an unsaved draft; otherwise it probes the stored row. The result is cached in memory
+it probes an unsaved draft; otherwise it probes the stored row. `ProbeResult.tools` is
+`[{ name, description }]` (description truncated to 240 chars) so the editor's tool-permission
+selector can list real tool names without a second round-trip. The result is cached in memory
 keyed by `${level}:${id}` and returned as `lastProbe` by later `state` calls.
+
+> 单层直管：`state` 返回两层全部行，界面以单列表展示，但不提供全局/工作区筛选。新增行写入当前
+> profile 层（`level: 'workspace'`），编辑/删除沿用行自身的 `level`（home 层里已有的行仍可管理）。
 
 ### `probeAll`
 
@@ -459,7 +458,9 @@ args `{ serverName }` → `{ ok: true }`. Removes the catalog entry only; config
 
 ### `refresh`
 
-args `{}` → `{ ok: true, rows: [Row], warnings }`. Cheap re-read used by the page's poll.
+args `{}` → `{ ok: true, rows: [Row], warnings }`. Retained Host re-read operation for API callers.
+The current page's polling, manual refresh button, and post-editor refresh call `state`, not this
+operation; a list refresh does not request `probeAll`.
 
 ---
 
@@ -552,19 +553,40 @@ phase changes when HMR applies a patch), and refetch immediately after every mut
 - Page: settings-embedded content column (design.md §4.4). Header = title + help + search +
   "refresh" icon button + "test all" icon button + "add" primary button; warning/error banners;
   list; toasts.
-- The page is **single-profile**: no scope filter, workspace binding, server library, or
-  import/export UI.
+- The page is **single-profile**: the list renders every row the Host returns, including
+  historical home-layer rows; there is no scope filter, workspace binding, server library, or
+  import/export UI in this release. The Host ops behind those flows remain documented in §4 and §6.
+- The list renders **all** rows matching the current search and scrolls inside its own container;
+  there is no 5-row preview and no "view more". The direct-probe summary cap in §5 is independent
+  of this UI policy and does not limit DSH's registered or callable tools.
 - Row: status dot, `serverName`, transport chip, optional read-only chip, optional latency, tool
   count, one-line target, and exactly **3** inline icon buttons: enable/disable, edit, delete.
+  Line 1 carries status/name/chips/tool count; line 2 carries the command/URL summary. Row height
+  follows content (no fixed tier), and the expanded tool-badge area is an additional block that
+  grows independently. Row and skeleton separators follow the same semantic rule as the equivalent
+  host settings row (design.md §2.4 / §7.9); token values stay in design.md.
   There is **no** per-row test button; testing is available from the editor's "test connectivity"
   button and the header's "test all".
 - Editor dialog (create/edit): form and JSON tabs; fields, validation, clean-config and tool
-  permission rules live in DESIGN.md §1.3 / §2.5. It matches the enclosing settings panel
-  (width/height follow the host panel, clamped to the viewport).
-- Delete confirmation: confirm dialog tier: **480px** max width, clamped to the viewport.
+  permission rules live in DESIGN.md §1.3 / §2.5. It passes `mode: 'cover-host'` to the shared
+  Dialog.
+- Delete confirmation: uses `mode: 'standard'`; it must not measure or follow the host panel.
+  Tier and scoping details live in design.md §7.6.
 - Tooltip: one page-wide instance; hover or keyboard focus, **300ms** delay; hidden on
   leave/press/scroll/view switch. Visual specs: design.md §7.7.
 - Dialog stacking, Escape and focus return: design.md §7.6 / §9.3.
+
+Dialog runtime (`src/client/16-dialog.js`):
+
+- Public prop `mode: 'standard' | 'cover-host'`, default `'standard'`.
+- `'standard'` keeps the fixed tier for its role and never measures a host.
+- `'cover-host'` measures the nearest enclosing `[role="dialog"]` settings panel and follows its
+  position and dimensions within the viewport. Host/viewport changes trigger a re-measure, and
+  listeners/observers are removed on unmount. With no measurable host it uses the centered fallback
+  specified in design.md §7.6. It must never produce negative or non-finite dimensions. A confirm
+  dialog always resolves to `'standard'`, even if passed `'cover-host'`.
+- Surface colors, radii, exact sizes, and the transparent settings-hosted backdrop are owned by
+  design.md §2.2 / §7.6; this contract only fixes the mode behavior and cleanup.
 
 Visual specs (colors, radii, spacing, icon sizes, hover/pressed states) are **not** part of this
 contract: see design.md §2, §7, §9 and DESIGN.md for the business mapping.

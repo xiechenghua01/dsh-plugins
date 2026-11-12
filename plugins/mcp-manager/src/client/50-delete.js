@@ -1,6 +1,7 @@
     function DeleteDialog(props) {
       const t = props.t
       const row = props.row
+      const scope = t(row.level === 'global' ? 'delete.scopeGlobal' : 'delete.scopeProfile')
       const cancelRef = useRef(null)
       const footer = h(
         Fragment,
@@ -30,7 +31,7 @@
           { className: 'mm-delete-desc' },
           t('delete.descPrefix'),
           h('code', { className: 'mm-mono mm-delete-name' }, row.serverName),
-          t('delete.descSuffix'),
+          t('delete.descSuffix', { scope: scope }),
         ),
       )
     }

@@ -1,13 +1,26 @@
 # MCP 服务管理 / MCP Manager
 
-在 **设置 → MCP 服务** 一页里管理 DeepSeek Harness 的 MCP 服务器：全局（home 层）与工作区
-（当前 profile 层）两层，新增、编辑、启用/停用、删除、连通性测试、JSON 导入导出，以及一个
-**全机共享的服务器库**——在 A 工作区配好的服务器，B 工作区一键复用，不用再输一遍。
+在 **设置 → MCP 服务** 一页里管理 DeepSeek Harness 当前 profile 的 MCP 服务器。列表是单 profile
+单列表：Host 返回的当前 profile 行与历史 home 层行都会展示，但不提供全局/工作区筛选、工作区
+分组或绑定。支持新增、编辑、启用/停用、删除、在编辑弹窗或页头测试连通性，以及表单 / JSON
+两种编辑方式。
 
-A single Settings page (`设置 → MCP 服务`) for the MCP servers of this Harness: global
-(home-layer) and workspace (profile-layer) servers, add / edit / enable / disable / delete,
-live connection tests, JSON import and export, and a machine-wide server library that makes one
-configured server reusable from any other layer without retyping it.
+A single Settings page (`设置 → MCP 服务`) for the MCP servers of the current profile. The list
+is a single profile-scoped list: it shows every row the Host returns, including historical
+home-layer rows, but offers no global/workspace filter or workspace binding. It supports add,
+edit, enable/disable, delete, connectivity tests from the editor or the page header, and form /
+JSON editing.
+
+## 版本状态 / Release status
+
+| 版本 | 状态 | 说明 |
+|---|---|---|
+| `0.7.5` | 已发布 | npm 与仓库 `index.json` 中当前可安装的版本。 |
+| `0.8.0` | 本地版本已准备，待发布 | 本文描述本地 0.8.0 行为；已更新 manifest 并完成本次范围的回归，尚未推送或发布 npm，索引仍保留已发布版本。 |
+
+后续通过独立发布流程更新 `index.json` 与 npm；发布后以索引的 `versions[].source`（或
+`pnpm run validate` 输出）为准，不得将本地版本准备等同于市场发布。本文不承诺所有配置参数都会在当前 DSH
+版本立即生效，字段支持范围见下文与 [CONTRACT.md](CONTRACT.md)。
 
 ---
 
@@ -15,24 +28,30 @@ configured server reusable from any other layer without retyping it.
 
 | 能力 | 说明 |
 |---|---|
-| 两层作用域 | **全局** = `$DSH_HOME/cordis.patch.yml`（本机所有 profile 生效）；**工作区** = 当前 profile 的 `cordis.patch.yml` |
-| 筛选与搜索 | 列表页按 **全部 / 全局 / 工作区** 筛选，并按名称、目标、id 搜索 |
-| 增删改 | 结构化表单覆盖全部 MCP 参数；启用/停用写 `disabled`；删除只动自己写的行 |
-| 连通性测试 | 主动发起真实 MCP 握手（stdio 启动探测进程 / Streamable HTTP `initialize`），返回成功、耗时、协议版本、工具数与失败原因；可一键测试**所有启用的**服务器 |
-| JSON 双向 | 每个服务器可切换 JSON 视图；导入兼容 Claude Desktop / Cursor 的 `{"mcpServers": {...}}`、数组、`servers` 列表与单个对象；导出默认输出同款 `mcpServers` JSON |
-| 服务器库 | 任何作用域配置过的服务器自动进入 `$DSH_HOME/mcp-manager/library.json`；其他作用域点「添加到…」即可复用，可改名 |
-| 实时状态 | 列表显示 Loader 阶段（已加载 / 未加载 / 加载失败）与已注册工具数；写入 patch 后由 HMR 自动重载，页面轮询刷新 |
-| 安全边界 | 同源 + JSON content-type 校验；只改自己拥有的 `insert` 行，文件其余字节（注释、其他插件的行）原样保留 |
+| 单 profile 列表 | Host 返回当前 profile 行和历史 home 层行，页面统一展示；没有全局/工作区筛选，也不提供工作区绑定 |
+| 搜索 | 按名称、命令/URL 摘要、行 id 与协议搜索；完整结果由列表容器滚动，无默认 5 条或「查看更多」 |
+| 行内操作 | 固定 3 个：启停、编辑、删除；不设行内测试；只读/无法安全解析的行禁用写操作 |
+| 刷新 | 页头「刷新列表」只重新拉取 `state`，不触发 probe |
+| 连通性测试 | 编辑弹窗底部测试当前草稿（不保存）；页头「测试所有启用的」并发测试启用且非只读的行，返回耗时、工具数与失败原因 |
+| 表单 / JSON | 每个服务器可在表单与 JSON 间切换；两者共用同一草稿与 clean config，JSON 语法错误阻止保存 |
+| 工具展开 | 点击「N 工具」展开徽章；工具来源合并 probe、已注册工具与权限配置；数量未知显示 `—`，不冒充 0 |
+| 权限标注 | `autoApprove` / `disabledTools` 会写入配置，但当前 DSH 版本的 MCP 客户端尚未读取；界面如实标注 |
+| 弹窗 | 新增/编辑使用公共 Dialog 的 `cover-host` 模式，覆盖设置面板；删除确认使用标准模式，不跟随面板 |
+| 实时状态 | 列表显示 Loader 阶段与已注册工具数；写入 patch 后由 HMR 自动重载，页面每 4 秒轮询 `state` |
+| 安全边界 | 同源 + JSON content-type 校验；只改写 `@deepseek-ai/dsh-mcp-client` 的 `insert` 行，文件其余字节（注释、其他插件的行）原样保留；无法安全解析的行只读 |
+| Host API | 服务器库、跨层移动、批量导入/导出等能力仍保留在 Host API（CONTRACT §4、§6），本版本设置页不提供入口 |
 
 ## 安装 / Install
 
-本插件已发布到 npm，也可随本仓库的插件索引分发：
+当前已发布版本是 `0.7.5`，可从 npm 或本仓库的插件索引安装：
 
 ```text
 plugin_manager action=install_bundle target=@chengze/dsh-mcp-manager@0.7.5
 ```
 
-或把本仓库加为 Discover 的插件索引源后安装。本地开发目录也可直接安装：
+已发布的 0.7.5 界面可能与本文件描述的单 profile / cover-host 行为不同；本文件对应待发布的
+0.8.0。0.8.0 的安装目标尚不存在，发布并更新索引后再按索引给出的 target 安装，不要提前使用
+`@0.8.0`。本地开发目录可直接安装：
 
 ```text
 plugin_manager action=install_bundle target=/absolute/path/to/dsh-plugins/plugins/mcp-manager
@@ -46,52 +65,51 @@ plugin_manager action=install_bundle target=/absolute/path/to/dsh-plugins/plugin
 
 打开 **设置 → MCP 服务**：
 
-1. **新增服务器**：选择作用域（全局 / 工作区），填写 `serverName`、传输方式与对应字段；
-   高级选项里可设置超时、启动失败策略、说明字节上限与重连参数。保存后写入对应 patch 层，
-   HMR 自动重载。
-2. **编辑 / 启停 / 删除**：每张卡片右侧的操作按钮。停用只写 `disabled: true`，配置保留。
-3. **测试连通性**：卡片上的「测试」按钮测试单个服务器；顶部「测试全部启用的」并发测试所有
-   未停用的服务器。测试不依赖 Loader 状态，未加载或已停用的服务器也能测。
-4. **JSON**：卡片上的「JSON」按钮查看/粘贴单个服务器的 JSON；底部「导入 / 导出」区支持整份
-   `mcpServers` JSON 批量导入到指定作用域。
-5. **服务器库**：页面底部列出本机配置过的所有服务器及其来源。点「添加到…」选择目标作用域
-   即可复用（可选改名），无需重新输入。
+1. **新增 / 编辑**：页头「新增」打开编辑弹窗；行内「更新配置」打开同一弹窗。表单填写名称、
+   传输方式与连接字段；高级设置可改超时、重连次数和远程 OAuth。新增写入当前 profile 的
+   `cordis.patch.yml`；编辑沿用行自身的 `level` 与 `id`，历史 home 行仍在 home 层更新。
+2. **启停 / 删除**：每行右侧固定 3 个操作。停用只写 `disabled: true`，配置保留；删除只移除
+   选中的 MCP `insert` 行，只读行不能写。
+3. **刷新与测试**：页头「刷新列表」只重取 `state`；「测试所有启用的」测试启用且非只读的行。
+   单条测试只在编辑弹窗底部，测试当前草稿，不落盘。
+4. **JSON**：编辑弹窗顶部切换到 JSON；支持常见 `mcpServers` 对象与单服务器对象形状，可粘贴
+   示例、复制配置。JSON 与表单共用草稿和清理规则，语法错误会阻止保存。
+5. **工具展开**：点击行内「N 工具」查看工具徽章；进入编辑弹窗的高级设置，才可切换默认 / 自动允许 /
+   禁用三态。当前 DSH 版本的 MCP 客户端尚未读取 `autoApprove` / `disabledTools`，因此这两项只写入配置，界面会标注。
 
-### 作用域与文件
+本版本**没有**批量导入/导出、服务器库、跨层移动或工作区归属的界面；这些 Host API 仍在
+[CONTRACT.md](CONTRACT.md) 中保留。单条测试只能从编辑弹窗发起。
 
-| 作用域 | 文件 | 生效范围 |
-|---|---|---|
-| 全局 global | `$DSH_HOME/cordis.patch.yml` | 本机所有 profile（优先级高于 profile 层） |
-| 工作区 workspace | `$DSH_PROFILE_DIR/cordis.patch.yml` | 当前 profile |
+### 文件与作用域
 
-`$DSH_HOME` 默认 `~/.dsh`；`$DSH_PROFILE_DIR` 是当前 profile 目录。同一个 `serverName`
-不能在两层同时存在（后加载的一行会失败），页面会在出现这种情况时给出警告。
+| 用途 | 文件 |
+|---|---|
+| 新增/保存（当前 profile） | `$DSH_PROFILE_DIR/cordis.patch.yml` |
+| 历史 home 层行（展示；编辑/删除沿用行自身 `level`） | `$DSH_HOME/cordis.patch.yml` |
 
-### 工作目录归属
+`$DSH_HOME` 默认 `~/.dsh`；`$DSH_PROFILE_DIR` 是当前 profile 目录。设置页不提供作用域选择或
+筛选：新配置写入当前 profile。如果同名 `serverName` 同时出现在两层，Host 会给出警告（后加载
+的一行会失败）。
 
-作用域选「工作区」时，可以在同一行选择**一个或多个工作目录**（来自 Harness 的工作区列表）。
-这份归属关系存在服务器库条目里，用于列表展示与跨工作区复用；它是**组织元数据**，不是 Loader
-作用域——DSH 的 MCP 行按 profile 生效，对当前 profile 的所有会话都可用。需要「只在某些目录
-生效」时，请为不同 profile 分别配置。
+服务器库文件 `$DSH_HOME/mcp-manager/library.json` 及对应 Host API 仍然存在；本版本页面不展示
+服务器库，也不提供工作目录归属编辑。
 
-服务器库文件：`$DSH_HOME/mcp-manager/library.json`（含完整配置，包括 env / headers 里的凭据，
-以及每个服务器的工作目录归属）。
-
-### 结构化配置字段
+### 表单字段
 
 | 字段 | 适用 | 说明 |
 |---|---|---|
 | `serverName` | 全部 | `[A-Za-z0-9_-]{1,32}`，工具名前缀 `mcp__<serverName>__` |
-| `transport` | 全部 | `stdio` 或 `streamable-http` |
-| `command` / `args` / `env` / `cwd` | stdio | 可执行文件、参数、额外环境变量、工作目录 |
+| `transport` | 全部 | `stdio` 或 `streamable-http`；SSE 选项保留但保存时被拦截（当前 DSH 不支持） |
+| `command` / `args` / `env` / `cwd` | stdio | 可执行文件、参数（每行一个）、额外环境变量、工作目录 |
 | `url` / `headers` | streamable-http | 端点与额外请求头 |
-| `toolCallTimeoutMs` | 全部 | 单次工具调用超时，默认 60000 |
-| `maxInstructionBytes` | 全部 | 服务器说明最大字节数，默认 32768 |
-| `failOnStartupError` | 全部 | 首次连接失败时拒绝加载，默认 false |
-| `reconnect.enabled` | 全部 | 断线自动重连，默认 true |
-| `reconnect.initialDelayMs` | 全部 | 首次重连延迟，默认 500 |
-| `reconnect.maxDelayMs` | 全部 | 重连延迟上限，默认 30000 |
-| `reconnect.maxAttempts` | 全部 | 连续失败次数上限，默认 10 |
+| `toolCallTimeoutMs`（表单「超时」） | 全部 | 1000–3600000 的整数；等于默认 60000 时不写入 |
+| `reconnect.maxAttempts`（表单「重连次数」） | 全部 | 1–1000 的整数；未修改时不写入，最终默认值以 CONTRACT §1 为准 |
+| `oauth.clientId` / `oauth.scopes` | streamable-http | 写入 `config.oauth`；当前 DSH 客户端不读取 |
+| `autoApprove` / `disabledTools` | 全部 | 工具权限配置写入；当前 DSH 客户端不读取 |
+
+表单只暴露上述常用字段。CONTRACT §1 是 Host 接受字段的完整列表；本版本编辑表单不提供
+`maxInstructionBytes`、`failOnStartupError` 或完整 `reconnect` 子字段的入口，也不承诺所有参数
+都会被当前 DSH 客户端读取或生效。JSON Tab 是按单个服务器节点编辑，不是批量导入器。
 
 ## 兼容性 / Compatibility
 
@@ -100,6 +118,8 @@ plugin_manager action=install_bundle target=/absolute/path/to/dsh-plugins/plugin
   `@deepseek-ai/*` 包。
 
 ## 开发 / Development
+
+以下命令在 `plugins/mcp-manager` 目录执行；`pnpm test` 在仓库根目录执行：
 
 ```bash
 node scripts/build-client.mjs        # src/client/*.js -> client.js（client.js 是生成产物，不要手改）

@@ -38,18 +38,137 @@
       return Array.prototype.slice.call(list).filter((item) => item.getAttribute('aria-hidden') !== 'true')
     }
 
+    const DIALOG_GUTTER = 16
+
+    /** Explicit mode: only `cover-host` measures; a confirm dialog is always standard. */
+    function dialogModeOf(props) {
+      if (props !== null && props !== undefined && props.size === 'confirm') return 'standard'
+      return props !== null && props !== undefined && props.mode === 'cover-host' ? 'cover-host' : 'standard'
+    }
+
+    function positiveFinite(value) {
+      return Number.isFinite(value) && value > 0 ? value : 0
+    }
+
+    /** Clamp one measured axis into the viewport's gutter, shrinking it as needed. */
+    function clampDialogAxis(start, size, viewport) {
+      const length = positiveFinite(viewport)
+      const gutter = Math.min(DIALOG_GUTTER, length / 2)
+      const min = gutter
+      const max = length - gutter
+      const origin = Number.isFinite(start) ? start : min
+      const extent = Number.isFinite(size) ? Math.max(0, size) : 0
+      const left = Math.min(Math.max(origin, min), max)
+      const right = Math.min(Math.max(origin + extent, min), max)
+      return { start: left, size: Math.max(0, right - left) }
+    }
+
     /**
-     * Modal dialog. The confirm tier stays fixed at 480px. The editor tier covers the layer
-     * beneath: it measures the enclosing settings panel and follows its size, clamped to the
-     * viewport (an explicit user requirement that supersedes the fixed tier in design.md §7.6).
-     * The body is the only scroll region; Escape and the backdrop dismiss the topmost dialog.
+     * Pure cover-host geometry. The host's viewport rect (left/top/width/height) is clamped
+     * into the viewport's 16px gutter. Missing, hidden (0×0 or disconnected), off-screen or
+     * non-finite hosts return null so the caller falls back to the centered 640px tier.
+     */
+    function coverHostRectOf(hostRect, viewportWidth, viewportHeight) {
+      if (hostRect === null || hostRect === undefined) return null
+      const values = [hostRect.left, hostRect.top, hostRect.width, hostRect.height]
+      if (values.some((value) => !Number.isFinite(value))) return null
+      if (hostRect.width <= 0 || hostRect.height <= 0) return null
+      if (positiveFinite(viewportWidth) === 0 || positiveFinite(viewportHeight) === 0) return null
+      const horizontal = clampDialogAxis(hostRect.left, hostRect.width, viewportWidth)
+      const vertical = clampDialogAxis(hostRect.top, hostRect.height, viewportHeight)
+      if (horizontal.size === 0 || vertical.size === 0) return null
+      return { left: horizontal.start, top: vertical.start, width: horizontal.size, height: vertical.size }
+    }
+
+    function sameDialogRect(left, right) {
+      return left !== null && right !== null
+        && left.left === right.left && left.top === right.top
+        && left.width === right.width && left.height === right.height
+    }
+
+    /** The nearest enclosing host panel, found through the dialog's own parent chain. */
+    function coverHostOf(boxRef) {
+      const node = boxRef.current
+      if (node === null || node === undefined) return null
+      const parent = node.parentElement
+      if (parent === null || parent === undefined || typeof parent.closest !== 'function') return null
+      const host = parent.closest('[role="dialog"]')
+      if (host === null || host === undefined) return null
+      if (host.isConnected === false || typeof host.getBoundingClientRect !== 'function') return null
+      return host
+    }
+
+    /**
+     * Measured geometry for a cover-host dialog. Standard and confirm dialogs pass
+     * `active: false`: they never measure a host nor install geometry observers.
+     * `size` is a dependency so a tier change disposes the previous listener/observer set.
+     */
+    function useCoverHostBox(boxRef, active, size) {
+      const [hostBox, setHostBox] = useState(null)
+      const lastBoxRef = useRef(null)
+      useLayoutEffect(() => {
+        const clearMeasurement = () => {
+          if (lastBoxRef.current === null) return
+          lastBoxRef.current = null
+          setHostBox(null)
+        }
+        let observer = null
+        let observedHost = null
+        const update = () => {
+          const host = coverHostOf(boxRef)
+          if (host !== observedHost) {
+            if (observer !== null) {
+              observer.disconnect()
+              observer = null
+            }
+            observedHost = host
+            if (host !== null && typeof ResizeObserver === 'function') {
+              observer = new ResizeObserver(update)
+              observer.observe(host)
+            }
+          }
+          const viewportWidth = typeof window === 'undefined' || window === null ? 0 : window.innerWidth
+          const viewportHeight = typeof window === 'undefined' || window === null ? 0 : window.innerHeight
+          const next = host === null ? null : coverHostRectOf(host.getBoundingClientRect(), viewportWidth, viewportHeight)
+          if (next === null) {
+            clearMeasurement()
+            return
+          }
+          if (sameDialogRect(lastBoxRef.current, next)) return
+          lastBoxRef.current = next
+          setHostBox(next)
+        }
+
+        if (active !== true) {
+          clearMeasurement()
+          return undefined
+        }
+        update()
+        if (typeof window === 'undefined' || window === null || typeof window.addEventListener !== 'function') return undefined
+        window.addEventListener('resize', update)
+        window.addEventListener('scroll', update, true)
+        return () => {
+          window.removeEventListener('resize', update)
+          window.removeEventListener('scroll', update, true)
+          if (observer !== null) observer.disconnect()
+          clearMeasurement()
+        }
+      }, [active, size])
+      return hostBox
+    }
+
+    /**
+     * Modal dialog. `standard` keeps the fixed tier; only an explicit `mode: 'cover-host'`
+     * measures the enclosing settings panel (confirm is always standard). The body is the
+     * only scroll region; Escape and the backdrop dismiss the topmost dialog.
      */
     function Dialog(props) {
       const boxRef = useRef(null)
       const stackToken = useRef({})
       const onCloseRef = useRef(props.onClose)
       onCloseRef.current = props.onClose
-
+      const mode = dialogModeOf(props)
+      const hostBox = useCoverHostBox(boxRef, mode === 'cover-host', props.size)
       useEffect(() => {
         const token = stackToken.current
         dialogStack.push(token)
@@ -91,7 +210,6 @@
           if (index !== -1) dialogStack.splice(index, 1)
         }
       }, [])
-
       useEffect(() => {
         const node = boxRef.current
         if (node === null || typeof node.querySelector !== 'function') return undefined
@@ -106,29 +224,11 @@
           focusQuietly(returnFocus)
         }
       }, [])
-
-      // The editor dialog covers the layer beneath: size it to the enclosing settings panel.
-      // Even though the dialog renders inside the fixed `.mm-backdrop` layer, the React tree
-      // stays under the host panel, so `closest` can find it from the dialog node.
-      const [hostBox, setHostBox] = useState(null)
-      useLayoutEffect(() => {
-        if (props.size === 'confirm') return undefined
-        const measure = () => {
-          const node = boxRef.current
-          if (node === null || node.parentElement === null) return
-          const host = node.parentElement.closest('[role="dialog"]')
-          if (host === null) return
-          const rect = host.getBoundingClientRect()
-          const width = Math.round(Math.min(rect.width, window.innerWidth - 32))
-          const height = Math.round(Math.min(rect.height, window.innerHeight - 32))
-          if (width > 0 && height > 0) setHostBox({ width: width, height: height })
-        }
-        measure()
-        window.addEventListener('resize', measure)
-        return () => {
-          window.removeEventListener('resize', measure)
-        }
-      }, [])
+      // Cover-host geometry is the §6.7 exception: viewport-fixed left/top/width/height
+      // come from the measured host rect; no visual styling is inlined here.
+      const measuredStyle = hostBox === null
+        ? null
+        : { left: hostBox.left + 'px', top: hostBox.top + 'px', width: hostBox.width + 'px', height: hostBox.height + 'px' }
 
       return h(
         'div',
@@ -146,21 +246,14 @@
           'div',
           {
             className: 'mm-dialog' + (props.size === 'confirm' ? ' mm-dialog-confirm' : ''),
+            'data-mode': mode,
+            'data-measured': hostBox === null ? undefined : 'true',
             role: 'dialog',
             'aria-modal': 'true',
             'aria-label': props.title,
             tabIndex: -1,
             ref: boxRef,
-            style:
-              hostBox === null
-                ? { boxShadow: 'none' }
-                : {
-                    width: hostBox.width + 'px',
-                    height: hostBox.height + 'px',
-                    maxWidth: 'none',
-                    maxHeight: 'none',
-                    boxShadow: 'none',
-                  },
+            style: Object.assign({ boxShadow: 'none' }, measuredStyle),
           },
           h(
             'div',

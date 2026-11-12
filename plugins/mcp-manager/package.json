@@ -1,11 +1,11 @@
 {
   "name": "@chengze/dsh-mcp-manager",
-  "version": "0.7.5",
+  "version": "0.8.0",
   "publishConfig": {
     "access": "public"
   },
   "type": "module",
-  "description": "MCP server manager for the DeepSeek Harness Web GUI: a Settings page that adds, edits, enables, disables, deletes and connection-tests global (home-layer) and workspace (profile-layer) MCP servers, with structured and JSON editing plus a machine-wide server library for reuse across workspaces.",
+  "description": "MCP server manager for the DeepSeek Harness Web GUI: a profile-scoped Settings list with search, refresh, registered tool details, server configuration, enable/disable and connectivity tests. Form and JSON editing use an editor that covers the host Settings panel.",
   "license": "MIT",
   "author": "xiechenghua01",
   "homepage": "https://github.com/xiechenghua01/dsh-plugins/tree/main/plugins/mcp-manager",

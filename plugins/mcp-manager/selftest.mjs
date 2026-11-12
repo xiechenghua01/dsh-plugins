@@ -1,7 +1,7 @@
 // Synthetic self-test for the MCP Manager plugin.
 //
-// `pnpm test` runs `run(report)` with synthetic input only: no filesystem, no network, no
-// Harness runtime. Every assertion here covers payload/parsing logic that must hold in CI.
+// `pnpm test` runs `run(report)` with synthetic input only: no user files, no network, no
+// Harness runtime. Payload/parsing logic and UI contracts must both hold in CI.
 
 import { nextRowId, normalizeConfig, parseImportJson, toDesktopEntry } from './index.js'
 import {
@@ -13,6 +13,8 @@ import {
   upsertInsert,
 } from './lib/patch.mjs'
 import { emptyLibrary, removeServer, syncLibrary, upsertServer } from './lib/library.mjs'
+import { runUiContract } from './tests/ui-contract.mjs'
+import { runCopyContract } from './tests/copy-contract.mjs'
 
 function expect(report, condition, message) {
   if (!condition) report(message)
@@ -206,4 +208,10 @@ export async function run(report) {
   expect(report, dropped.library.servers.github?.origins.length === 0, 'a server with no layer must keep the entry with empty origins')
   const gone = removeServer(dropped.library, 'github', 4)
   expect(report, gone.removed === true && Object.keys(gone.library.servers).length === 0, 'removeServer must drop the entry')
+
+  // ---- UI contract: dialog geometry + full list rendering ----------------
+  await runUiContract(report)
+
+  // ---- copy contract: locale, delete scopes, DESIGN §3 --------------------
+  runCopyContract(report)
 }

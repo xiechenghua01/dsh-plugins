@@ -63,7 +63,7 @@ window.__ModuleLoader__.load({
     const zh = {
       'section.title': 'MCP 服务',
       'page.title': 'MCP 服务',
-      'page.help': '所有配置写入当前 Profile (cordis.patch.yml)，自动在全部工作区会话中共享生效',
+      'page.help': '新增配置写入当前 Profile (cordis.patch.yml)；已有行按所属配置层更新或删除；Profile 内所有工作区会话共享同一份配置',
       'page.searchPlaceholder': '搜索服务...',
       'page.testAll': '测试所有启用的 MCP 服务器',
       'page.refresh': '刷新列表',
@@ -103,7 +103,7 @@ window.__ModuleLoader__.load({
       'action.cancel': '取消',
       'action.save': '保存',
       'action.probe': '连接获取工具',
-      'action.probeTip': '尝试连接当前配置的 MCP 服务并刷新全量工具列表',
+      'action.probeTip': '尝试连接当前配置的 MCP 服务并刷新工具列表与说明',
       'action.allAuto': '全设为自动允许',
       'action.resetDefault': '重置默认',
       'action.pasteSample': '粘贴社区分享 JSON 示例',
@@ -169,7 +169,7 @@ window.__ModuleLoader__.load({
       'editor.kvKeyHeader': 'Header',
       'editor.kvValHeader': 'Value',
       'editor.toolsTitle': '工具权限配置 (autoApprove / disabledTools)',
-      'editor.toolsTip': '底层尝试连接 MCP 服务拉取全量工具与说明。设为「自动允许」写入 autoApprove，设为「禁用」写入 disabledTools，保持「默认」则不写入配置文件；当前 DSH 版本的 MCP 客户端尚未读取 autoApprove/disabledTools',
+      'editor.toolsTip': '底层尝试连接 MCP 服务获取工具列表与说明。设为「自动允许」写入 autoApprove，设为「禁用」写入 disabledTools，保持「默认」则不写入配置文件；当前 DSH 版本的 MCP 客户端尚未读取 autoApprove/disabledTools',
       'editor.toolsIdle': '未获取工具列表',
       'editor.toolsProbing': '正在连接服务获取工具...',
       'editor.toolsProbed': '已连接获取 {count} 个工具',
@@ -198,7 +198,9 @@ window.__ModuleLoader__.load({
       'editor.required': '必填',
       'delete.title': '删除 MCP 服务',
       'delete.descPrefix': '确定要删除 ',
-      'delete.descSuffix': ' 吗？此操作会从当前 Profile 的 cordis.patch.yml 中移除该行，不可撤销。',
+      'delete.descSuffix': ' 吗？此操作会从「{scope}」的 cordis.patch.yml 中移除对应行，不可撤销。',
+      'delete.scopeGlobal': 'home 层配置（影响使用该配置的所有 Profile）',
+      'delete.scopeProfile': '当前 Profile 配置',
       'delete.confirm': '删除',
       'delete.cancel': '取消',
       'common.unknownError': '未知错误',
@@ -209,7 +211,7 @@ window.__ModuleLoader__.load({
     const en = {
       'section.title': 'MCP servers',
       'page.title': 'MCP servers',
-      'page.help': 'All settings are written to the current Profile (cordis.patch.yml) and shared by every workspace session',
+      'page.help': 'New settings are written to the current Profile (cordis.patch.yml); existing rows are updated or deleted in their own config layer; all workspace sessions in the Profile share the same config',
       'page.searchPlaceholder': 'Search services...',
       'page.testAll': 'Test all enabled MCP servers',
       'page.refresh': 'Refresh list',
@@ -249,7 +251,7 @@ window.__ModuleLoader__.load({
       'action.cancel': 'Cancel',
       'action.save': 'Save',
       'action.probe': 'Connect and fetch tools',
-      'action.probeTip': 'Try to connect to the configured MCP service and refresh the full tool list',
+      'action.probeTip': 'Try to connect to the configured MCP service and refresh the tool list and descriptions',
       'action.allAuto': 'Set all to auto-allow',
       'action.resetDefault': 'Reset to default',
       'action.pasteSample': 'Paste shared JSON sample',
@@ -315,7 +317,7 @@ window.__ModuleLoader__.load({
       'editor.kvKeyHeader': 'Header',
       'editor.kvValHeader': 'Value',
       'editor.toolsTitle': 'Tool permissions (autoApprove / disabledTools)',
-      'editor.toolsTip': 'Connect to the MCP service to fetch all tools and descriptions. Auto-allow writes autoApprove, Disable writes disabledTools, and Default writes nothing; the current DSH MCP client does not read autoApprove/disabledTools',
+      'editor.toolsTip': 'Connect to the MCP service to fetch the tool list and descriptions. Auto-allow writes autoApprove, Disable writes disabledTools, and Default writes nothing; the current DSH MCP client does not read autoApprove/disabledTools',
       'editor.toolsIdle': 'Tool list not fetched',
       'editor.toolsProbing': 'Connecting to fetch tools...',
       'editor.toolsProbed': 'Connected; fetched {count} tools',
@@ -344,7 +346,9 @@ window.__ModuleLoader__.load({
       'editor.required': 'Required',
       'delete.title': 'Delete MCP server',
       'delete.descPrefix': 'Delete ',
-      'delete.descSuffix': '? This removes the row from the current Profile cordis.patch.yml and cannot be undone.',
+      'delete.descSuffix': '? This removes the corresponding row from {scope} cordis.patch.yml and cannot be undone.',
+      'delete.scopeGlobal': 'the home-level config (affects every Profile that uses it)',
+      'delete.scopeProfile': 'the current Profile config',
       'delete.confirm': 'Delete',
       'delete.cancel': 'Cancel',
       'common.unknownError': 'Unknown error',
@@ -1394,18 +1398,137 @@ window.__ModuleLoader__.load({
       return Array.prototype.slice.call(list).filter((item) => item.getAttribute('aria-hidden') !== 'true')
     }
 
+    const DIALOG_GUTTER = 16
+
+    /** Explicit mode: only `cover-host` measures; a confirm dialog is always standard. */
+    function dialogModeOf(props) {
+      if (props !== null && props !== undefined && props.size === 'confirm') return 'standard'
+      return props !== null && props !== undefined && props.mode === 'cover-host' ? 'cover-host' : 'standard'
+    }
+
+    function positiveFinite(value) {
+      return Number.isFinite(value) && value > 0 ? value : 0
+    }
+
+    /** Clamp one measured axis into the viewport's gutter, shrinking it as needed. */
+    function clampDialogAxis(start, size, viewport) {
+      const length = positiveFinite(viewport)
+      const gutter = Math.min(DIALOG_GUTTER, length / 2)
+      const min = gutter
+      const max = length - gutter
+      const origin = Number.isFinite(start) ? start : min
+      const extent = Number.isFinite(size) ? Math.max(0, size) : 0
+      const left = Math.min(Math.max(origin, min), max)
+      const right = Math.min(Math.max(origin + extent, min), max)
+      return { start: left, size: Math.max(0, right - left) }
+    }
+
     /**
-     * Modal dialog. The confirm tier stays fixed at 480px. The editor tier covers the layer
-     * beneath: it measures the enclosing settings panel and follows its size, clamped to the
-     * viewport (an explicit user requirement that supersedes the fixed tier in design.md §7.6).
-     * The body is the only scroll region; Escape and the backdrop dismiss the topmost dialog.
+     * Pure cover-host geometry. The host's viewport rect (left/top/width/height) is clamped
+     * into the viewport's 16px gutter. Missing, hidden (0×0 or disconnected), off-screen or
+     * non-finite hosts return null so the caller falls back to the centered 640px tier.
+     */
+    function coverHostRectOf(hostRect, viewportWidth, viewportHeight) {
+      if (hostRect === null || hostRect === undefined) return null
+      const values = [hostRect.left, hostRect.top, hostRect.width, hostRect.height]
+      if (values.some((value) => !Number.isFinite(value))) return null
+      if (hostRect.width <= 0 || hostRect.height <= 0) return null
+      if (positiveFinite(viewportWidth) === 0 || positiveFinite(viewportHeight) === 0) return null
+      const horizontal = clampDialogAxis(hostRect.left, hostRect.width, viewportWidth)
+      const vertical = clampDialogAxis(hostRect.top, hostRect.height, viewportHeight)
+      if (horizontal.size === 0 || vertical.size === 0) return null
+      return { left: horizontal.start, top: vertical.start, width: horizontal.size, height: vertical.size }
+    }
+
+    function sameDialogRect(left, right) {
+      return left !== null && right !== null
+        && left.left === right.left && left.top === right.top
+        && left.width === right.width && left.height === right.height
+    }
+
+    /** The nearest enclosing host panel, found through the dialog's own parent chain. */
+    function coverHostOf(boxRef) {
+      const node = boxRef.current
+      if (node === null || node === undefined) return null
+      const parent = node.parentElement
+      if (parent === null || parent === undefined || typeof parent.closest !== 'function') return null
+      const host = parent.closest('[role="dialog"]')
+      if (host === null || host === undefined) return null
+      if (host.isConnected === false || typeof host.getBoundingClientRect !== 'function') return null
+      return host
+    }
+
+    /**
+     * Measured geometry for a cover-host dialog. Standard and confirm dialogs pass
+     * `active: false`: they never measure a host nor install geometry observers.
+     * `size` is a dependency so a tier change disposes the previous listener/observer set.
+     */
+    function useCoverHostBox(boxRef, active, size) {
+      const [hostBox, setHostBox] = useState(null)
+      const lastBoxRef = useRef(null)
+      useLayoutEffect(() => {
+        const clearMeasurement = () => {
+          if (lastBoxRef.current === null) return
+          lastBoxRef.current = null
+          setHostBox(null)
+        }
+        let observer = null
+        let observedHost = null
+        const update = () => {
+          const host = coverHostOf(boxRef)
+          if (host !== observedHost) {
+            if (observer !== null) {
+              observer.disconnect()
+              observer = null
+            }
+            observedHost = host
+            if (host !== null && typeof ResizeObserver === 'function') {
+              observer = new ResizeObserver(update)
+              observer.observe(host)
+            }
+          }
+          const viewportWidth = typeof window === 'undefined' || window === null ? 0 : window.innerWidth
+          const viewportHeight = typeof window === 'undefined' || window === null ? 0 : window.innerHeight
+          const next = host === null ? null : coverHostRectOf(host.getBoundingClientRect(), viewportWidth, viewportHeight)
+          if (next === null) {
+            clearMeasurement()
+            return
+          }
+          if (sameDialogRect(lastBoxRef.current, next)) return
+          lastBoxRef.current = next
+          setHostBox(next)
+        }
+
+        if (active !== true) {
+          clearMeasurement()
+          return undefined
+        }
+        update()
+        if (typeof window === 'undefined' || window === null || typeof window.addEventListener !== 'function') return undefined
+        window.addEventListener('resize', update)
+        window.addEventListener('scroll', update, true)
+        return () => {
+          window.removeEventListener('resize', update)
+          window.removeEventListener('scroll', update, true)
+          if (observer !== null) observer.disconnect()
+          clearMeasurement()
+        }
+      }, [active, size])
+      return hostBox
+    }
+
+    /**
+     * Modal dialog. `standard` keeps the fixed tier; only an explicit `mode: 'cover-host'`
+     * measures the enclosing settings panel (confirm is always standard). The body is the
+     * only scroll region; Escape and the backdrop dismiss the topmost dialog.
      */
     function Dialog(props) {
       const boxRef = useRef(null)
       const stackToken = useRef({})
       const onCloseRef = useRef(props.onClose)
       onCloseRef.current = props.onClose
-
+      const mode = dialogModeOf(props)
+      const hostBox = useCoverHostBox(boxRef, mode === 'cover-host', props.size)
       useEffect(() => {
         const token = stackToken.current
         dialogStack.push(token)
@@ -1447,7 +1570,6 @@ window.__ModuleLoader__.load({
           if (index !== -1) dialogStack.splice(index, 1)
         }
       }, [])
-
       useEffect(() => {
         const node = boxRef.current
         if (node === null || typeof node.querySelector !== 'function') return undefined
@@ -1462,29 +1584,11 @@ window.__ModuleLoader__.load({
           focusQuietly(returnFocus)
         }
       }, [])
-
-      // The editor dialog covers the layer beneath: size it to the enclosing settings panel.
-      // Even though the dialog renders inside the fixed `.mm-backdrop` layer, the React tree
-      // stays under the host panel, so `closest` can find it from the dialog node.
-      const [hostBox, setHostBox] = useState(null)
-      useLayoutEffect(() => {
-        if (props.size === 'confirm') return undefined
-        const measure = () => {
-          const node = boxRef.current
-          if (node === null || node.parentElement === null) return
-          const host = node.parentElement.closest('[role="dialog"]')
-          if (host === null) return
-          const rect = host.getBoundingClientRect()
-          const width = Math.round(Math.min(rect.width, window.innerWidth - 32))
-          const height = Math.round(Math.min(rect.height, window.innerHeight - 32))
-          if (width > 0 && height > 0) setHostBox({ width: width, height: height })
-        }
-        measure()
-        window.addEventListener('resize', measure)
-        return () => {
-          window.removeEventListener('resize', measure)
-        }
-      }, [])
+      // Cover-host geometry is the §6.7 exception: viewport-fixed left/top/width/height
+      // come from the measured host rect; no visual styling is inlined here.
+      const measuredStyle = hostBox === null
+        ? null
+        : { left: hostBox.left + 'px', top: hostBox.top + 'px', width: hostBox.width + 'px', height: hostBox.height + 'px' }
 
       return h(
         'div',
@@ -1502,21 +1606,14 @@ window.__ModuleLoader__.load({
           'div',
           {
             className: 'mm-dialog' + (props.size === 'confirm' ? ' mm-dialog-confirm' : ''),
+            'data-mode': mode,
+            'data-measured': hostBox === null ? undefined : 'true',
             role: 'dialog',
             'aria-modal': 'true',
             'aria-label': props.title,
             tabIndex: -1,
             ref: boxRef,
-            style:
-              hostBox === null
-                ? { boxShadow: 'none' }
-                : {
-                    width: hostBox.width + 'px',
-                    height: hostBox.height + 'px',
-                    maxWidth: 'none',
-                    maxHeight: 'none',
-                    boxShadow: 'none',
-                  },
+            style: Object.assign({ boxShadow: 'none' }, measuredStyle),
           },
           h(
             'div',
@@ -2741,6 +2838,7 @@ window.__ModuleLoader__.load({
         {
           title: mode === 'edit' ? t('editor.editTitle') : t('editor.addTitle'),
           size: 'editor',
+          mode: 'cover-host',
           onClose: props.onClose,
           returnFocus: props.returnFocus,
           closeLabel: t('action.close'),
@@ -2767,6 +2865,7 @@ window.__ModuleLoader__.load({
     function DeleteDialog(props) {
       const t = props.t
       const row = props.row
+      const scope = t(row.level === 'global' ? 'delete.scopeGlobal' : 'delete.scopeProfile')
       const cancelRef = useRef(null)
       const footer = h(
         Fragment,
@@ -2796,7 +2895,7 @@ window.__ModuleLoader__.load({
           { className: 'mm-delete-desc' },
           t('delete.descPrefix'),
           h('code', { className: 'mm-mono mm-delete-name' }, row.serverName),
-          t('delete.descSuffix'),
+          t('delete.descSuffix', { scope: scope }),
         ),
       )
     }
@@ -3323,8 +3422,10 @@ window.__ModuleLoader__.load({
       '.mm-state-hint{margin:0;font-size:calc(var(--ds-fs) - 2px);color:var(--dsw-alias-label-tertiary)}',
       '.mm-state-icon{color:var(--dsw-alias-label-tertiary)}',
       '.mm-backdrop{position:fixed;inset:0;z-index:1200;display:flex;align-items:center;justify-content:center;padding:16px;background:transparent}',
-      '.mm-dialog{width:100%;max-width:min(640px,calc(100vw - 32px));max-height:calc(100vh - 96px);display:flex;flex-direction:column;font-size:var(--ds-fs);background:var(--dsw-alias-bg-layer-2);border:.5px solid var(--dsw-alias-border-l2);border-radius:var(--dsw-radius-lg);box-shadow:none;overflow:hidden}',
-      '.mm-dialog-confirm{max-width:min(480px,calc(100vw - 32px));max-height:calc(100vh - 96px);border-radius:var(--dsw-radius-xl)}',
+      '.mm-dialog{width:100%;max-width:min(488px,calc(100vw - 32px));max-height:calc(100vh - 96px);display:flex;flex-direction:column;font-size:var(--ds-fs);background:var(--dsw-alias-bg-layer-2);border:.5px solid var(--dsw-alias-border-l2);border-radius:var(--dsw-radius-panel);box-shadow:none;overflow:hidden}',
+      '.mm-dialog-confirm{max-width:min(480px,calc(100vw - 32px));border-radius:var(--dsw-radius-xl)}',
+      '.mm-dialog[data-mode="cover-host"]{max-width:min(640px,calc(100vw - 32px));max-height:calc(100vh - 96px);border-radius:var(--dsw-radius-lg)}',
+      '.mm-dialog[data-measured="true"]{position:fixed;margin:0;max-width:none;max-height:none}',
       '.mm-dialog-head{display:flex;align-items:center;justify-content:space-between;gap:12px;padding:16px 24px;border-bottom:.5px solid var(--dsw-alias-border-l1);flex:none}',
       '.mm-dialog-title{margin:0;font-size:calc(var(--ds-fs) + 1px);line-height:1.35;font-weight:600}',
       '.mm-dialog-head-actions{display:flex;align-items:center;gap:8px}',

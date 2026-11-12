@@ -13,10 +13,12 @@
 
 - 插件只注册一个设置页：`settings.section`，`id: mcp-manager`，`order: 16`，导航标题取 `section.title`。
 - 插件渲染在 DSH 设置面板的右侧内容区；左侧导航与设置面板外框由宿主提供，插件不自绘。
-- **单层直管**：工作区只承载项目路径与会话分组，不承载 MCP 配置；所有服务器都是当前 profile 的
-  `@deepseek-ai/dsh-mcp-client` 行，直接读写 `~/.dsh/profiles/<name>/cordis.patch.yml`。
+- **单层直管**：工作区只承载项目路径与会话分组，不承载 MCP 配置；新增写入当前 profile 的
+  `@deepseek-ai/dsh-mcp-client` 行（`~/.dsh/profiles/<name>/cordis.patch.yml`），编辑/删除沿用行自身
+  的 `level`。Host 同时返回历史 home 层已有的行，列表照常展示，因此 home 行仍在 home 层更新。
 - **界面上不出现**：全局/工作区筛选、工作区分组、工作区绑定、服务器库、导入/导出、「应用到当前工作区」、
   「管理生效工作区」。列表页只有搜索 + 全部服务器；一次配置即在该 profile 的所有工作区会话中生效。
+  服务器库、跨层移动、批量导入/导出等 Host API 仍保留（CONTRACT §4、§6），只是本页不提供入口。
 - 页面自上而下：页头 → 警告/错误提示条 → 列表区（或空态/加载/错误态）→ Toast 层。
 - 页头一行：标题 + 帮助图标 + 搜索框 + 「刷新」图标按钮 + 「全部测试」图标按钮 + 「新增」主按钮。
 - 布局、内边距、响应式与数据四态见 design.md §4.4、§4.7、§7.10。
@@ -43,6 +45,11 @@
   最近一次 probe 的 `lastProbe.tools` / `lastProbe.toolNames`，其次 DSH 已注册工具 `registeredTools`，
   最后是自允许 / 禁用列表中的名称；按名称去重并保持首见顺序，probe 的说明优先于已注册工具的说明。
 - 搜索匹配 `serverName`、命令/URL 摘要、行 `id` 与协议。
+- 主列表渲染搜索命中的**全部**行，由列表容器滚动；不设默认 5 条预览，也不加「查看更多」。工具明细展示
+  已返回的数据；探测响应的防御性摘要上限见 CONTRACT §5，它不是工具注册或调用数量的限制，也不是列表预览策略。
+- 行内两条信息：第一条为状态点、名称、协议/只读/延迟与「N 工具」，第二条为命令/URL 摘要。行高随内容自然
+  增长；工具展开区是独立追加块，另计高度。行与骨架行的分隔线与宿主设置页等价行遵循同一语义规则
+  （design.md §2.4、§7.9）；本文件不复制具体 token 值。
 - 空列表显示一句话空态（见 design.md §7.10）。
 
 ### 1.3 新增 / 编辑弹窗
@@ -58,13 +65,18 @@
   - 工具权限：连接获取工具、关键字过滤、汇总计数、全设为自动允许、重置默认、逐工具三态。
 - 底部：左侧「测试连通性」+ 结果文字；右侧「取消」+「保存」。
 - 新建默认启用；编辑保持行当前的启用/停用状态；弹窗内**没有**「启用此服务器」勾选框。
-- 表单控件、Tab、下拉、弹窗与 Tooltip 的视觉与交互见 design.md §7.3、§7.4、§7.5、§7.6、§7.7。其中编辑弹窗贴合并覆盖外层设置面板（宽高跟随宿主 panel，限制在视口内）；确认弹窗固定 480px。此为用户明确要求，优先于 design.md §7.6 的固定档位。
+- 表单控件、Tab、下拉、弹窗与 Tooltip 的视觉与交互见 design.md §7.3、§7.4、§7.5、§7.6、§7.7。
+  新增/编辑弹窗显式选择公共 Dialog 的 `mode: 'cover-host'`：位置与宽高跟随外层设置面板，具体尺寸
+  与回退规则由 design.md §7.6 规定；删除确认使用标准模式，不跟随设置面板。
 
 ### 1.4 删除确认弹窗
 
 - 标题 `delete.title`，说明由 `delete.descPrefix` + `serverName` + `delete.descSuffix` 组成。
+- `delete.descSuffix` 的 `{scope}` 按行所属 `level` 显示：`global` 取 `delete.scopeGlobal`（home 层配置，
+  影响使用该配置的所有 Profile），`workspace` 或缺失时取 `delete.scopeProfile`（当前 Profile 配置）；
+  两档都明确从对应层的 `cordis.patch.yml` 移除该行且不可撤销。
 - 操作：「取消」/「删除」（危险主按钮）。
-- 视觉与交互见 design.md §7.6（确认档）、§9.4；确认链文案见 §3.5。
+- 使用公共 Dialog 的标准确认模式，不跟随设置面板；视觉与交互见 design.md §7.6、§9.4；确认链文案见 §3.5。
 
 ### 1.5 全局反馈
 
@@ -145,6 +157,8 @@
 ### 2.6 删除
 
 - 点击删除 → 打开确认弹窗；确认中「取消」「删除」都禁用，防重复提交。
+- 确认文案按行自身 `level` 指认作用层：`global` 显示 home 层，`workspace` 或缺失时显示当前 Profile；
+  删除请求同样沿用该 `level`。
 - 成功 → Toast `toast.deleted` → 关闭弹窗 → 重取 `state`。
 - 失败 → Toast `toast.operationFailed`，弹窗保持打开，可重试。
 
@@ -167,7 +181,7 @@
 | --- | --- | --- |
 | `section.title` | MCP 服务 | MCP servers |
 | `page.title` | MCP 服务 | MCP servers |
-| `page.help` | 所有配置写入当前 Profile (cordis.patch.yml)，自动在全部工作区会话中共享生效 | All settings are written to the current Profile (cordis.patch.yml) and shared by every workspace session |
+| `page.help` | 新增配置写入当前 Profile (cordis.patch.yml)；已有行按所属配置层更新或删除；Profile 内所有工作区会话共享同一份配置 | New settings are written to the current Profile (cordis.patch.yml); existing rows are updated or deleted in their own config layer; all workspace sessions in the Profile share the same config |
 | `page.searchPlaceholder` | 搜索服务... | Search services... |
 | `page.refresh` | 刷新列表 | Refresh list |
 | `page.testAll` | 测试所有启用的 MCP 服务器 | Test all enabled MCP servers |
@@ -203,7 +217,7 @@
 | `action.cancel` | 取消 | Cancel |
 | `action.save` | 保存 | Save |
 | `action.probe` | 连接获取工具 | Connect and fetch tools |
-| `action.probeTip` | 尝试连接当前配置的 MCP 服务并刷新全量工具列表 | Try to connect to the configured MCP service and refresh the full tool list |
+| `action.probeTip` | 尝试连接当前配置的 MCP 服务并刷新工具列表与说明 | Try to connect to the configured MCP service and refresh the tool list and descriptions |
 | `action.allAuto` | 全设为自动允许 | Set all to auto-allow |
 | `action.resetDefault` | 重置默认 | Reset to default |
 | `action.pasteSample` | 粘贴社区分享 JSON 示例 | Paste shared JSON sample |
@@ -290,7 +304,7 @@
 | `editor.kvKeyHeader` | Header | Header |
 | `editor.kvValHeader` | Value | Value |
 | `editor.toolsTitle` | 工具权限配置 (autoApprove / disabledTools) | Tool permissions (autoApprove / disabledTools) |
-| `editor.toolsTip` | 底层尝试连接 MCP 服务拉取全量工具与说明。设为「自动允许」写入 autoApprove，设为「禁用」写入 disabledTools，保持「默认」则不写入配置文件；当前 DSH 版本的 MCP 客户端尚未读取 autoApprove/disabledTools | Connect to the MCP service to fetch all tools and descriptions. Auto-allow writes autoApprove, Disable writes disabledTools, and Default writes nothing; the current DSH MCP client does not read autoApprove/disabledTools |
+| `editor.toolsTip` | 底层尝试连接 MCP 服务获取工具列表与说明。设为「自动允许」写入 autoApprove，设为「禁用」写入 disabledTools，保持「默认」则不写入配置文件；当前 DSH 版本的 MCP 客户端尚未读取 autoApprove/disabledTools | Connect to the MCP service to fetch the tool list and descriptions. Auto-allow writes autoApprove, Disable writes disabledTools, and Default writes nothing; the current DSH MCP client does not read autoApprove/disabledTools |
 | `editor.toolsIdle` | 未获取工具列表 | Tool list not fetched |
 | `editor.toolsProbing` | 正在连接服务获取工具... | Connecting to fetch tools... |
 | `editor.toolsProbed` | 已连接获取 {count} 个工具 | Connected; fetched {count} tools |
@@ -324,7 +338,9 @@
 | --- | --- | --- |
 | `delete.title` | 删除 MCP 服务 | Delete MCP server |
 | `delete.descPrefix` | 确定要删除 | Delete |
-| `delete.descSuffix` | 吗？此操作会从当前 Profile 的 cordis.patch.yml 中移除该行，不可撤销。 | ? This removes the row from the current Profile cordis.patch.yml and cannot be undone. |
+| `delete.descSuffix` | 吗？此操作会从「{scope}」的 cordis.patch.yml 中移除对应行，不可撤销。 | ? This removes the corresponding row from {scope} cordis.patch.yml and cannot be undone. |
+| `delete.scopeGlobal` | home 层配置（影响使用该配置的所有 Profile） | the home-level config (affects every Profile that uses it) |
+| `delete.scopeProfile` | 当前 Profile 配置 | the current Profile config |
 | `delete.confirm` | 删除 | Delete |
 | `delete.cancel` | 取消 | Cancel |
 | `common.unknownError` | 未知错误 | Unknown error |
@@ -332,4 +348,5 @@
 | `common.invalidResponse` | 宿主返回了无效响应 | The host returned an invalid response |
 
 > 注：`delete.descPrefix` / `delete.descSuffix` 在原字典中分别带首尾空格，渲染时与 `serverName` 直接拼接；
-> 本表为便于阅读省略了行尾空格。
+> `delete.descSuffix` 的 `{scope}` 在运行时按行 `level` 插值为 `delete.scopeGlobal` 或 `delete.scopeProfile`；
+> 本表为便于阅读省略了行首尾空格。

@@ -162,6 +162,7 @@
         {
           title: mode === 'edit' ? t('editor.editTitle') : t('editor.addTitle'),
           size: 'editor',
+          mode: 'cover-host',
           onClose: props.onClose,
           returnFocus: props.returnFocus,
           closeLabel: t('action.close'),
