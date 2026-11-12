@@ -66,6 +66,7 @@ window.__ModuleLoader__.load({
       'page.help': '所有配置写入当前 Profile (cordis.patch.yml)，自动在全部工作区会话中共享生效',
       'page.searchPlaceholder': '搜索服务...',
       'page.testAll': '测试所有启用的 MCP 服务器',
+      'page.refresh': '刷新列表',
       'page.add': '新增',
       'page.loading': '正在加载 MCP 服务器…',
       'page.unauthorized': '当前页面未获授权，无法读取 MCP 服务器',
@@ -211,6 +212,7 @@ window.__ModuleLoader__.load({
       'page.help': 'All settings are written to the current Profile (cordis.patch.yml) and shared by every workspace session',
       'page.searchPlaceholder': 'Search services...',
       'page.testAll': 'Test all enabled MCP servers',
+      'page.refresh': 'Refresh list',
       'page.add': 'Add',
       'page.loading': 'Loading MCP servers…',
       'page.unauthorized': 'This page is not authorized to read MCP servers',
@@ -461,8 +463,6 @@ window.__ModuleLoader__.load({
     }
 
     function toolNamesOf(row) {
-      const probe = isObject(row) ? row.lastProbe : null
-      if (!isObject(probe)) return []
       const names = []
       const seen = {}
       const push = (name) => {
@@ -471,11 +471,17 @@ window.__ModuleLoader__.load({
           names.push(name)
         }
       }
-      if (Array.isArray(probe.tools)) {
-        for (const tool of probe.tools) if (isObject(tool)) push(textOf(tool.name))
+      const probe = isObject(row) ? row.lastProbe : null
+      if (isObject(probe)) {
+        if (Array.isArray(probe.tools)) {
+          for (const tool of probe.tools) if (isObject(tool)) push(textOf(tool.name))
+        }
+        if (Array.isArray(probe.toolNames)) {
+          for (const name of probe.toolNames) push(textOf(name))
+        }
       }
-      if (Array.isArray(probe.toolNames)) {
-        for (const name of probe.toolNames) push(textOf(name))
+      if (isObject(row) && Array.isArray(row.registeredTools)) {
+        for (const tool of row.registeredTools) if (isObject(tool)) push(textOf(tool.name))
       }
       const lists = toolListsOf(row)
       for (const name of lists.auto) push(name)
@@ -486,11 +492,20 @@ window.__ModuleLoader__.load({
     function toolDescriptionsOf(row) {
       const probe = isObject(row) ? row.lastProbe : null
       const out = {}
-      if (!isObject(probe) || !Array.isArray(probe.tools)) return out
-      for (const tool of probe.tools) {
-        if (!isObject(tool)) continue
-        const name = textOf(tool.name)
-        if (name !== '') out[name] = textOf(tool.description)
+      // Probe descriptions win; registered tools only fill names the probe did not cover.
+      if (isObject(probe) && Array.isArray(probe.tools)) {
+        for (const tool of probe.tools) {
+          if (!isObject(tool)) continue
+          const name = textOf(tool.name)
+          if (name !== '') out[name] = textOf(tool.description)
+        }
+      }
+      if (isObject(row) && Array.isArray(row.registeredTools)) {
+        for (const tool of row.registeredTools) {
+          if (!isObject(tool)) continue
+          const name = textOf(tool.name)
+          if (name !== '' && Object.prototype.hasOwnProperty.call(out, name) !== true) out[name] = textOf(tool.description)
+        }
       }
       return out
     }
@@ -498,10 +513,12 @@ window.__ModuleLoader__.load({
     function toolCountOf(row) {
       if (isObject(row) && typeof row.toolCount === 'number' && Number.isFinite(row.toolCount)) return row.toolCount
       const probe = isObject(row) ? row.lastProbe : null
-      if (isObject(probe) && typeof probe.toolCount === 'number' && Number.isFinite(probe.toolCount)) return probe.toolCount
+      if (isObject(probe) && probe.ok === true && typeof probe.toolCount === 'number' && Number.isFinite(probe.toolCount)) return probe.toolCount
+      const registered = isObject(row) && Array.isArray(row.registeredTools) ? row.registeredTools : []
+      if (registered.length > 0) return registered.length
       // Unknown (disabled or never connected) stays unknown instead of claiming zero tools.
-      const names = toolNamesOf(row)
-      return names.length > 0 ? names.length : null
+      // Permission lists (`autoApprove` / `disabledTools`) are configuration, not a tool count.
+      return null
     }
 
     function statusOf(t, row, testing) {
@@ -892,6 +909,11 @@ window.__ModuleLoader__.load({
       }
       if (isObject(probe) && Array.isArray(probe.toolNames)) {
         for (const name of probe.toolNames) push(textOf(name), '')
+      }
+      if (isObject(row) && Array.isArray(row.registeredTools)) {
+        for (const tool of row.registeredTools) {
+          if (isObject(tool)) push(textOf(tool.name), textOf(tool.description))
+        }
       }
       const lists = toolListsOf(row)
       for (const name of lists.auto) push(name, '')
@@ -2807,6 +2829,7 @@ window.__ModuleLoader__.load({
       const [loading, setLoading] = useState(true)
       const [error, setError] = useState(null)
       const [unauthorized, setUnauthorized] = useState(false)
+      const [refreshing, setRefreshing] = useState(false)
       const load = useCallback(async () => {
         try {
           const payload = await callApi('state', {})
@@ -2824,6 +2847,14 @@ window.__ModuleLoader__.load({
           setLoading(false)
         }
       }, [])
+      const refresh = useCallback(async () => {
+        setRefreshing(true)
+        try {
+          await load()
+        } finally {
+          setRefreshing(false)
+        }
+      }, [load])
       useEffect(() => {
         load()
         const timer = setInterval(load, POLL_MS)
@@ -2833,7 +2864,7 @@ window.__ModuleLoader__.load({
       }, [load])
       const rows = isObject(data) && Array.isArray(data.rows) ? data.rows : []
       const warnings = isObject(data) && Array.isArray(data.warnings) ? data.warnings.map((entry) => textOf(entry)).filter((entry) => entry !== '') : []
-      return { data: data, loading: loading, error: error, unauthorized: unauthorized, rows: rows, warnings: warnings, load: load }
+      return { data: data, loading: loading, error: error, unauthorized: unauthorized, refreshing: refreshing, rows: rows, warnings: warnings, load: load, refresh: refresh }
     }
 
     /** Row-level actions: enable toggle and the toolbar "test all" probe. */
@@ -2897,6 +2928,7 @@ window.__ModuleLoader__.load({
 
       function closeEditor() {
         setEditor(null)
+        load()
       }
 
       function handleSaved() {
@@ -2967,6 +2999,8 @@ window.__ModuleLoader__.load({
           hasData: state.data !== null,
           warnings: state.warnings,
           error: state.error,
+          refreshing: state.refreshing,
+          onRefresh: state.refresh,
           onTestAll: actions.testAll,
           onAdd: () => dialogs.openEditor('create', null),
         }),
@@ -3044,6 +3078,15 @@ window.__ModuleLoader__.load({
               },
             }),
           ),
+          h(IconButton, {
+            icon: ICON_REFRESH,
+            label: t('page.refresh'),
+            tooltip: t('page.refresh'),
+            className: 'mm-toolbar-btn',
+            spin: props.refreshing === true,
+            disabled: props.busy === true,
+            onClick: props.onRefresh,
+          }),
           h(IconButton, {
             icon: ICON_ZAP,
             label: t('page.testAll'),
@@ -3180,7 +3223,7 @@ window.__ModuleLoader__.load({
       '.mm-list{display:flex;flex-direction:column;flex:1 1 auto;min-height:0;overflow-y:auto;padding-right:2px;scrollbar-gutter:stable}',
       '.mm-list::-webkit-scrollbar,.mm-tools-list::-webkit-scrollbar,.mm-dialog-body::-webkit-scrollbar{width:6px;height:6px}',
       '.mm-list::-webkit-scrollbar-thumb,.mm-tools-list::-webkit-scrollbar-thumb,.mm-dialog-body::-webkit-scrollbar-thumb{background:color-mix(in srgb,var(--dsw-alias-label-tertiary) 45%,transparent);border-radius:9999px}',
-      '.mm-row{padding:16px 0;border-bottom:.5px solid var(--dsw-alias-border-l1);display:flex;flex-direction:column;gap:8px}',
+      '.mm-row{padding:16px 0;border-bottom:.5px solid var(--dsw-alias-border-l2);display:flex;flex-direction:column;gap:8px}',
       '.mm-row:last-child{border-bottom:none}',
       '.mm-row-main{display:flex;align-items:center;justify-content:space-between;gap:16px;min-width:0}',
       '.mm-row-left{min-width:0;flex:1 1 auto}',
@@ -3234,7 +3277,7 @@ window.__ModuleLoader__.load({
       '.mm-btn-md{height:32px;padding:0 12px;border-radius:var(--dsw-radius-md);font-size:calc(var(--ds-fs) - 1px);line-height:20px}',
       '.mm-empty{padding:48px 0;text-align:center;font-size:var(--ds-fs);color:var(--dsw-alias-label-tertiary)}',
       '.mm-loading{padding:32px 0;text-align:center;font-size:var(--ds-fs);color:var(--dsw-alias-label-tertiary)}',
-      '.mm-skeleton-row{padding:16px 0;border-bottom:.5px solid var(--dsw-alias-border-l1);display:flex;flex-direction:column;gap:8px}',
+      '.mm-skeleton-row{padding:16px 0;border-bottom:.5px solid var(--dsw-alias-border-l2);display:flex;flex-direction:column;gap:8px}',
       '.mm-skeleton-line{display:block;height:12px;border-radius:var(--dsw-radius-xs);background:color-mix(in srgb,var(--dsw-alias-label-tertiary) 14%,transparent);animation:mm-pulse 1.4s ease-in-out infinite}',
       '.mm-skeleton-name{width:40%}',
       '.mm-skeleton-summary{width:65%;height:10px}',

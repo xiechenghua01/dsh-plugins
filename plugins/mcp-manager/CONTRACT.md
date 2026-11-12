@@ -343,17 +343,25 @@ handler; wrap every op in try/catch.
   "description": "跨业务共享的代码仓库查询服务",  // catalog-only, '' when unset
   "extra": { "capabilities": {}, "autoApprove": [], "disabledTools": [], "oauth": {}, "maxRetries": 3 },
   "toolCount": 12,                   // number | null: null means "not known yet", not zero
-  "lastProbe": null,                 // ProbeResult from the in-memory cache
+  "registeredTools": [               // derived from the tools DSH already registered; [] when unavailable
+    { "name": "create_issue", "description": "Create a repository issue…" }
+  ],
+  "lastProbe": null,                 // ProbeResult from the in-memory cache; wins over registeredTools
   "updatedAt": 1793698687874
 }
 ```
 
 Rows are ordered `level` (global first) then `serverName`. `live` comes from
 `ctx.pluginManager.listPlugins()` filtered by `moduleName === '@deepseek-ai/dsh-mcp-client'`, matched
-by `patchId`/`entryId` tail; when the service is unavailable `live` is `null`. `toolCount` prefers
-the most recent probe's tool count (a real handshake); otherwise it counts `ctx.tools.schemas()`
-names matching `/^mcp__<serverName>__/`; when neither is available it is `null` and the client omits
-the count instead of claiming zero. The probe cache is in memory, so a Host reload clears it.
+by `patchId`/`entryId` tail; when the service is unavailable `live` is `null`. `registeredTools` is
+derived from `ctx.get('tools') ?? ctx.tools`'s `schemas()`: only `mcp__<serverName>__<tool>` entries
+are taken, the prefix is stripped from the name, and descriptions are truncated to 240 characters;
+a missing or throwing tool runtime yields `[]`. `toolCount` prefers a **successful** probe's
+`toolCount` (a real handshake); otherwise it uses `registeredTools.length` when greater than zero;
+when neither is available it is `null` and the client omits the count instead of claiming zero. The
+client's expanded row merges `lastProbe` tools first and then `registeredTools`, so a connectivity
+test that reuses the live connection (`connectedTools`, no `probeCache` write) still lists tools.
+The probe cache is in memory, so a Host reload clears it.
 
 ### `create`
 
@@ -542,7 +550,8 @@ phase changes when HMR applies a patch), and refetch immediately after every mut
 ### 8.2 UI surfaces
 
 - Page: settings-embedded content column (design.md §4.4). Header = title + help + search +
-  "test all" icon button + "add" primary button; warning/error banners; list; toasts.
+  "refresh" icon button + "test all" icon button + "add" primary button; warning/error banners;
+  list; toasts.
 - The page is **single-profile**: no scope filter, workspace binding, server library, or
   import/export UI.
 - Row: status dot, `serverName`, transport chip, optional read-only chip, optional latency, tool

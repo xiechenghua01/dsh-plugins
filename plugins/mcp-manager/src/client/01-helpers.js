@@ -109,8 +109,6 @@
     }
 
     function toolNamesOf(row) {
-      const probe = isObject(row) ? row.lastProbe : null
-      if (!isObject(probe)) return []
       const names = []
       const seen = {}
       const push = (name) => {
@@ -119,11 +117,17 @@
           names.push(name)
         }
       }
-      if (Array.isArray(probe.tools)) {
-        for (const tool of probe.tools) if (isObject(tool)) push(textOf(tool.name))
+      const probe = isObject(row) ? row.lastProbe : null
+      if (isObject(probe)) {
+        if (Array.isArray(probe.tools)) {
+          for (const tool of probe.tools) if (isObject(tool)) push(textOf(tool.name))
+        }
+        if (Array.isArray(probe.toolNames)) {
+          for (const name of probe.toolNames) push(textOf(name))
+        }
       }
-      if (Array.isArray(probe.toolNames)) {
-        for (const name of probe.toolNames) push(textOf(name))
+      if (isObject(row) && Array.isArray(row.registeredTools)) {
+        for (const tool of row.registeredTools) if (isObject(tool)) push(textOf(tool.name))
       }
       const lists = toolListsOf(row)
       for (const name of lists.auto) push(name)
@@ -134,11 +138,20 @@
     function toolDescriptionsOf(row) {
       const probe = isObject(row) ? row.lastProbe : null
       const out = {}
-      if (!isObject(probe) || !Array.isArray(probe.tools)) return out
-      for (const tool of probe.tools) {
-        if (!isObject(tool)) continue
-        const name = textOf(tool.name)
-        if (name !== '') out[name] = textOf(tool.description)
+      // Probe descriptions win; registered tools only fill names the probe did not cover.
+      if (isObject(probe) && Array.isArray(probe.tools)) {
+        for (const tool of probe.tools) {
+          if (!isObject(tool)) continue
+          const name = textOf(tool.name)
+          if (name !== '') out[name] = textOf(tool.description)
+        }
+      }
+      if (isObject(row) && Array.isArray(row.registeredTools)) {
+        for (const tool of row.registeredTools) {
+          if (!isObject(tool)) continue
+          const name = textOf(tool.name)
+          if (name !== '' && Object.prototype.hasOwnProperty.call(out, name) !== true) out[name] = textOf(tool.description)
+        }
       }
       return out
     }
@@ -146,10 +159,12 @@
     function toolCountOf(row) {
       if (isObject(row) && typeof row.toolCount === 'number' && Number.isFinite(row.toolCount)) return row.toolCount
       const probe = isObject(row) ? row.lastProbe : null
-      if (isObject(probe) && typeof probe.toolCount === 'number' && Number.isFinite(probe.toolCount)) return probe.toolCount
+      if (isObject(probe) && probe.ok === true && typeof probe.toolCount === 'number' && Number.isFinite(probe.toolCount)) return probe.toolCount
+      const registered = isObject(row) && Array.isArray(row.registeredTools) ? row.registeredTools : []
+      if (registered.length > 0) return registered.length
       // Unknown (disabled or never connected) stays unknown instead of claiming zero tools.
-      const names = toolNamesOf(row)
-      return names.length > 0 ? names.length : null
+      // Permission lists (`autoApprove` / `disabledTools`) are configuration, not a tool count.
+      return null
     }
 
     function statusOf(t, row, testing) {

@@ -18,7 +18,7 @@
 - **界面上不出现**：全局/工作区筛选、工作区分组、工作区绑定、服务器库、导入/导出、「应用到当前工作区」、
   「管理生效工作区」。列表页只有搜索 + 全部服务器；一次配置即在该 profile 的所有工作区会话中生效。
 - 页面自上而下：页头 → 警告/错误提示条 → 列表区（或空态/加载/错误态）→ Toast 层。
-- 页头一行：标题 + 帮助图标 + 搜索框 + 「全部测试」图标按钮 + 「新增」主按钮。
+- 页头一行：标题 + 帮助图标 + 搜索框 + 「刷新」图标按钮 + 「全部测试」图标按钮 + 「新增」主按钮。
 - 布局、内边距、响应式与数据四态见 design.md §4.4、§4.7、§7.10。
 - 字号跟随、`--ds-fs` 阶梯与浮层字号穿透见 design.md §3。
 
@@ -39,7 +39,9 @@
 
 - **行内操作固定 3 个**：启停 / 编辑 / 删除。测试入口只有两处：编辑弹窗底部的「测试连通性」，以及页头的
   「全部测试」。视觉与交互见 design.md §7.2、§7.9。
-- 展开区：工具徽章，三态为默认 / 自动允许 / 禁用；徽章 Tooltip 显示「说明 · 状态」。
+- 展开区：工具徽章，三态为默认 / 自动允许 / 禁用；徽章 Tooltip 显示「说明 · 状态」。工具来源按优先级合并：
+  最近一次 probe 的 `lastProbe.tools` / `lastProbe.toolNames`，其次 DSH 已注册工具 `registeredTools`，
+  最后是自允许 / 禁用列表中的名称；按名称去重并保持首见顺序，probe 的说明优先于已注册工具的说明。
 - 搜索匹配 `serverName`、命令/URL 摘要、行 `id` 与协议。
 - 空列表显示一句话空态（见 design.md §7.10）。
 
@@ -103,8 +105,10 @@
 
 状态的视觉表达（状态点颜色、脉冲等）见 design.md §7.9。
 
-- `toolCount` 优先取 `row.toolCount`，其次取 `lastProbe.toolCount`；都没有时为 `null`，界面省略数量而不是显示 0。
-- 工具名来源：最近一次探测的 `tools` / `toolNames`，加上配置中的 `autoApprove` / `disabledTools` 去重。
+- `toolCount` 优先取 `row.toolCount`；其次取成功探测（`lastProbe.ok === true`）的 `lastProbe.toolCount`；再次取非空的
+  `registeredTools` 长度；都没有时为 `null`，数量显示 `—` 而不是 0。
+- 工具名来源按优先级合并：最近一次探测的 `tools` / `toolNames`，其次 DSH 已注册工具 `registeredTools`，
+  最后是配置中的 `autoApprove` / `disabledTools`；按名称去重。权限配置里的名称只用于展开区展示，不参与数量推导。
 - `readOnly` 行显示只读标签；启停、编辑、删除全部禁用，不发起写请求。
 
 ### 2.3 启停
@@ -165,6 +169,7 @@
 | `page.title` | MCP 服务 | MCP servers |
 | `page.help` | 所有配置写入当前 Profile (cordis.patch.yml)，自动在全部工作区会话中共享生效 | All settings are written to the current Profile (cordis.patch.yml) and shared by every workspace session |
 | `page.searchPlaceholder` | 搜索服务... | Search services... |
+| `page.refresh` | 刷新列表 | Refresh list |
 | `page.testAll` | 测试所有启用的 MCP 服务器 | Test all enabled MCP servers |
 | `page.add` | 新增 | Add |
 | `page.loading` | 正在加载 MCP 服务器… | Loading MCP servers… |

@@ -60,6 +60,7 @@
       const [loading, setLoading] = useState(true)
       const [error, setError] = useState(null)
       const [unauthorized, setUnauthorized] = useState(false)
+      const [refreshing, setRefreshing] = useState(false)
       const load = useCallback(async () => {
         try {
           const payload = await callApi('state', {})
@@ -77,6 +78,14 @@
           setLoading(false)
         }
       }, [])
+      const refresh = useCallback(async () => {
+        setRefreshing(true)
+        try {
+          await load()
+        } finally {
+          setRefreshing(false)
+        }
+      }, [load])
       useEffect(() => {
         load()
         const timer = setInterval(load, POLL_MS)
@@ -86,7 +95,7 @@
       }, [load])
       const rows = isObject(data) && Array.isArray(data.rows) ? data.rows : []
       const warnings = isObject(data) && Array.isArray(data.warnings) ? data.warnings.map((entry) => textOf(entry)).filter((entry) => entry !== '') : []
-      return { data: data, loading: loading, error: error, unauthorized: unauthorized, rows: rows, warnings: warnings, load: load }
+      return { data: data, loading: loading, error: error, unauthorized: unauthorized, refreshing: refreshing, rows: rows, warnings: warnings, load: load, refresh: refresh }
     }
 
     /** Row-level actions: enable toggle and the toolbar "test all" probe. */
@@ -150,6 +159,7 @@
 
       function closeEditor() {
         setEditor(null)
+        load()
       }
 
       function handleSaved() {
@@ -220,6 +230,8 @@
           hasData: state.data !== null,
           warnings: state.warnings,
           error: state.error,
+          refreshing: state.refreshing,
+          onRefresh: state.refresh,
           onTestAll: actions.testAll,
           onAdd: () => dialogs.openEditor('create', null),
         }),

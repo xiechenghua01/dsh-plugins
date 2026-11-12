@@ -75,6 +75,11 @@
       if (isObject(probe) && Array.isArray(probe.toolNames)) {
         for (const name of probe.toolNames) push(textOf(name), '')
       }
+      if (isObject(row) && Array.isArray(row.registeredTools)) {
+        for (const tool of row.registeredTools) {
+          if (isObject(tool)) push(textOf(tool.name), textOf(tool.description))
+        }
+      }
       const lists = toolListsOf(row)
       for (const name of lists.auto) push(name, '')
       for (const name of lists.disabled) push(name, '')

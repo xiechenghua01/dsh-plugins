@@ -33,6 +33,15 @@
             }),
           ),
           h(IconButton, {
+            icon: ICON_REFRESH,
+            label: t('page.refresh'),
+            tooltip: t('page.refresh'),
+            className: 'mm-toolbar-btn',
+            spin: props.refreshing === true,
+            disabled: props.busy === true,
+            onClick: props.onRefresh,
+          }),
+          h(IconButton, {
             icon: ICON_ZAP,
             label: t('page.testAll'),
             tooltip: t('page.testAll'),

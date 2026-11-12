@@ -537,6 +537,7 @@ export function apply(ctx, config) {
           extra: {},
           live: null,
           toolCount: 0,
+          registeredTools: [],
           lastProbe: probeCache.get(`${level}:${row.id}`) ?? null,
           updatedAt: 0,
         })
@@ -576,27 +577,54 @@ export function apply(ctx, config) {
     return live.find((entry) => typeof entry.entryId === 'string' && (entry.entryId === row.id || entry.entryId.endsWith(`:${row.id}`)))
   }
 
-  function toolCounts() {
-    const counts = {}
+  /**
+   * Tools the DSH runtime has already registered, grouped by MCP server name. A `Map` keeps
+   * names such as `constructor` or `__proto__` safe. Matching only against the configured row
+   * names (longest first) keeps `__` inside a tool name intact: `mcp__github__ns__ping` maps to
+   * server `github`, tool `ns__ping`, exactly like `opConnectedTools`' prefix check.
+   */
+  function registeredTools(serverNames) {
+    const map = new Map()
     const tools = ctx.get('tools') ?? ctx.tools
-    if (tools === undefined || tools === null || typeof tools.schemas !== 'function') return counts
+    if (tools === undefined || tools === null || typeof tools.schemas !== 'function') return map
+    let schemas
     try {
-      const schemas = tools.schemas()
-      if (!Array.isArray(schemas)) return counts
-      for (const schema of schemas) {
-        const match = /^mcp__([A-Za-z0-9_-]+)__/u.exec(String(schema?.name ?? ''))
-        if (match === null) continue
-        counts[match[1]] = (counts[match[1]] ?? 0) + 1
-      }
+      schemas = tools.schemas()
     } catch {
-      /* a composition without the tool runtime simply reports zero tools */
+      /* a composition without the tool runtime simply reports no registered tools */
+      return map
     }
-    return counts
+    if (!Array.isArray(schemas)) return map
+    const candidates = (Array.isArray(serverNames) ? serverNames : [])
+      .filter((name) => typeof name === 'string' && name !== '')
+      .sort((left, right) => right.length - left.length)
+    for (const schema of schemas) {
+      const fullName = typeof schema?.name === 'string' ? schema.name : ''
+      const serverName = candidates.find((name) => fullName.startsWith(`mcp__${name}__`))
+      if (serverName === undefined) continue
+      const name = fullName.slice(`mcp__${serverName}__`.length)
+      if (name === '') continue
+      const list = map.get(serverName) ?? []
+      list.push({
+        name,
+        description: typeof schema.description === 'string' ? schema.description.slice(0, 240) : '',
+      })
+      map.set(serverName, list)
+    }
+    return map
   }
 
   async function decorateRows(rows) {
     const live = await liveEntries()
-    const counts = toolCounts()
+    // Match schemas only against the server names actually configured in this composition.
+    const serverNames = []
+    const seenServerNames = new Set()
+    for (const row of rows) {
+      if (seenServerNames.has(row.serverName)) continue
+      seenServerNames.add(row.serverName)
+      serverNames.push(row.serverName)
+    }
+    const registeredByServer = registeredTools(serverNames)
     for (const row of rows) {
       const entry = liveFor(row, live)
       row.live =
@@ -608,12 +636,17 @@ export function apply(ctx, config) {
               addressable: typeof entry.patchId === 'string' && entry.patchId !== '',
             }
       // The live tool count comes from a probe when one ran (a real handshake), otherwise from
-      // the tool registry when this scope can see it; `null` means "not known" and the client
+      // the tools the DSH runtime already registered; `null` means "not known" and the client
       // simply omits the count instead of claiming zero.
+      const registered = registeredByServer.get(row.serverName) ?? []
       const probed = probeCache.get(`${row.level}:${row.id}`)
-      const registered = counts[row.serverName]
-      const count = probed !== undefined && probed.ok === true && typeof probed.toolCount === 'number' ? probed.toolCount : registered
-      row.toolCount = typeof count === 'number' && Number.isFinite(count) ? count : null
+      const probedCount =
+        probed !== undefined && probed.ok === true && typeof probed.toolCount === 'number' && Number.isFinite(probed.toolCount)
+          ? probed.toolCount
+          : null
+      const count = probedCount !== null ? probedCount : registered.length > 0 ? registered.length : null
+      row.registeredTools = registered
+      row.toolCount = count
       row.updatedAt = Number.isFinite(entry?.updatedAt) ? entry.updatedAt : 0
     }
     return rows
