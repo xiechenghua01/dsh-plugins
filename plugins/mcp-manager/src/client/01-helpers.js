@@ -167,6 +167,30 @@
       return null
     }
 
+    /** Latest successful probe duration in whole ms; null when absent, failed or invalid. */
+    function latencyOf(row) {
+      const probe = isObject(row) ? row.lastProbe : null
+      if (!isObject(probe) || probe.ok !== true) return null
+      if (typeof probe.durationMs !== 'number' || !Number.isFinite(probe.durationMs) || probe.durationMs < 0) return null
+      return Math.round(probe.durationMs)
+    }
+
+    /**
+     * Latency tone for the compact data badge: `good` / `fair` / `poor`, or null.
+     * Each band includes its upper bound (≤ goodMax is good, ≤ fairMax is fair) and
+     * thresholds are transport-specific; only `stdio` gets the slower pair, every
+     * other transport uses the HTTP pair.
+     */
+    function latencyToneOf(ms, transport) {
+      if (typeof ms !== 'number' || !Number.isFinite(ms) || ms < 0) return null
+      const stdio = transport === 'stdio'
+      const goodMax = stdio ? 800 : 200
+      const fairMax = stdio ? 2500 : 600
+      if (ms <= goodMax) return 'good'
+      if (ms <= fairMax) return 'fair'
+      return 'poor'
+    }
+
     function statusOf(t, row, testing) {
       if (testing === true) return { tone: 'warn', text: t('status.testing'), pulse: true }
       if (row.disabled === true) return { tone: 'muted', text: t('status.disabled'), pulse: false }

@@ -27,10 +27,14 @@
       const names = toolNamesOf(row)
       const descriptions = toolDescriptionsOf(row)
       const lists = toolListsOf(row)
-      const probe = isObject(row.lastProbe) ? row.lastProbe : null
-      const latency = isObject(probe) && probe.ok === true && typeof probe.durationMs === 'number' && Number.isFinite(probe.durationMs)
-        ? Math.round(probe.durationMs)
-        : null
+      const latency = latencyOf(row)
+      const tone = latency === null ? null : latencyToneOf(latency, transport)
+      const latencyLevelKey = tone === 'good'
+        ? 'list.latencyLevelGood'
+        : tone === 'fair' ? 'list.latencyLevelFair' : tone === 'poor' ? 'list.latencyLevelPoor' : ''
+      const latencyTip = latency !== null && latencyLevelKey !== ''
+        ? t('list.latencyTip', { ms: latency, level: t(latencyLevelKey) })
+        : ''
       const blocked = props.busy === true || readOnly === true
       return h(
         'div',
@@ -56,9 +60,18 @@
               readOnly === true
                 ? h('span', Object.assign({ className: 'mm-chip mm-chip-warn' }, tooltipHandlers(t('list.readOnlyTip'))), t('list.readOnly'))
                 : null,
-              enabled === true && latency !== null
-                ? h('span', { className: 'mm-latency' }, t('list.latency', { ms: latency }))
-                : null,
+              testing === true && enabled === true
+                ? h('span', { className: 'mm-latency mm-latency-neutral' }, '…')
+                : enabled === true && latency !== null && tone !== null
+                  ? h(
+                    'span',
+                    Object.assign({
+                      className: 'mm-latency mm-latency-' + tone,
+                      'aria-label': latencyTip,
+                    }, tooltipHandlers(latencyTip)),
+                    t('list.latency', { ms: latency }),
+                  )
+                  : null,
               h(
                 LinkButton,
                 {

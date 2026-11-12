@@ -34,7 +34,7 @@
 | 行首 | `serverName` | 完整命令/URL 见第二行摘要 |
 | 行首 | 协议标签 | `stdio` / `streamable-http` |
 | 行首 | 只读标签（可选） | 仅 `readOnly` 行显示 |
-| 行首 | 延迟（可选） | 仅启用且最近一次探测成功时显示 |
+| 行首 | 延迟（可选） | 仅启用、未在测试且最近一次探测成功时显示分级徽章；数据取 `lastProbe.durationMs`，状态矩阵见 §2.2 |
 | 行首 | 「N 工具」 | 点击展开工具徽章；数量未知时显示 `—`，不冒充 0 |
 | 第二行 | 命令/URL 摘要 | stdio 为 `command + args.join(' ')`；远程为 `url` |
 | 行尾 | 行内操作 3 个 | 启停、编辑、删除；**不设**行内测试按钮 |
@@ -44,6 +44,16 @@
 - 展开区：工具徽章，三态为默认 / 自动允许 / 禁用；徽章 Tooltip 显示「说明 · 状态」。工具来源按优先级合并：
   最近一次 probe 的 `lastProbe.tools` / `lastProbe.toolNames`，其次 DSH 已注册工具 `registeredTools`，
   最后是自允许 / 禁用列表中的名称；按名称去重并保持首见顺序，probe 的说明优先于已注册工具的说明。
+- 延迟徽章是 18px 紧凑数据徽章：`display: inline-flex`、内容居中、`height: 18px`、`min-width: 52px`、
+  `padding: 0 5px`、`border-radius: var(--dsw-radius-xs)`、辅助档字号 `calc(var(--ds-fs) - 2px)`、
+  `line-height: 17px`、`white-space: nowrap`、`font-variant-numeric: tabular-nums`、`flex: none`。
+  三态 class 为 `.mm-latency-good` / `.mm-latency-fair` / `.mm-latency-poor`，分别用 success / warn / error
+  语义色的 12% 底、28% 边框与语义色文字；测试中的中性占位 `.mm-latency-neutral` 用 `label-tertiary` 的
+  10% 底与 24% 边框。徽章文本取 `list.latency`，Tooltip 与 `aria-label` 统一取 `list.latencyTip`；
+  数值型标识不参与标题宽度竞争。
+- 延迟字段只取最近一次成功探测的 `lastProbe.durationMs`，不读本地计时或历史缓存；阈值按 transport 分两套
+  （区间含上限、不含下限）：`stdio` ≤ 800ms 良好、800 < x ≤ 2500ms 一般、> 2500ms 慢；其余
+  transport（含 `streamable-http`）≤ 200ms 良好、200 < x ≤ 600ms 一般、> 600ms 慢。
 - 搜索匹配 `serverName`、命令/URL 摘要、行 `id` 与协议。
 - 主列表渲染搜索命中的**全部**行，由列表容器滚动；不设默认 5 条预览，也不加「查看更多」。工具明细展示
   已返回的数据；探测响应的防御性摘要上限见 CONTRACT §5，它不是工具注册或调用数量的限制，也不是列表预览策略。
@@ -116,6 +126,15 @@
 | 6 | 其余 | `status.running` | — |
 
 状态的视觉表达（状态点颜色、脉冲等）见 [根 DESIGN.md](../../DESIGN.md) §7.9。
+
+**延迟徽章状态矩阵**（阈值与字段见 §1.2，实现见 `01-helpers.js` / `30-row.js`）：
+
+| 条件 | 徽章 | 附加表现 |
+| --- | --- | --- |
+| 该行正在测试（本行 `testing`，或「全部测试」覆盖的启用行） | `.mm-latency-neutral`，文本 `…` | 不显示上一次的旧值 |
+| `row.disabled === true` | 不显示 | — |
+| 未探测、`lastProbe.ok !== true`，或 `durationMs` 非有限/为负 | 不显示 | — |
+| 启用且 `lastProbe.ok === true`、`durationMs` 有限 | `.mm-latency-good` / `.mm-latency-fair` / `.mm-latency-poor` | 文本 `list.latency`；`aria-label` 与 Tooltip 均为 `list.latencyTip`（含等级文案） |
 
 - `toolCount` 优先取 `row.toolCount`；其次取成功探测（`lastProbe.ok === true`）的 `lastProbe.toolCount`；再次取非空的
   `registeredTools` 长度；都没有时为 `null`，数量显示 `—` 而不是 0。
@@ -203,6 +222,10 @@
 | `list.readOnly` | 只读 | Read-only |
 | `list.readOnlyTip` | 该行无法安全改写，只能查看 | This row cannot be rewritten safely and is view-only |
 | `list.latency` | {ms}ms | {ms}ms |
+| `list.latencyTip` | 最近一次探测耗时 {ms}ms · {level} | Last probe took {ms}ms · {level} |
+| `list.latencyLevelGood` | 良好 | Good |
+| `list.latencyLevelFair` | 一般 | Fair |
+| `list.latencyLevelPoor` | 慢 | Slow |
 
 ### 3.2 行内操作与工具权限
 

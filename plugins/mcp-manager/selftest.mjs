@@ -15,6 +15,7 @@ import {
 import { emptyLibrary, removeServer, syncLibrary, upsertServer } from './lib/library.mjs'
 import { runUiContract } from './tests/ui-contract.mjs'
 import { runCopyContract } from './tests/copy-contract.mjs'
+import { runLatencyContract } from './tests/latency-contract.mjs'
 
 function expect(report, condition, message) {
   if (!condition) report(message)
@@ -214,4 +215,7 @@ export async function run(report) {
 
   // ---- copy contract: locale, delete scopes, DESIGN §3 --------------------
   runCopyContract(report)
+
+  // ---- latency contract: thresholds, data badge, locale, DESIGN §3 -------
+  runLatencyContract(report)
 }

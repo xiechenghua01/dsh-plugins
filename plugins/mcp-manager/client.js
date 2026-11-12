@@ -85,6 +85,10 @@ window.__ModuleLoader__.load({
       'list.readOnly': '只读',
       'list.readOnlyTip': '该行无法安全改写，只能查看',
       'list.latency': '{ms}ms',
+      'list.latencyTip': '最近一次探测耗时 {ms}ms · {level}',
+      'list.latencyLevelGood': '良好',
+      'list.latencyLevelFair': '一般',
+      'list.latencyLevelPoor': '慢',
       'tool.stateDefault': '未写入配置，沿用宿主工具审批策略',
       'tool.stateAuto': '配置为自动允许 (autoApprove)；当前 DSH 版本的 MCP 客户端尚未读取该字段',
       'tool.stateDisabled': '配置为禁用 (disabledTools)；当前 DSH 版本的 MCP 客户端尚未读取该字段',
@@ -233,6 +237,10 @@ window.__ModuleLoader__.load({
       'list.readOnly': 'Read-only',
       'list.readOnlyTip': 'This row cannot be rewritten safely and is view-only',
       'list.latency': '{ms}ms',
+      'list.latencyTip': 'Last probe took {ms}ms · {level}',
+      'list.latencyLevelGood': 'Good',
+      'list.latencyLevelFair': 'Fair',
+      'list.latencyLevelPoor': 'Slow',
       'tool.stateDefault': 'Not written to config; follows the host tool approval policy',
       'tool.stateAuto': 'Configured as auto-allow (autoApprove); the current DSH MCP client does not read this field yet',
       'tool.stateDisabled': 'Configured as disabled (disabledTools); the current DSH MCP client does not read this field yet',
@@ -523,6 +531,30 @@ window.__ModuleLoader__.load({
       // Unknown (disabled or never connected) stays unknown instead of claiming zero tools.
       // Permission lists (`autoApprove` / `disabledTools`) are configuration, not a tool count.
       return null
+    }
+
+    /** Latest successful probe duration in whole ms; null when absent, failed or invalid. */
+    function latencyOf(row) {
+      const probe = isObject(row) ? row.lastProbe : null
+      if (!isObject(probe) || probe.ok !== true) return null
+      if (typeof probe.durationMs !== 'number' || !Number.isFinite(probe.durationMs) || probe.durationMs < 0) return null
+      return Math.round(probe.durationMs)
+    }
+
+    /**
+     * Latency tone for the compact data badge: `good` / `fair` / `poor`, or null.
+     * Each band includes its upper bound (≤ goodMax is good, ≤ fairMax is fair) and
+     * thresholds are transport-specific; only `stdio` gets the slower pair, every
+     * other transport uses the HTTP pair.
+     */
+    function latencyToneOf(ms, transport) {
+      if (typeof ms !== 'number' || !Number.isFinite(ms) || ms < 0) return null
+      const stdio = transport === 'stdio'
+      const goodMax = stdio ? 800 : 200
+      const fairMax = stdio ? 2500 : 600
+      if (ms <= goodMax) return 'good'
+      if (ms <= fairMax) return 'fair'
+      return 'poor'
     }
 
     function statusOf(t, row, testing) {
@@ -1671,10 +1703,14 @@ window.__ModuleLoader__.load({
       const names = toolNamesOf(row)
       const descriptions = toolDescriptionsOf(row)
       const lists = toolListsOf(row)
-      const probe = isObject(row.lastProbe) ? row.lastProbe : null
-      const latency = isObject(probe) && probe.ok === true && typeof probe.durationMs === 'number' && Number.isFinite(probe.durationMs)
-        ? Math.round(probe.durationMs)
-        : null
+      const latency = latencyOf(row)
+      const tone = latency === null ? null : latencyToneOf(latency, transport)
+      const latencyLevelKey = tone === 'good'
+        ? 'list.latencyLevelGood'
+        : tone === 'fair' ? 'list.latencyLevelFair' : tone === 'poor' ? 'list.latencyLevelPoor' : ''
+      const latencyTip = latency !== null && latencyLevelKey !== ''
+        ? t('list.latencyTip', { ms: latency, level: t(latencyLevelKey) })
+        : ''
       const blocked = props.busy === true || readOnly === true
       return h(
         'div',
@@ -1700,9 +1736,18 @@ window.__ModuleLoader__.load({
               readOnly === true
                 ? h('span', Object.assign({ className: 'mm-chip mm-chip-warn' }, tooltipHandlers(t('list.readOnlyTip'))), t('list.readOnly'))
                 : null,
-              enabled === true && latency !== null
-                ? h('span', { className: 'mm-latency' }, t('list.latency', { ms: latency }))
-                : null,
+              testing === true && enabled === true
+                ? h('span', { className: 'mm-latency mm-latency-neutral' }, '…')
+                : enabled === true && latency !== null && tone !== null
+                  ? h(
+                    'span',
+                    Object.assign({
+                      className: 'mm-latency mm-latency-' + tone,
+                      'aria-label': latencyTip,
+                    }, tooltipHandlers(latencyTip)),
+                    t('list.latency', { ms: latency }),
+                  )
+                  : null,
               h(
                 LinkButton,
                 {
@@ -3372,7 +3417,11 @@ window.__ModuleLoader__.load({
       '.mm-chip{display:inline-flex;align-items:center;gap:4px;height:20px;padding:0 6px;border-radius:var(--dsw-radius-xs);font-size:calc(var(--ds-fs) - 2px);line-height:19px;white-space:nowrap;border:.5px solid transparent;flex:none}',
       '.mm-chip-mono{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;background:var(--dsw-alias-bg-layer-1);color:var(--dsw-alias-label-secondary);border-color:var(--dsw-alias-border-l1)}',
       '.mm-chip-warn{background:color-mix(in srgb,var(--dsw-alias-state-warn-primary) 12%,transparent);color:var(--dsw-alias-state-warn-primary);border-color:color-mix(in srgb,var(--dsw-alias-state-warn-primary) 28%,transparent)}',
-      '.mm-latency{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:calc(var(--ds-fs) - 2px);color:var(--dsw-alias-label-tertiary);white-space:nowrap}',
+      '.mm-latency{display:inline-flex;align-items:center;justify-content:center;height:18px;min-width:52px;padding:0 5px;border-radius:var(--dsw-radius-xs);font-size:calc(var(--ds-fs) - 2px);line-height:17px;white-space:nowrap;border:.5px solid transparent;font-variant-numeric:tabular-nums;flex:none}',
+      '.mm-latency-good{background:color-mix(in srgb,var(--dsw-alias-state-success-primary) 12%,transparent);border-color:color-mix(in srgb,var(--dsw-alias-state-success-primary) 28%,transparent);color:var(--dsw-alias-state-success-primary)}',
+      '.mm-latency-fair{background:color-mix(in srgb,var(--dsw-alias-state-warn-primary) 12%,transparent);border-color:color-mix(in srgb,var(--dsw-alias-state-warn-primary) 28%,transparent);color:var(--dsw-alias-state-warn-primary)}',
+      '.mm-latency-poor{background:color-mix(in srgb,var(--dsw-alias-state-error-primary) 12%,transparent);border-color:color-mix(in srgb,var(--dsw-alias-state-error-primary) 28%,transparent);color:var(--dsw-alias-state-error-primary)}',
+      '.mm-latency-neutral{background:color-mix(in srgb,var(--dsw-alias-label-tertiary) 10%,transparent);border-color:color-mix(in srgb,var(--dsw-alias-label-tertiary) 24%,transparent);color:var(--dsw-alias-label-tertiary)}',
       '.mm-tools-btn{display:inline-flex;align-items:center;gap:2px;padding:0;border:none;background:transparent;color:var(--dsw-alias-label-secondary);font-size:calc(var(--ds-fs) - 2px);font-family:inherit;cursor:pointer;white-space:nowrap}',
       '.mm-tools-btn:hover{color:var(--dsw-alias-label-primary)}',
       '.mm-chevron{transition:transform .18s ease}',
