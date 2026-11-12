@@ -669,7 +669,7 @@
 | --- | --- |
 | 状态点 | 8×8，与文字 gap 6px，`aria-hidden`；含义由旁边文字或 `aria-label` 承载 |
 | 文字徽章 | 高 20px，padding `0 6px`，`radius-xs`，辅助档，语义色 12% 底 |
-| 数据徽章（延迟等） | 高 18px，padding `0 5px`，`radius-xs`，辅助档，语义色 12% 底 + `.5px` 语义色 28% 边框；数值型标识不参与标题宽度竞争 |
+| 数据徽章（延迟等） | `min-height` `calc(var(--ds-fs) + 2px)`（默认字号下 18px），padding `0 5px`，`radius-xs`，辅助档，语义色 12% 底 + `.5px` 语义色 28% 边框；数值型标识不参与标题宽度竞争 |
 | 组合状态 | 横排 `gap 4px` 不换行；放不下折叠为 `+N` + Tooltip |
 | 布局 | 徽章 `flex: none`，不参与标题宽度竞争 |
 

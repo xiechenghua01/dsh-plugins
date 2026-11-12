@@ -343,12 +343,12 @@ function testCssContract(report) {
     ['display', 'inline-flex'],
     ['align-items', 'center'],
     ['justify-content', 'center'],
-    ['height', '18px'],
+    ['min-height', 'calc(var(--ds-fs) + 2px)'],
     ['min-width', '52px'],
     ['padding', '0 5px'],
     ['border-radius', 'var(--dsw-radius-xs)'],
     ['font-size', 'calc(var(--ds-fs) - 2px)'],
-    ['line-height', '17px'],
+    ['line-height', 'normal'],
     ['white-space', 'nowrap'],
     ['border', '.5px solid transparent'],
     ['font-variant-numeric', 'tabular-nums'],
@@ -384,6 +384,34 @@ function testCssContract(report) {
 }
 
 /**
+ * Every badge shrinks its text by 2px against `--ds-fs`. A fixed `height` and the
+ * matching fixed `line-height` therefore clip the label once the host font-size
+ * grows, so each badge must scale both with the token instead.
+ */
+function testBadgeVerticalFit(report) {
+  const css = new Function(sourceOf('90-styles.js') + '\nreturn CSS\n')()
+  const lines = css.split('\n')
+  const ruleOf = (selector) => lines.find((line) => line.startsWith(selector + '{')) || ''
+  const badges = [
+    ['.mm-chip', 4],
+    ['.mm-latency', 2],
+    ['.mm-tool-badge', 4],
+    ['.mm-badge', 4],
+    ['.mm-tools-status', 4],
+  ]
+  for (const [selector, slack] of badges) {
+    const rule = ruleOf(selector)
+    expect(report, rule !== '', `90-styles.js must define ${selector}`)
+    if (rule === '') continue
+    const decl = declarationsOf(rule)
+    expect(report, decl.duplicates.length === 0, `${selector} must not redeclare properties: ${decl.duplicates.join(', ')}`)
+    expect(report, decl.map.get('font-size') === 'calc(var(--ds-fs) - 2px)', `${selector} must keep the auxiliary font size`)
+    expect(report, decl.map.get('min-height') === `calc(var(--ds-fs) + ${slack}px)`, `${selector} min-height must scale with --ds-fs (got ${String(decl.map.get('min-height'))})`)
+    expect(report, decl.map.get('line-height') === 'normal', `${selector} must not pin line-height (got ${String(decl.map.get('line-height'))})`)
+  }
+}
+
+/**
  * Entry point called from `selftest.run(report)`. Kept dependency-free and synthetic.
  * @param {(message: string) => void} report
  */
@@ -395,4 +423,5 @@ export function runLatencyContract(report) {
   testLocale(report, locale)
   testDesignTable(report, locale)
   testCssContract(report)
+  testBadgeVerticalFit(report)
 }

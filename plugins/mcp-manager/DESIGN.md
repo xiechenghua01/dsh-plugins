@@ -44,9 +44,12 @@
 - 展开区：工具徽章，三态为默认 / 自动允许 / 禁用；徽章 Tooltip 显示「说明 · 状态」。工具来源按优先级合并：
   最近一次 probe 的 `lastProbe.tools` / `lastProbe.toolNames`，其次 DSH 已注册工具 `registeredTools`，
   最后是自允许 / 禁用列表中的名称；按名称去重并保持首见顺序，probe 的说明优先于已注册工具的说明。
-- 延迟徽章是 18px 紧凑数据徽章：`display: inline-flex`、内容居中、`height: 18px`、`min-width: 52px`、
+- 延迟徽章是紧凑数据徽章：`display: inline-flex`、内容居中、`min-height: calc(var(--ds-fs) + 2px)`、`min-width: 52px`、
   `padding: 0 5px`、`border-radius: var(--dsw-radius-xs)`、辅助档字号 `calc(var(--ds-fs) - 2px)`、
-  `line-height: 17px`、`white-space: nowrap`、`font-variant-numeric: tabular-nums`、`flex: none`。
+  `line-height: normal`、`white-space: nowrap`、`font-variant-numeric: tabular-nums`、`flex: none`。
+  尺寸随 `--ds-fs` 缩放而不是写死像素：徽章文字比正文字号小 2px，固定盒高会在宿主调大字号后裁掉文字上下沿。
+  用 `min-height` 而非 `height`，字号超出时由行盒自然撑高；`.mm-chip`、`.mm-tool-badge`、`.mm-badge`、
+  `.mm-tools-status` 同理，统一按 `calc(var(--ds-fs) + 4px)`。默认 16px 字号下仍为 18px / 20px，与设计值一致。
   三态 class 为 `.mm-latency-good` / `.mm-latency-fair` / `.mm-latency-poor`，分别用 success / warn / error
   语义色的 12% 底、28% 边框与语义色文字；测试中的中性占位 `.mm-latency-neutral` 用 `label-tertiary` 的
   10% 底与 24% 边框。徽章文本取 `list.latency`，Tooltip 与 `aria-label` 统一取 `list.latencyTip`；
