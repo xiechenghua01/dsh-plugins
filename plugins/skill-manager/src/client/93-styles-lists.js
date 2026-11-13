@@ -423,7 +423,9 @@ const STYLES_4 = `
   color: var(--dsw-alias-label-secondary);
   font-size: calc(var(--ds-fs) - 3px);
   font-weight: 500;
-  line-height: 17px;
+  /* The label shrinks 3px against --ds-fs; a fixed line-height clips its top and
+   * bottom once the host font-size grows, so the line box must stay intrinsic. */
+  line-height: normal;
   white-space: nowrap;
   flex-shrink: 0;
 }

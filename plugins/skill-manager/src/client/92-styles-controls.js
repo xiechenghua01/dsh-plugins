@@ -140,7 +140,9 @@ const STYLES_3 = `
 }
 
 .sm-chip {
-  height: 24px;
+  /* The label shrinks 2px against --ds-fs; the box scales with the token so the
+   * text is never clipped when the host font-size grows. */
+  min-height: calc(var(--ds-fs) + 6px);
   padding: 0 8px;
   border-radius: var(--dsw-radius-panel);
   border: 0.5px solid var(--dsw-alias-border-l1);

@@ -362,14 +362,16 @@ const STYLES_2 = `
 .sm-tab-count,
 .sm-count-badge {
   min-width: 16px;
-  height: 18px;
+  /* The label shrinks 3px against --ds-fs; a fixed height and line-height clip it
+   * once the host font-size grows, so the box must scale with the token. */
+  min-height: calc(var(--ds-fs) + 2px);
   padding: 0 6px;
   border-radius: var(--dsw-radius-panel);
   background: transparent;
   color: var(--dsw-alias-label-caption);
   font-size: calc(var(--ds-fs) - 3px);
   font-weight: 500;
-  line-height: 18px;
+  line-height: normal;
   text-align: center;
   white-space: nowrap;
   font-variant-numeric: tabular-nums;

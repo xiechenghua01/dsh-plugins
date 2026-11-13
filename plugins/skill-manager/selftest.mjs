@@ -397,6 +397,99 @@ export async function run(report) {
   //   ① the shared card renderers must call the helpers;
   //   ② no fragment may define a second copy of a shared helper.
   checkCardStructure(report)
+
+  // --- badge vertical fit: the box must scale with --ds-fs ----------------
+  // Every badge shrinks its label by 2-3px against `--ds-fs`. A fixed `height`
+  // or `line-height` therefore clips the text once the host font-size grows
+  // (`--dsh-content-font-size` goes up to 20px), so those rules must scale
+  // with the token and leave the line box intrinsic.
+  checkBadgeVerticalFit(report)
+}
+
+/* ================================================================
+ * Badge vertical fit guard
+ *
+ * The badges below are read from their stylesheet fragments directly: a rule
+ * that pins pixels does not fail at the default 16px font size, so nothing
+ * else in CI would catch the regression before a user raised the setting.
+ * ================================================================ */
+
+/** Fragment, selector, and the slack its box adds above the text size. */
+const BADGES = [
+  { file: '91-styles-toolbar.js', selector: '.sm-tab-badge,\n.sm-tab-count,\n.sm-count-badge', slack: 2, layout: 'min-height' },
+  { file: '93-styles-lists.js', selector: '.sm-badge,\n.sm-badge-update,\n.sm-badge-builtin,\n.sm-badge-model,\n.sm-badge-user,\n.sm-badge-loc', slack: null, layout: 'padding' },
+  { file: '92-styles-controls.js', selector: '.sm-chip', slack: 6, layout: 'min-height' },
+]
+
+/** Extract one rule body by selector lines; null when absent. */
+function styleRuleOf(text, selector) {
+  const head = selector + ' {'
+  const start = text.indexOf(head)
+  if (start === -1) return null
+  const open = start + head.length
+  const close = text.indexOf('}', open)
+  if (close === -1) return null
+  return text.slice(open, close)
+}
+
+/** Split a declaration list, flagging redeclared properties. */
+function styleDeclarations(body) {
+  /* Comments are prose, not declarations: an `x: y` inside one would otherwise
+   * be mistaken for a property and hide the real one. */
+  const text = body.replace(/\/\*[\s\S]*?\*\//gu, '')
+  const map = new Map()
+  const duplicates = []
+  for (const segment of text.split(';')) {
+    const declaration = segment.trim()
+    if (declaration === '') continue
+    const at = declaration.indexOf(':')
+    if (at === -1) continue
+    const name = declaration.slice(0, at).trim()
+    if (map.has(name)) duplicates.push(name)
+    map.set(name, declaration.slice(at + 1).trim())
+  }
+  return { map, duplicates }
+}
+
+function checkBadgeVerticalFit(report) {
+  const fragments = new Map(readFragments().map((fragment) => [fragment.name, fragment.text]))
+  for (const badge of BADGES) {
+    const text = fragments.get(badge.file)
+    if (text === undefined) {
+      report(`fit: ${badge.file} is missing, so ${badge.selector.split('\n')[0]} cannot be checked`)
+      continue
+    }
+    const body = styleRuleOf(text, badge.selector)
+    if (body === null) {
+      report(`fit: ${badge.file} no longer defines ${badge.selector.split('\n')[0]}`)
+      continue
+    }
+    const { map, duplicates } = styleDeclarations(body)
+    const label = badge.selector.split('\n')[0]
+    if (duplicates.length > 0) report(`fit: ${label} redeclares ${duplicates.join(', ')}`)
+
+    const fontSize = map.get('font-size') || ''
+    if (!/var\(--ds-fs\)/u.test(fontSize)) report(`fit: ${label} must derive its font size from --ds-fs (got ${fontSize})`)
+
+    /* A pinned line box is the actual clipping cause: the box is tall enough
+     * but the text overflows the line it was given. */
+    const lineHeight = map.get('line-height')
+    if (lineHeight !== undefined && /^\d+(?:\.\d+)?px$/u.test(lineHeight)) {
+      report(`fit: ${label} pins line-height: ${lineHeight}; the label is clipped once the host font size grows — use normal or a unitless ratio`)
+    }
+
+    if (badge.layout === 'min-height') {
+      const expected = `calc(var(--ds-fs) + ${badge.slack}px)`
+      const actual = map.get('min-height')
+      if (actual !== expected) report(`fit: ${label} min-height must be ${expected} (got ${String(actual)})`)
+      if (map.has('height')) report(`fit: ${label} must not pin height (got ${map.get('height')})`)
+    } else {
+      /* Padding-driven boxes grow on their own; a fixed height would defeat that. */
+      if (map.has('height')) report(`fit: ${label} must not pin height (got ${map.get('height')})`)
+      const padding = map.get('padding') || ''
+      if (!/^2px\s+8px$/u.test(padding)) report(`fit: ${label} must keep its 2px vertical padding (got ${padding})`)
+    }
+  }
 }
 
 /* ================================================================

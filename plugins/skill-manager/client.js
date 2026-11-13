@@ -8731,14 +8731,16 @@ const STYLES_2 = `
 .sm-tab-count,
 .sm-count-badge {
   min-width: 16px;
-  height: 18px;
+  /* The label shrinks 3px against --ds-fs; a fixed height and line-height clip it
+   * once the host font-size grows, so the box must scale with the token. */
+  min-height: calc(var(--ds-fs) + 2px);
   padding: 0 6px;
   border-radius: var(--dsw-radius-panel);
   background: transparent;
   color: var(--dsw-alias-label-caption);
   font-size: calc(var(--ds-fs) - 3px);
   font-weight: 500;
-  line-height: 18px;
+  line-height: normal;
   text-align: center;
   white-space: nowrap;
   font-variant-numeric: tabular-nums;
@@ -9022,7 +9024,9 @@ const STYLES_3 = `
 }
 
 .sm-chip {
-  height: 24px;
+  /* The label shrinks 2px against --ds-fs; the box scales with the token so the
+   * text is never clipped when the host font-size grows. */
+  min-height: calc(var(--ds-fs) + 6px);
   padding: 0 8px;
   border-radius: var(--dsw-radius-panel);
   border: 0.5px solid var(--dsw-alias-border-l1);
@@ -9779,7 +9783,9 @@ const STYLES_4 = `
   color: var(--dsw-alias-label-secondary);
   font-size: calc(var(--ds-fs) - 3px);
   font-weight: 500;
-  line-height: 17px;
+  /* The label shrinks 3px against --ds-fs; a fixed line-height clips its top and
+   * bottom once the host font-size grows, so the line box must stay intrinsic. */
+  line-height: normal;
   white-space: nowrap;
   flex-shrink: 0;
 }
