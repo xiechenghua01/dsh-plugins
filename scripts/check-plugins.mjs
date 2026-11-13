@@ -133,6 +133,49 @@ async function checkPlugin(plugin, config, report) {
     if (unexpected.length > 0) report(`client entry requires ${unexpected.join(', ')}; only 'react' is available from the module loader`)
     if (source.includes('@deepseek-ai/')) report('client entry must not import @deepseek-ai packages; only react is available')
 
+    // --- CSS style checks (DESIGN.md §2.1, §3.2, §5.8) ---
+    // Strip line comments before scanning to avoid false positives from explanatory remarks.
+    const sourceWithoutLineComments = source.replace(/\/\*[\s\S]*?\*\//gu, '').replace(/\/\/.*/gu, '')
+
+    // Literal colour values: #hex, rgb(), rgba(), hsl() — forbidden outside --ss-series-* definitions.
+    // Allowed: --ss-series-N:#hex inside a CSS variable definition (DESIGN.md §2.10 whitelist).
+    // Allowed: color-mix() already uses var(--dsw-*) so no literal colour inside it.
+    const literalColorRe = /(?:^|[^-\w])(?:#[0-9a-fA-F]{3,8}\b|(?:rgb|rgba|hsl)\s*\()/gmu
+    const colorMatches = []
+    for (const m of sourceWithoutLineComments.matchAll(literalColorRe)) {
+      // Allow --ss-series-N variable definitions (DESIGN.md §2.10 chart palette whitelist).
+      const lineStart = sourceWithoutLineComments.lastIndexOf('\n', m.index) + 1
+      const lineEnd = sourceWithoutLineComments.indexOf('\n', m.index)
+      const line = sourceWithoutLineComments.slice(lineStart, lineEnd === -1 ? undefined : lineEnd)
+      if (/--ss-series-\d+\s*:/.test(line)) continue
+      colorMatches.push(m[0].trim())
+    }
+    if (colorMatches.length > 0) {
+      report(`client entry contains literal colour values (${[...new Set(colorMatches)].slice(0, 5).join(', ')}…); use --dsw-* tokens or color-mix() on tokens (DESIGN.md §2.1)`)
+    }
+
+    // Bare px font-size: "font-size: 14px" or "font-size:14px" — must use --ds-fs ladder (DESIGN.md §3.2).
+    // Allowed: calc() expressions (they derive from --ds-fs) and var() references.
+    const pxFontSizeRe = /font-size\s*:\s*[0-9]+(?:\.[0-9]+)?px/gmu
+    const pxFontMatches = [...sourceWithoutLineComments.matchAll(pxFontSizeRe)].map((m) => m[0])
+    if (pxFontMatches.length > 0) {
+      report(`client entry contains hard-coded font-size px values (${[...new Set(pxFontMatches)].slice(0, 3).join(', ')}); derive font sizes from --ds-fs (DESIGN.md §3.2)`)
+    }
+
+    // Non-none box-shadow: decorative shadows are banned; only "none" and the split-button inset
+    // separator (DESIGN.md §7.12: inset 1px 0 0 <token>) are allowed.
+    const badShadows = []
+    for (const m of sourceWithoutLineComments.matchAll(/box-shadow\s*:\s*([^;{}]+)/gu)) {
+      const val = m[1].trim()
+      if (val === 'none' || val === '') continue
+      // Allow the §7.12 split-button functional separator: inset N px 0 <token-var>
+      if (/^inset\s+\d+px\s+0\s+0\s+var\(--dsw-/.test(val)) continue
+      badShadows.push(val.slice(0, 60))
+    }
+    if (badShadows.length > 0) {
+      report(`client entry contains non-none box-shadow values (${[...new Set(badShadows)].slice(0, 2).join(' | ')}); use .5px border or none (DESIGN.md §5.8)`)
+    }
+
     const inline = inlineDictionaries(source)
     if (inline !== null) {
       const zhKeys = [...inline.zh.keys()]
