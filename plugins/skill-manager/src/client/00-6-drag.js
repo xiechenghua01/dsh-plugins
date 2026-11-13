@@ -411,7 +411,11 @@
     function renderPage(props) {
         const source = props !== null && typeof props === 'object' ? props : {}
         if (typeof source.t === 'function') boundT = source.t
-        if (typeof source.locale === 'string' && /^(zh|en)/iu.test(source.locale)) appState.locale = source.locale
+        /* Fallback only: once the host locale subscription has delivered a
+         * value, the slot props must not overwrite it. */
+        if (smLocaleSubscribed !== true && typeof source.locale === 'string' && /^(zh|en)/iu.test(source.locale)) {
+            appState.locale = source.locale
+        }
         if (typeof source.fontSize === 'number' && Number.isFinite(source.fontSize)) appState.fontSize = Math.round(source.fontSize)
         const size = Number.isFinite(appState.fontSize) && appState.fontSize > 0 ? appState.fontSize : DEFAULT_FONT_SIZE
         const rootStyle = { '--ds-fs': size + 'px' }

@@ -557,13 +557,17 @@ export function createUpdateChecker(options = {}) {
     return result
   }
 
-  async function runCheck(force, refreshIndexes) {
+  async function runCheck(force, refreshIndexes, sourceIds) {
     view = { ...view, checking: true }
     abortController = new AbortController()
     const errors = []
     const updates = []
     try {
-      const sources = (await listSources()).filter((source) => source !== null && typeof source === 'object' && source.enabled !== false)
+      const wanted = Array.isArray(sourceIds) && sourceIds.length > 0 ? new Set(sourceIds) : null
+      const sources = (await listSources()).filter((source) => (
+        source !== null && typeof source === 'object' && source.enabled !== false
+        && (wanted === null || wanted.has(source.id))
+      ))
       const records = (await listInstalled()).filter((record) => (
         record !== null && typeof record === 'object' && typeof record.sourceId === 'string' && record.sourceId !== ''
       ))
@@ -670,11 +674,12 @@ export function createUpdateChecker(options = {}) {
   async function check(checkOptions = {}) {
     const force = checkOptions.force === true
     const refreshIndexes = checkOptions.refreshIndexes === true
-    if (inflight !== null) return inflight
+    const scoped = Array.isArray(checkOptions.sourceIds) && checkOptions.sourceIds.length > 0
+    if (inflight !== null && !scoped) return inflight
     if (!force && !refreshIndexes && lastCheckMs > 0 && clock() - lastCheckMs < MIN_CHECK_INTERVAL_MS) {
       return { ...getState(), sources: lastSourceCount, refreshNeeded: false }
     }
-    inflight = runCheck(force, refreshIndexes).finally(() => {
+    inflight = runCheck(force, refreshIndexes, checkOptions.sourceIds).finally(() => {
       inflight = null
     })
     return inflight

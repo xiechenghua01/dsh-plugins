@@ -158,7 +158,7 @@
         smSourceIconAction('edit', 'edit', t('action.editSource'), function () {
             if (typeof openModal === 'function') openModal('add-source', { source: source })
         }, frozen || busy),
-        smSourceIconAction('refresh', 'refresh', t('action.refresh'), function () {
+        smSourceIconAction('refresh', 'refresh', t('action.checkUpdates'), function () {
             smSourceRefresh(source)
         }, frozen || busy),
         smSourceIconAction('delete', 'trash', t('action.deleteSource'), function () {

@@ -52,6 +52,10 @@
     /** Bound by 99-apply through the slot props (ctx.locale.bind(NS)). */
     let boundT = null
 
+    /** True once the host locale subscription delivered a value; the slot
+     * props' `locale` then stays a fallback and never overrides it. */
+    let smLocaleSubscribed = false
+
     function isEnglishLocale() {
         return String(appState.locale === undefined || appState.locale === null ? '' : appState.locale).toLowerCase().indexOf('en') === 0
     }

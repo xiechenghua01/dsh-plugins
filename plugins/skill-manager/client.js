@@ -685,6 +685,10 @@ window.__ModuleLoader__.load({
     /** Bound by 99-apply through the slot props (ctx.locale.bind(NS)). */
     let boundT = null
 
+    /** True once the host locale subscription delivered a value; the slot
+     * props' `locale` then stays a fallback and never overrides it. */
+    let smLocaleSubscribed = false
+
     function isEnglishLocale() {
         return String(appState.locale === undefined || appState.locale === null ? '' : appState.locale).toLowerCase().indexOf('en') === 0
     }
@@ -1160,6 +1164,138 @@ window.__ModuleLoader__.load({
         return t('detail.status.active')
     }
 
+    /* ------------------------------------------------------------------ *
+     * Display name / description selection.                              *
+     *                                                                    *
+     * The technical `name` is never replaced: install, uninstall,        *
+     * update, de-duplication, routing and search keep using it. These    *
+     * helpers only choose what the UI prints, and they are pure (no      *
+     * network). Chinese prefers zh then en; every other locale uses en.  *
+     * ------------------------------------------------------------------ */
+
+    function smIsChineseLocale() {
+        const locale = String(appState.locale === undefined || appState.locale === null ? '' : appState.locale).toLowerCase()
+        return locale.indexOf('zh') === 0
+    }
+
+    /** A non-empty string or ''. */
+    function smLocaleText(value) {
+        return typeof value === 'string' && value !== '' ? value : ''
+    }
+
+    /** Pick from a `{ zh, en }` map: zh (then en) for Chinese, en otherwise. */
+    function smLocalizedField(byLocale) {
+        if (byLocale === null || typeof byLocale !== 'object') return ''
+        if (smIsChineseLocale()) {
+            const zh = smLocaleText(byLocale.zh)
+            if (zh !== '') return zh
+        }
+        return smLocaleText(byLocale.en)
+    }
+
+    /**
+     * Author-supplied display name. Installed skills use `displayNameByLocale`,
+     * market items use `titleByLocale`; both share the same fallback rules and
+     * fall back to the technical `name` so the UI never shows an empty title.
+     */
+    function smSkillDisplayName(skill) {
+        if (skill === null || typeof skill !== 'object') return ''
+        const byLocale = skill.displayNameByLocale !== null && typeof skill.displayNameByLocale === 'object'
+            ? skill.displayNameByLocale
+            : skill.titleByLocale
+        const localized = smLocalizedField(byLocale)
+        if (localized !== '') return localized
+        return smLocaleText(skill.name)
+    }
+
+    /** Author-supplied description with the same locale fallback chain. */
+    function smSkillDisplayDescription(skill) {
+        if (skill === null || typeof skill !== 'object') return ''
+        const localized = smLocalizedField(skill.descriptionByLocale)
+        if (localized !== '') return localized
+        return smLocaleText(skill.description)
+    }
+
+    /* ------------------------------------------------------------------ *
+     * Author-provided skill icons.                                       *
+     *                                                                    *
+     * Market items carry an absolute `icon` URL (or a data: URL).        *
+     * Installed skills carry a skill-relative `iconPath`; the bytes come  *
+     * from the local `/skill-manager/api/skill/icon` route.               *
+     * ------------------------------------------------------------------ */
+
+    /** Only http(s), data:image and same-origin absolute paths reach <img src>. */
+    function smIsSafeIconUrl(value) {
+        const src = smLocaleText(value).trim()
+        if (src === '') return false
+        if (/^data:image\//iu.test(src)) return true
+        if (/^https?:\/\//iu.test(src)) return true
+        return src.charAt(0) === '/'
+    }
+
+    /**
+     * Resolve the author-provided icon for a skill.
+     * @returns {{ kind: 'url'|'route', src: string } | null}
+     */
+    function smSkillIconSource(skill) {
+        if (skill === null || typeof skill !== 'object') return null
+        /* Installed: iconPath is relative to the skill directory; serve it locally. */
+        const iconPath = smLocaleText(skill.iconPath).trim()
+        const skillPath = smLocaleText(skill.path)
+        if (iconPath !== '' && skillPath !== '') {
+            const cwd = String(appState.cwd === undefined || appState.cwd === null ? '' : appState.cwd)
+            return {
+                kind: 'route',
+                src: API_BASE + 'skill/icon?path=' + encodeURIComponent(skillPath) + '&cwd=' + encodeURIComponent(cwd),
+            }
+        }
+        /* Market: `icon` is already resolved to an absolute or data: URL. */
+        const icon = smLocaleText(skill.icon).trim()
+        if (icon !== '' && smIsSafeIconUrl(icon)) return { kind: 'url', src: icon }
+        /* Defensive fallback for a Host that hands back a resolved route/URL. */
+        const iconUrl = smLocaleText(skill.iconUrl).trim()
+        if (iconUrl !== '' && smIsSafeIconUrl(iconUrl)) {
+            return { kind: iconUrl.charAt(0) === '/' ? 'route' : 'url', src: iconUrl }
+        }
+        return null
+    }
+
+    /**
+     * Authored icon when present, otherwise the keyword heuristic glyph.
+     * The failed URL is remembered per component so a broken icon is not
+     * retried on every render; a different URL gets a fresh chance.
+     */
+    function SmSkillIcon(props) {
+        const skill = props !== null && typeof props === 'object' ? props.skill : null
+        const size = props !== null && typeof props === 'object' && typeof props.size === 'number' && props.size > 0
+            ? props.size
+            : 20
+        const fallback = props !== null && typeof props === 'object' && smLocaleText(props.fallback) !== ''
+            ? props.fallback
+            : skillIconName(skill)
+        const source = smSkillIconSource(skill)
+        const src = source === null ? '' : String(source.src)
+        const [failedSrc, setFailedSrc] = useState('')
+        if (source === null || (failedSrc !== '' && failedSrc === src)) {
+            return icon(fallback, size)
+        }
+        return h('img', {
+            className: 'sm-skill-icon-img',
+            src: src,
+            width: size,
+            height: size,
+            alt: '',
+            loading: 'lazy',
+            decoding: 'async',
+            draggable: 'false',
+            onError: function () {
+                /* Keep the mark: the same URL must not trigger a retry loop. */
+                if (src !== '') setFailedSrc(src)
+            },
+            style: { width: '100%', height: '100%', objectFit: 'contain', display: 'block' },
+        })
+    }
+
     /** Pick a stable semantic glyph for a skill name and location. */
     function skillIconName(skillOrName, location) {
         const name = typeof skillOrName === 'string'
@@ -1185,12 +1321,103 @@ window.__ModuleLoader__.load({
         return 'folder'
     }
 
+    /**
+     * Card status dot. The only implementation: the skills page and the market
+     * page both render it in the card title row, never on the icon artwork, so
+     * the dot cannot cover an authored PNG/SVG. The tone stays owned by the
+     * `sm-dot-*` classes. Both tip channels are kept, exactly as the market
+     * card had them (`title` plus `data-tip`, the latter rendered by the
+     * page-level delegation into the shared tooltip), and `aria-label` carries
+     * the meaning for assistive tech per the status-dot spec.
+     */
+    function renderStatusDot(dotClass, tip) {
+        const label = smLocaleText(tip)
+        return h('span', {
+            className: dotClass,
+            role: 'img',
+            'aria-label': label,
+            title: label,
+            'data-tip': label,
+        })
+    }
+
+    /** Status dot for an installed skill; colours stay owned by skillStatusDot. */
+    function renderSkillStatusDot(skill) {
+        return renderStatusDot(skillStatusDot(skill), skillStatusTip(skill))
+    }
+
+    /**
+     * The card icon box, shared by both pages. It renders the icon alone: the
+     * status dot lives in the title row (see renderStatusDot) so it can never
+     * overlap the artwork.
+     */
     function renderSkillIconBox(skill, options) {
         const opts = options !== null && typeof options === 'object' ? options : {}
         const size = typeof opts.iconSize === 'number' && opts.iconSize > 0 ? opts.iconSize : 20
         return h('div', { className: cx('sm-card-icon', opts.className) },
-            icon(skillIconName(skill), size),
-            h('span', { className: skillStatusDot(skill), 'data-tip': skillStatusTip(skill) }))
+            h(SmSkillIcon, { skill: skill, size: size, fallback: opts.fallback }))
+    }
+
+    /* ------------------------------------------------------------------ *
+     * Card body: title row, meta row, description.                       *
+     *                                                                    *
+     * The skills page and the market page used to hand-write these three  *
+     * lines separately and the two copies drifted apart: the market copy *
+     * put a version badge inside the title row and clipped that row with *
+     * an inline overflow, which squeezed a long Chinese name down to the *
+     * ellipsis. These helpers are the only implementation, so a badge    *
+     * can never take width from the display name again.                  *
+     * ------------------------------------------------------------------ */
+
+    /**
+     * Title row: status dot, display name, technical name. Nothing else
+     * belongs here. The display name cannot shrink (see `.sm-card-name`), so
+     * it is always printed in full; the technical name yields the space.
+     */
+    function renderCardTitleRow(options) {
+        const opts = options !== null && typeof options === 'object' ? options : {}
+        const displayName = String(opts.displayName === undefined || opts.displayName === null ? '' : opts.displayName)
+        const technicalName = String(opts.technicalName === undefined || opts.technicalName === null ? '' : opts.technicalName)
+        const localized = displayName !== technicalName
+        return h('div', { className: 'sm-card-title-row' },
+            opts.dot !== undefined && opts.dot !== null ? opts.dot : null,
+            h('span', {
+                className: cx('sm-card-name', localized ? 'sm-card-display-name' : 'sm-mono'),
+                title: displayName,
+            }, displayName),
+            localized && technicalName !== ''
+                ? h('span', { className: 'sm-card-tech sm-mono', title: technicalName }, technicalName)
+                : null)
+    }
+
+    /**
+     * Meta row: version badge and tags. It sits directly under the title row
+     * and above the description, so the badges read as a subtitle of the name
+     * while still never competing with it for width. Returns null when there
+     * is nothing to show, so a card without badges keeps two lines.
+     */
+    function renderCardMetaRow(badges) {
+        const items = Array.isArray(badges)
+            ? badges.filter(function (item) { return item !== null && item !== undefined && item !== false })
+            : []
+        if (items.length === 0) return null
+        return h('div', { className: 'sm-tagbar' }, items)
+    }
+
+    /**
+     * The whole `.sm-card-main` column shared by both card lists: title row,
+     * badge row, then the description.
+     */
+    function renderCardMain(options) {
+        const opts = options !== null && typeof options === 'object' ? options : {}
+        const description = String(opts.description === undefined || opts.description === null ? '' : opts.description)
+        return h('div', { className: 'sm-card-main' },
+            renderCardTitleRow(opts),
+            renderCardMetaRow(opts.badges),
+            h('div', {
+                className: 'sm-card-desc',
+                'data-tip': description !== '' ? description : undefined,
+            }, description))
     }
 
     function badge(label, tone, tip, key) {
@@ -1438,25 +1665,36 @@ window.__ModuleLoader__.load({
     }
 
     /**
-     * POST /check-updates { force: true }
-     * Refetches every enabled source index, recomputes updates and refreshes
-     * the installed scan. The spinner is kept for at least 400ms.
+     * POST /check-updates { force: true, sourceId? }
+     * Refetches every enabled source index (or one source when `sourceId` is
+     * given), recomputes updates, then refreshes the installed scan, the source
+     * list and the market with the current search term and sort. The spinner
+     * is kept for at least 400ms; `checking` is shared by both toolbars.
      */
-    async function checkUpdates() {
+    async function checkUpdates(sourceId) {
         if (appState.checking === true) return null
+        const id = sourceId === undefined || sourceId === null ? '' : String(sourceId)
+        const body = { force: true }
+        if (id !== '') body.sourceId = id
         appState.checking = true
         clearErrorScope('check')
         rerender()
         const started = Date.now()
         try {
-            const data = await api('check-updates', { method: 'POST', body: { force: true } })
+            const data = await api('check-updates', { method: 'POST', body: body })
             const remain = 400 - (Date.now() - started)
             if (remain > 0) await delay(remain)
             const sources = data !== null && typeof data === 'object' && Number.isFinite(Number(data.sources)) ? Number(data.sources) : 0
             const updates = data !== null && typeof data === 'object' && Number.isFinite(Number(data.updates)) ? Number(data.updates) : 0
             toast(updates > 0 ? t('toast.checkedSources', { sources: sources, updates: updates }) : t('toast.noUpdates', { sources: sources }))
             appState.lastErrorToast = null
-            await Promise.all([loadInstalled(true), loadSources(true)])
+            const search = String(appState.search === undefined || appState.search === null ? '' : appState.search)
+            const sort = typeof smMarketSortValue === 'function' ? smMarketSortValue() : 'recommend'
+            await Promise.all([
+                loadInstalled(true),
+                loadSources(true),
+                loadMarket({ q: search, sort: sort }),
+            ])
             return data
         } catch (error) {
             /* Failures are surfaced by the inline check banner, not a toast. */
@@ -1927,7 +2165,11 @@ window.__ModuleLoader__.load({
     function renderPage(props) {
         const source = props !== null && typeof props === 'object' ? props : {}
         if (typeof source.t === 'function') boundT = source.t
-        if (typeof source.locale === 'string' && /^(zh|en)/iu.test(source.locale)) appState.locale = source.locale
+        /* Fallback only: once the host locale subscription has delivered a
+         * value, the slot props must not overwrite it. */
+        if (smLocaleSubscribed !== true && typeof source.locale === 'string' && /^(zh|en)/iu.test(source.locale)) {
+            appState.locale = source.locale
+        }
         if (typeof source.fontSize === 'number' && Number.isFinite(source.fontSize)) appState.fontSize = Math.round(source.fontSize)
         const size = Number.isFinite(appState.fontSize) && appState.fontSize > 0 ? appState.fontSize : DEFAULT_FONT_SIZE
         const rootStyle = { '--ds-fs': size + 'px' }
@@ -2043,7 +2285,17 @@ window.__ModuleLoader__.load({
     function skillsMatchesQuery(skill, query) {
         if (query === '') return true
         if (!skillsIsSkill(skill)) return false
+        /* Match the technical name plus every authored locale variant, so a
+         * search works in either language regardless of the active one. */
         const fields = [skill.name, skill.description, skill.whenToUse]
+        const pushLocalized = function (value) {
+            if (value === null || typeof value !== 'object') return
+            if (typeof value.zh === 'string' && value.zh !== '') fields.push(value.zh)
+            if (typeof value.en === 'string' && value.en !== '') fields.push(value.en)
+        }
+        pushLocalized(skill.displayNameByLocale)
+        pushLocalized(skill.titleByLocale)
+        pushLocalized(skill.descriptionByLocale)
         return fields.some(function (field) {
             return typeof field === 'string' && field.toLowerCase().indexOf(query) !== -1
         })
@@ -2567,10 +2819,11 @@ window.__ModuleLoader__.load({
         const broken = skill.status === 'broken' || skill.status === 'invalid'
         const readonly = skill.writable === false
         const updateVersion = skillUpdateVersion(skill)
-        // Locale-aware description when the market index carries both languages.
-        const description = typeof smSkillDescription === 'function'
-            ? smSkillDescription(skill)
-            : (typeof skill.description === 'string' ? skill.description : '')
+        /* Display name / description are localized; the technical name stays
+         * visible as a small mono label and keeps driving every action. */
+        const technicalName = String(skill.name === undefined || skill.name === null ? '' : skill.name)
+        const displayName = smSkillDisplayName(skill) || technicalName
+        const description = smSkillDisplayDescription(skill)
         const badges = []
         /* Upgrade badge sits first in the tag bar (interaction spec §4.2). */
         if (updateVersion !== '') {
@@ -2618,14 +2871,14 @@ window.__ModuleLoader__.load({
             },
         },
         renderSkillIconBox(skill),
-        h('div', { className: 'sm-card-main' },
-            h('div', { className: 'sm-card-title-row' },
-                h('span', { className: 'sm-card-name sm-mono', title: String(skill.name || '') }, String(skill.name || '')),
-                badges.length > 0 ? h('span', { className: 'sm-tagbar' }, badges) : null),
-            h('div', {
-                className: 'sm-card-desc',
-                'data-tip': description !== '' ? description : undefined,
-            }, description)),
+        /* Title row, description and badge row come from one shared helper. */
+        renderCardMain({
+            dot: renderSkillStatusDot(skill),
+            displayName: displayName,
+            technicalName: technicalName,
+            description: description,
+            badges: badges,
+        }),
         h('div', {
             className: 'sm-card-tail',
             onClick: function (event) { event.stopPropagation() },
@@ -3311,6 +3564,7 @@ window.__ModuleLoader__.load({
             : installed
                 ? t('market.installed')
                 : t('action.install')
+        const version = smMarketVersionLabel(item.version)
         const tags = []
         if (update !== '') {
             tags.push(h('span', {
@@ -3319,14 +3573,23 @@ window.__ModuleLoader__.load({
                 'data-tip': t('badge.updateTip', { version: smMarketVersionLabel(update) }),
             }, smMarketUpgradeGlyph(), h('span', null, smMarketVersionLabel(update))))
         }
+        /* The version used to sit in the title row and stole width from the
+         * Chinese display name. It now belongs to the badge row below the
+         * description, next to the tags (user instruction). */
+        if (version !== '') {
+            tags.push(h('span', { key: 'version', className: 'sm-badge sm-mono' }, version))
+        }
         const maxTags = update !== '' ? 3 : 4
         const itemTags = Array.isArray(item.tags) ? item.tags : []
         itemTags.slice(0, maxTags).forEach(function (tag) {
             if (typeof tag !== 'string' || tag === '') return
             tags.push(h('span', { key: 'tag-' + tag, className: 'sm-badge' }, tag))
         })
-        const version = smMarketVersionLabel(item.version)
-        const description = typeof item.description === 'string' ? item.description : ''
+        /* Market items localize through `titleByLocale` / `descriptionByLocale`;
+         * the technical name is still what install / update calls use. */
+        const technicalName = String(item.name === undefined || item.name === null ? '' : item.name)
+        const displayName = smSkillDisplayName(item) || technicalName
+        const description = smSkillDisplayDescription(item)
         const openDetail = function () { smMarketOpenDetail(item) }
 
         return h('div', {
@@ -3346,34 +3609,17 @@ window.__ModuleLoader__.load({
                 }
             },
         },
-        h('div', {
-            className: 'sm-card-icon',
-        },
-        icon(smMarketIconName(item), 24),
-        h('span', { className: cx('sm-dot', dotClass), title: dotTip, 'data-tip': dotTip })),
-        h('div', {
-            className: 'sm-card-main',
-            /* .sm-card-main 的 gap 为 5px，卡片需更紧，暂留 gap。 */
-            style: { gap: '4px' },
-        },
-        h('div', {
-            className: 'sm-card-title-row',
-            /* .sm-card-title-row 的 gap 为 6px，卡片标题行需 8px 并裁切溢出。 */
-            style: { gap: '8px', overflow: 'hidden' },
-        },
-        h('span', { className: 'sm-card-name sm-mono', title: String(item.name || '') }, String(item.name || '')),
-        version !== '' ? h('span', { className: 'sm-badge sm-mono' }, version) : null,
-        tags.length > 0
-            ? h('div', {
-                className: 'sm-tagbar',
-                /* 布局/裁切由 .sm-tagbar 提供，其 gap 为 6px，市场标签行需 4px。 */
-                style: { gap: '4px' },
-            }, tags)
-            : null),
-        h('div', {
-            className: 'sm-card-desc',
-            title: description,
-        }, description)),
+        /* Same icon box as the skills page: one helper, no duplicated markup. */
+        renderSkillIconBox(item, { iconSize: 24, fallback: smMarketIconName(item) }),
+        /* Title row, description and badge row come from one shared helper;
+         * the version badge and tags sit on the badge row, not in the title. */
+        renderCardMain({
+            dot: renderStatusDot(cx('sm-dot', dotClass), dotTip),
+            displayName: displayName,
+            technicalName: technicalName,
+            description: description,
+            badges: tags,
+        }),
         h('div', {
             className: 'sm-card-tail',
             onClick: function (event) {
@@ -4001,6 +4247,10 @@ window.__ModuleLoader__.load({
      * 行内动作                                                            *
      * ------------------------------------------------------------------ */
 
+    /**
+     * 行内“检查更新”：与管理源外的检查更新走同一条链路。
+     * 只检查当前源，仍会强制拉取索引、刷新技能数量并重载市场与已安装状态。
+     */
     function smSourceRefresh(source) {
         if (source === null || typeof source !== 'object' || !source.id) return
         const id = String(source.id)
@@ -4010,11 +4260,15 @@ window.__ModuleLoader__.load({
         if (typeof setState === 'function') setState({})
         const run = async function () {
             try {
-                await api('sources/' + encodeURIComponent(id) + '/refresh', { method: 'POST' })
-                if (typeof loadSources === 'function') {
-                    try { await loadSources(true) } catch (err) { void err }
+                if (typeof checkUpdates === 'function') {
+                    await checkUpdates(id)
+                } else {
+                    await api('sources/' + encodeURIComponent(id) + '/refresh', { method: 'POST' })
+                    if (typeof loadSources === 'function') {
+                        try { await loadSources(true) } catch (err) { void err }
+                    }
+                    smSourceReloadMarket()
                 }
-                smSourceReloadMarket()
             } catch (err) {
                 void err
                 smSourceDialogError[id] = t('source.error.refreshFailed')
@@ -4423,7 +4677,7 @@ window.__ModuleLoader__.load({
         smSourceIconAction('edit', 'edit', t('action.editSource'), function () {
             if (typeof openModal === 'function') openModal('add-source', { source: source })
         }, frozen || busy),
-        smSourceIconAction('refresh', 'refresh', t('action.refresh'), function () {
+        smSourceIconAction('refresh', 'refresh', t('action.checkUpdates'), function () {
             smSourceRefresh(source)
         }, frozen || busy),
         smSourceIconAction('delete', 'trash', t('action.deleteSource'), function () {
@@ -5169,6 +5423,8 @@ window.__ModuleLoader__.load({
     function SmDetailHeader(props) {
         const skill = props.skill
         const version = smSkillVersion(skill)
+        const technicalName = smText(props.technicalName)
+        const shownName = smText(props.name, technicalName)
         return h('div', { className: 'sm-detail-head' },
             h('div', null,
                 h('div', {
@@ -5176,10 +5432,13 @@ window.__ModuleLoader__.load({
                     style: {
                         opacity: smIsDisabled(skill) ? 0.6 : 1,
                     },
-                }, icon(skillIconName(skill), 28)),
+                }, h(SmSkillIcon, { skill: skill, size: 28, fallback: skillIconName(skill) })),
                 h('div', { style: { display: 'flex', flexDirection: 'column', gap: '6px', minWidth: 0 } },
                     h('div', { className: 'sm-detail-title-line' },
-                        h('h2', { className: 'sm-mono sm-detail-title' }, props.name),
+                        h('h2', { className: cx('sm-detail-title', technicalName === '' ? 'sm-mono' : 'sm-display-name'), title: shownName }, shownName),
+                        technicalName !== '' && technicalName !== shownName
+                            ? h('span', { className: 'sm-mono sm-detail-tech', title: technicalName }, technicalName)
+                            : null,
                         version !== '' ? h('span', { className: 'sm-mono sm-detail-ver' }, version) : null,
                         props.badge !== undefined && props.badge !== null ? props.badge : null),
                     props.subtitle !== undefined && props.subtitle !== null && props.subtitle !== ''
@@ -5203,7 +5462,8 @@ window.__ModuleLoader__.load({
         const detail = props.detail
         const skill = props.skill
         const name = smText(skill.name, smText(detail.name, smText(detail.id)))
-        const description = smSkillDescription(skill)
+        const displayName = smSkillDisplayName(skill) || name
+        const description = smSkillDisplayDescription(skill)
         const whenToUse = smText(skill.whenToUse)
         const path = smText(skill.path)
         const writable = !smIsReadonly(skill) && !smIsBuiltin(skill)
@@ -5351,7 +5611,8 @@ window.__ModuleLoader__.load({
             h(SmDetailBack, { kind: 'installed' }),
             h(SmDetailHeader, {
                 skill: skill,
-                name: name,
+                name: displayName,
+                technicalName: name,
                 badge: badge,
                 subtitle: smSourceShort(skill) + ' · ' + t('detail.updated', { time: fmtTime(smNumber(skill.mtime, 0)) }),
             }, actions),
@@ -5462,6 +5723,7 @@ window.__ModuleLoader__.load({
         const content = smText(data.content, smText(data.readme))
         const contentError = smText(data.contentError, error)
         const name = smText(market.name, key.name)
+        const displayName = smSkillDisplayName(market) || name
         const version = smSkillVersion(market)
         const sourceName = smText(market.sourceName, smText(detail.sourceName, smSourceNameById(smText(market.sourceId, key.sourceId))))
         const homepage = smText(market.homepage)
@@ -5514,7 +5776,8 @@ window.__ModuleLoader__.load({
             h(SmDetailBack, { kind: 'market' }),
             h(SmDetailHeader, {
                 skill: market,
-                name: name,
+                name: displayName,
+                technicalName: name,
                 badge: installedNow ? h(SmBadge, { tone: 'ok' }, t('market.installed')) : null,
                 subtitle: smText(market.author) + (smText(market.author) !== '' ? ' · ' : '') + t('detail.source.market', { source: sourceName }),
             }, actions),
@@ -5522,7 +5785,7 @@ window.__ModuleLoader__.load({
                 h('div', { className: 'sm-detail-main' },
                     h(SmCard, null,
                         h(SmCardTitle, null, t('market.detailDesc')),
-                        h('div', { className: 'sm-fs-14', style: { color: 'var(--dsw-alias-label-primary)', lineHeight: '1.55' } }, smText(smSkillDescription(market), '—'))),
+                        h('div', { className: 'sm-fs-14', style: { color: 'var(--dsw-alias-label-primary)', lineHeight: '1.55' } }, smText(smSkillDisplayDescription(market), '—'))),
                     /* 正文卡片始终占位（即使正文为空），保证骨架与内容页结构一致。 */
                     h(SmCard, { className: 'sm-detail-content' },
                         h(SmCardTitle, {
@@ -9014,6 +9277,18 @@ textarea.sm-input.sm-edit-body {
   align-items: center;
   gap: 6px;
   min-width: 0;
+  /* The title row never clips: the display name must stay whole. Anything
+   * that cannot fit yields first (see .sm-card-tech). */
+  overflow: hidden;
+}
+
+/* The badge/tag row sits between the title row and the description. It hugs
+ * the title (4px) and keeps 8px before the description, so the column reads
+ * name, then badges, then prose without the badges touching either text.
+ * The offsets are relative to the .sm-card-main gap of 6px. */
+.sm-card-main > .sm-tagbar {
+  margin-top: -2px;
+  margin-bottom: 2px;
 }
 
 .sm-card-name {
@@ -9024,9 +9299,13 @@ textarea.sm-input.sm-edit-body {
   line-height: 1.4;
   color: var(--dsw-alias-label-primary);
   white-space: nowrap;
+  /* The display name holds its full content width: the technical name yields
+   * almost all of the overflow first (see .sm-card-tech). The ellipsis is the
+   * last resort, only for a name wider than the whole title row. */
+  flex: 0 1 auto;
+  min-width: 0;
   overflow: hidden;
   text-overflow: ellipsis;
-  min-width: 0;
 }
 
 .sm-card-desc {
@@ -9445,11 +9724,19 @@ const STYLES_4 = `
 
 .sm-icon-box > .sm-dot,
 .sm-row-icon > .sm-dot,
-.sm-detail-icon > .sm-dot,
-.sm-card-icon > .sm-dot {
+.sm-detail-icon > .sm-dot {
   position: absolute;
   left: 5px;
   bottom: 5px;
+}
+
+/* Card status dot: the single rule shared by the skills and market card
+ * title rows. It sits in normal flow ahead of the name, so it can never cover
+ * the authored icon artwork; the 6px title-row gap is the spec separation and
+ * the ring the on-icon version needed is dropped, keeping it a true 8x8.
+ * Both pages render it through renderStatusDot(). */
+.sm-card-title-row > .sm-dot {
+  border: none;
 }
 
 .sm-dot-ok {
@@ -11660,6 +11947,59 @@ const STYLES_9 = `
   }
 }
 
+
+/* ------------------------------------------------------------------ *
+ * Authored display names and icons                                   *
+ * ------------------------------------------------------------------ */
+
+/* Display names are prose, not identifiers: drop the mono face used for the
+ * technical name. Chinese names simply render in the UI font. */
+.sm-card-name.sm-card-display-name {
+  font-family: inherit;
+  font-weight: 500;
+}
+
+/* The technical identifier stays visible but subordinate. */
+.sm-card-tech,
+.sm-detail-tech {
+  font-size: calc(var(--ds-fs) - 2px);
+  color: var(--dsw-alias-label-caption);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 16ch;
+}
+
+/* The detail title does not participate in the card's shrink contest. */
+.sm-detail-tech {
+  flex: none;
+}
+
+/* On a card the technical name is the first thing to yield: it shrinks to
+ * nothing before the display name loses a pixel, so a long Chinese name is
+ * never ellipsised at the cost of the identifier. The detail title keeps the
+ * old fixed behaviour. */
+.sm-card-tech {
+  flex: 1 1 auto;
+  min-width: 0;
+  /* A far larger shrink weight than the display name: the identifier absorbs
+   * the whole overflow, so the ellipsis lands here and not on the name. */
+  flex-shrink: 1000;
+}
+
+/* Detail title without the mono face when it is an authored display name. */
+.sm-detail-title.sm-display-name {
+  font-family: inherit;
+  font-weight: 500;
+}
+
+/* Author icon: fill the existing 40/48px icon box without changing layout. */
+.sm-skill-icon-img {
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+}
 `
 
 /* 按原顺序拼接，保证层叠顺序不变。 */
@@ -11766,9 +12106,67 @@ const STYLES = STYLES_1 + STYLES_2 + STYLES_3 + STYLES_4 + STYLES_5 + STYLES_6 +
       await Promise.all([loadSources(), loadInstalled()])
     }
 
+    /**
+     * Follow the host locale face (`{ getSnapshot, subscribe }`): seed
+     * `appState.locale` from the snapshot and re-render on every change.
+     * Returns an unsubscribe function (or null when the face is absent).
+     */
+    function smWatchHostLocale(ctx) {
+      const locale = ctx !== null && typeof ctx === 'object' ? ctx.locale : null
+      if (locale === null || typeof locale !== 'object') return null
+      const readActive = function () {
+        if (typeof locale.getSnapshot !== 'function') return ''
+        try {
+          const snapshot = locale.getSnapshot()
+          return snapshot !== null && typeof snapshot === 'object' && typeof snapshot.active === 'string'
+            ? snapshot.active
+            : ''
+        } catch {
+          return ''
+        }
+      }
+      const applySnapshot = function (snapshot) {
+        let active = snapshot !== null && typeof snapshot === 'object' && typeof snapshot.active === 'string'
+          ? snapshot.active
+          : ''
+        /* Some hosts invoke subscribers without an argument; read it back. */
+        if (active === '') active = readActive()
+        if (active === '') return
+        smLocaleSubscribed = true
+        if (active === appState.locale) return
+        appState.locale = active
+        rerender()
+      }
+      applySnapshot(null)
+      if (typeof locale.subscribe !== 'function') return null
+      let subscription = null
+      try {
+        subscription = locale.subscribe(function (snapshot) { applySnapshot(snapshot) })
+      } catch {
+        return null
+      }
+      if (typeof subscription === 'function') return subscription
+      if (subscription !== null && typeof subscription === 'object' && typeof subscription.dispose === 'function') {
+        return function () { subscription.dispose() }
+      }
+      return null
+    }
+
     /** Browser half entry. */
     function apply(ctx) {
       ctx.effect(() => ctx.locale.register(NS, { zh, en }), 'skill-manager: dictionaries')
+
+      /* Locale: primary source while the panel is mounted (props.locale in
+       * renderPage remains only the fallback). */
+      let disposeLocale = null
+      if (typeof ctx.effect === 'function') {
+        ctx.effect(() => {
+          const dispose = smWatchHostLocale(ctx)
+          return typeof dispose === 'function' ? dispose : () => {}
+        }, 'skill-manager: locale')
+      } else {
+        disposeLocale = smWatchHostLocale(ctx)
+      }
 
       ctx.effect(() => {
         if (typeof document === 'undefined' || document === null) return () => {}
@@ -11817,6 +12215,9 @@ const STYLES = STYLES_1 + STYLES_2 + STYLES_3 + STYLES_4 + STYLES_5 + STYLES_6 +
           ),
         'skill-manager: sidebar entry',
       )
+
+      /* Hosts without ctx.effect dispose through apply's return value. */
+      if (typeof disposeLocale === 'function') return disposeLocale
     }
 
     return { inject: ['slots', 'locale', 'layout'], apply }

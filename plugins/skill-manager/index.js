@@ -15,7 +15,7 @@
  */
 import { Buffer } from 'node:buffer'
 import { readFile, realpath } from 'node:fs/promises'
-import { basename, dirname, join, resolve } from 'node:path'
+import { basename, dirname, extname, join, resolve, sep } from 'node:path'
 import { homedir } from 'node:os'
 
 import { ApiError, fail, methodNotAllowed, queryOf, readBody, rejected, sendJson } from './lib/http.mjs'
@@ -335,6 +335,31 @@ function descriptionByLocaleField(value) {
   return pair === null ? {} : { descriptionByLocale: pair }
 }
 
+function titleByLocaleField(value) {
+  const pair = localizedPair(value)
+  return pair === null ? {} : { titleByLocale: pair }
+}
+
+/**
+ * Resolve one index `icon` value into an absolute URL the browser can load.
+ * `data:image/*` passes through; a relative reference resolves against the index
+ * URL. The result must be https, or same-origin with the index (spec §10).
+ */
+function iconField(value, indexUrl) {
+  if (typeof value !== 'string' || value.trim() === '') return {}
+  const raw = value.trim()
+  if (/^data:image\//iu.test(raw)) return { icon: raw }
+  let base = null
+  if (typeof indexUrl === 'string' && indexUrl !== '') {
+    try { base = new URL(indexUrl) } catch { base = null }
+  }
+  let resolved
+  try { resolved = new URL(raw, base ?? undefined) } catch { return {} }
+  if (resolved.protocol === 'https:') return { icon: resolved.href }
+  if (base !== null && resolved.origin === base.origin) return { icon: resolved.href }
+  return {}
+}
+
 function indexOfResult(result) {
   if (!isObject(result)) return result
   if (result.index !== undefined) return result.index
@@ -416,8 +441,10 @@ function marketSkillView(entry, context) {
     id: `${context.source.id}:${entry?.name ?? ''}`,
     name: typeof entry?.name === 'string' ? entry.name : '',
     title: localized(entry?.title) || (typeof entry?.name === 'string' ? entry.name : ''),
+    ...titleByLocaleField(entry?.title),
     description: localized(entry?.description),
     ...descriptionByLocaleField(entry?.description),
+    ...iconField(entry?.icon, context.source?.url),
     version: typeof version?.version === 'string' ? version.version : '',
     tags,
     author: typeof entry?.author === 'string' ? entry.author : '',
@@ -487,7 +514,9 @@ function marketListView(entry, context) {
     name: typeof entry?.name === 'string' ? entry.name : '',
     version: typeof version?.version === 'string' ? version.version : '',
     description: localized(entry?.description),
+    ...titleByLocaleField(entry?.title),
     ...descriptionByLocaleField(entry?.description),
+    ...iconField(entry?.icon, context.source?.url),
     tags,
     installed: installed !== undefined,
     installedVersion,
@@ -609,7 +638,7 @@ export function createSkillMarkdownReader({ fetchImpl = globalThis.fetch, now = 
   const inflight = new Map()
 
   const keyOf = ({ sourceId, name, version, sha256 }) => (
-    `${sourceId ?? ''} ${name ?? ''} ${version ?? ''} ${sha256 ?? ''}`
+    `${sourceId ?? ''}\u0000${name ?? ''}\u0000${version ?? ''}\u0000${sha256 ?? ''}`
   )
 
   const readCache = (key) => {
@@ -869,14 +898,43 @@ async function checkUpdatesOf(checker, options) {
 }
 
 /**
+ * How long a transient "checking" mark stays visible. The mark is written before a route
+ * awaits its index read and cleared when that read settles; this deadline is only the
+ * safety net for the paths a `finally` cannot reach (a handler whose promise was abandoned
+ * mid-await because the client navigated away, a request dropped with its response stream).
+ *
+ * It has to sit *above* the fetch budget the guarded read can spend, otherwise a slow but
+ * healthy source would stop looking busy while it is still being checked. `fetchIndex`
+ * bounds one read at `FETCH_TIMEOUT_MS` (15 s), so the window is that plus one round trip.
+ */
+const SOURCE_CHECKING_TTL_MS = 20_000
+
+/**
  * Per-process source health that is not persisted in `state.json`
  * (skill counts, the transient "checking" flag and the latest fetch error).
+ *
+ * `checking` is a `Map<id, deadline>` rather than a `Set`: a visible "checking" state is a
+ * debt every caller must be able to pay back, and a mark left by an abandoned request used
+ * to stay truthy forever — the client then kept painting the source as "检查中" (a yellow
+ * dot) for the rest of the process lifetime. Storing the deadline lets `view()` expire a
+ * stale mark lazily (no timer, no polling) so the mark always heals on its own, while the
+ * routes below still clear it deterministically the moment the read settles.
  */
 function createSourceTracker() {
   const counts = new Map()
   const errors = new Map()
   const checkedAt = new Map()
-  const checking = new Set()
+  /** @type {Map<string, number>} source id -> wall-clock ms when the mark lapses */
+  const checking = new Map()
+
+  const isChecking = (id) => {
+    const deadline = checking.get(id)
+    if (deadline === undefined) return false
+    if (Date.now() < deadline) return true
+    // Lazily expire: an expired mark must never be observable again.
+    checking.delete(id)
+    return false
+  }
 
   const view = (source) => {
     if (!isObject(source)) return null
@@ -893,7 +951,7 @@ function createSourceTracker() {
       name: typeof source.name === 'string' ? source.name : '',
       url: typeof source.url === 'string' ? source.url : '',
       enabled: source.enabled !== false,
-      status: checking.has(id) ? 'checking' : (error !== null ? 'error' : 'ok'),
+      status: isChecking(id) ? 'checking' : (error !== null ? 'error' : 'ok'),
       skillCount: counts.get(id) ?? 0,
       lastCheckedAt: checked,
       error,
@@ -917,7 +975,7 @@ function createSourceTracker() {
       checking.delete(id)
     },
     markChecking: (id) => {
-      if (typeof id === 'string' && id !== '') checking.add(id)
+      if (typeof id === 'string' && id !== '') checking.set(id, Date.now() + SOURCE_CHECKING_TTL_MS)
     },
     markIdle: (id) => {
       if (typeof id === 'string' && id !== '') checking.delete(id)
@@ -984,6 +1042,146 @@ async function resolveWrittenSkill(ctx, cwd, result, hint = {}) {
 }
 
 // ---------------------------------------------------------------------------
+// Installed-view market metadata: read budget, fallback and failure policy
+// ---------------------------------------------------------------------------
+
+/**
+ * A wait budget is *not* a failure. `/installed` is raced against a budget so a slow
+ * source never delays the list; when the budget expires the reader serves the last index
+ * it managed to read and the still-running fetch warms that copy. Four numbers describe
+ * the whole policy:
+ *
+ *   - `QUICK`  a previously-read index already covers the view, so a short wait is enough
+ *              to prefer a fresh copy without making the request slow;
+ *   - `COLD`   nothing to fall back on: waiting for the index is strictly better than
+ *              rendering the list without its display metadata;
+ *   - `REFRESH` an explicit refresh asks for new data, so it waits longer;
+ *   - `RETRY`  only a source that genuinely failed backs off for this long.
+ */
+const MARKET_INDEX_WAIT_QUICK_MS = 250
+const MARKET_INDEX_WAIT_COLD_MS = 1200
+const MARKET_INDEX_WAIT_REFRESH_MS = 2500
+const MARKET_INDEX_RETRY_MS = 60_000
+/** Sentinel resolved by the wait budget; never an error and never cached. */
+const MARKET_INDEX_TIMEOUT = Symbol('skill-manager:market-index-timeout')
+
+/**
+ * Decide how one source's market index read behaves for the current request.
+ *
+ * A timeout only ends the *wait*: the caller still serves the previously-read index, so an
+ * expired budget can never make `/installed` drop display names, descriptions or icons.
+ * Only a genuine failure (network, HTTP, schema) is remembered as a back-off — a canceled
+ * fetch does not count either, because `check-updates` invalidates the fetch cache (and
+ * aborts its in-flight requests) right before the client reloads `/installed`; treating
+ * that cancellation as a failure is exactly what used to hide the metadata for 60 s.
+ *
+ * Pure and exported so the selftest can pin the policy.
+ *
+ * @param {{ hasPrevious?: boolean, refresh?: boolean, failedAt?: number, now?: number }} [input]
+ * @returns {{ action: 'read' | 'stale', budgetMs: number }} `stale` means "serve the last
+ *   index that was read without waiting on the network" (`budgetMs` is then 0).
+ */
+export function planMarketIndexRead(input = {}) {
+  const hasPrevious = input.hasPrevious === true
+  const refresh = input.refresh === true
+  const now = Number.isFinite(input.now) ? input.now : Date.now()
+  const backingOff = Number.isFinite(input.failedAt) && now - input.failedAt < MARKET_INDEX_RETRY_MS
+  // An explicit refresh asks for new data, so it always waits and never reuses quietly.
+  if (refresh) return { action: 'read', budgetMs: MARKET_INDEX_WAIT_REFRESH_MS }
+  // A previous index already covers the view: a short wait prefers a fresh copy, and a
+  // timed-out read still returns that previous index, so the view never loses metadata.
+  if (hasPrevious) {
+    return backingOff
+      ? { action: 'stale', budgetMs: 0 }
+      : { action: 'read', budgetMs: MARKET_INDEX_WAIT_QUICK_MS }
+  }
+  // Nothing to fall back on: waiting is strictly better than rendering the list without
+  // its display metadata — and that holds *even* for a source that failed before. A
+  // back-off only pays off when there is a copy to serve, so it must never turn a cold
+  // view into an instant, permanently empty one: with no previous index, `stale` would
+  // return `null` and the list would render without icons until the back-off expired.
+  return { action: 'read', budgetMs: MARKET_INDEX_WAIT_COLD_MS }
+}
+
+/**
+ * The copy to remember for one source, built from a freshly read index. `null` means the
+ * read produced nothing usable, in which case the caller keeps the copy it already had.
+ *
+ * The copy keeps the URL it was read from. That is what stops a source whose URL was
+ * edited from serving the previous source's metadata, and it is the same identity
+ * `marketIndexFromCache` checks on the way back out.
+ *
+ * Pure and exported so the selftest can pin the shape.
+ *
+ * @param {unknown} index a normalized market index
+ * @param {{ sourceId?: unknown, url?: unknown }} [target]
+ * @returns {{ url: string, skills: object[] } | null}
+ */
+export function marketIndexCopyOf(index, target = {}) {
+  const sourceId = target.sourceId
+  const url = target.url
+  if (typeof sourceId !== 'string' || sourceId === '') return null
+  if (typeof url !== 'string' || url === '') return null
+  if (index === null || typeof index !== 'object') return null
+  if (!Array.isArray(index.skills)) return null
+  return { url, skills: index.skills }
+}
+
+/**
+ * A previously-read index as a `marketIndexes` entry. It only applies to the source URL it
+ * was read from, so editing a source URL never serves another index's metadata. `null`
+ * means "no usable fallback", which keeps the entry out of the scan options entirely.
+ *
+ * @param {unknown} cached the entry remembered for this source id
+ * @param {{ sourceId?: unknown, url?: unknown }} [target]
+ * @returns {{ sourceId: string, url: string, skills: object[] } | null}
+ */
+export function marketIndexFromCache(cached, target = {}) {
+  if (cached === null || typeof cached !== 'object') return null
+  const sourceId = target.sourceId
+  const url = target.url
+  if (typeof sourceId !== 'string' || sourceId === '') return null
+  if (typeof url !== 'string' || url === '') return null
+  if (cached.url !== url) return null
+  if (!Array.isArray(cached.skills)) return null
+  return { sourceId, url, skills: cached.skills }
+}
+
+/**
+ * Whether a failed index read was a cancellation rather than a source failure. The index
+ * fetcher aborts in-flight requests when `check-updates` drops the cache; that abort says
+ * nothing about the source's health, so it must not start a back-off.
+ *
+ * @param {unknown} error
+ */
+export function isCanceledMarketIndexError(error) {
+  if (error === null || typeof error !== 'object') return false
+  return error.code === 'E_CANCELED'
+}
+
+/**
+ * Whether one canceled index read deserves a second attempt.
+ *
+ * `check-updates` drops the index fetch cache — aborting the requests that are in flight —
+ * immediately before the client reloads `/installed`. That abort is not the source's fault,
+ * and the read it interrupted was probably mid-flight when it happened. With no previous
+ * index to serve, giving up would render the whole list without its market icons; one
+ * retry settles the race with a fresh request instead of an empty view.
+ *
+ * A retry is pointless when a previous index exists (the caller serves that copy) because
+ * the fallback already covers the view.
+ *
+ * Pure and exported so the selftest can pin the policy.
+ *
+ * @param {{ error?: unknown, hasPrevious?: boolean }} [input]
+ * @returns {boolean} true when a canceled read should be attempted once more
+ */
+export function shouldRetryCanceledMarketIndexRead(input = {}) {
+  if (input.hasPrevious === true) return false
+  return isCanceledMarketIndexError(input.error)
+}
+
+// ---------------------------------------------------------------------------
 // Plugin
 // ---------------------------------------------------------------------------
 
@@ -1030,17 +1228,25 @@ export function apply(ctx, config) {
   const skillMarkdown = createSkillMarkdownReader()
 
   /**
-   * Installed views need each install record's market index entry to expose the optional
-   * `descriptionByLocale`. Indexes come from the same 10-minute cache `/market` uses, so
-   * the usual case is a memory hit. A slow source must not delay `/installed`: the read is
-   * raced against a 150ms budget, while the underlying fetch keeps running and warms the
-   * cache for the next request. When the index is missing we return without the optional
-   * `descriptionByLocale` — the client falls back to `description`. A source that failed
-   * is retried after a short back-off.
+   * Installed views need each install record's market index entries to expose the optional
+   * `displayNameByLocale` / `descriptionByLocale` / `iconUrl`. Indexes come from the same
+   * 10-minute cache `/market` uses, so the usual case is a memory hit.
+   *
+   * A slow source must not delay `/installed`, but a budget expiry must also never cost the
+   * view its metadata. Two properties give that guarantee:
+   *
+   *   - every source keeps the last index it read (`lastGoodIndexes`), and a read that times
+   *     out serves that copy instead of nothing (stale-while-revalidate). The still-running
+   *     fetch warms the cache and the copy for the next request;
+   *   - only a genuine source failure starts the back-off. A canceled fetch does not,
+   *     because `check-updates` drops the fetch cache (aborting in-flight reads) right
+   *     before the client reloads `/installed`.
+   *
+   * The policy numbers live next to `planMarketIndexRead`, the pure decision helper.
    */
-  const DESCRIPTION_WAIT_MS = 150
-  const DESCRIPTION_RETRY_MS = 60_000
-  const DESCRIPTION_TIMEOUT = Symbol('skill-manager:description-timeout')
+  /** @type {Map<string, { url: string, skills: object[], fetchedAt: number }>} */
+  const lastGoodIndexes = new Map()
+  /** @type {Map<string, number>} source id -> when a genuine failure was last seen */
   const descriptionIndexFailures = new Map()
 
   const readMarketIndexes = async (sources, refresh = false) => {
@@ -1049,39 +1255,127 @@ export function apply(ctx, config) {
     const results = await Promise.all(list.map(async (source) => {
       if (!isObject(source) || typeof source.id !== 'string' || source.id === '') return null
       if (typeof source.url !== 'string' || source.url === '') return null
-      const failedAt = descriptionIndexFailures.get(source.id)
-      if (!refresh && failedAt !== undefined && now - failedAt < DESCRIPTION_RETRY_MS) return null
-
-      let timer
-      const timeout = new Promise((resolve) => {
-        timer = setTimeout(() => resolve(DESCRIPTION_TIMEOUT), DESCRIPTION_WAIT_MS)
-        if (typeof timer.unref === 'function') timer.unref()
+      const sourceId = source.id
+      const sourceUrl = source.url
+      const fallback = () => marketIndexFromCache(lastGoodIndexes.get(sourceId), { sourceId, url: sourceUrl })
+      const plan = planMarketIndexRead({
+        hasPrevious: fallback() !== null,
+        refresh,
+        failedAt: descriptionIndexFailures.get(sourceId),
+        now,
       })
-      const pending = fetchIndex(source.url, { refresh })
-      // Track a failure that happens *after* the short wait gave up, so a dead source
-      // backs off instead of costing every later `/installed` its full budget.
-      pending.then(
-        () => descriptionIndexFailures.delete(source.id),
-        () => descriptionIndexFailures.set(source.id, Date.now()),
-      )
-      try {
-        const result = await Promise.race([pending, timeout])
-        if (result === DESCRIPTION_TIMEOUT) return null
-        // `fetchIndex` keeps the last good index when a refresh fails; that is still the
-        // best description we have, so only the index shape decides.
-        const index = normalizeIndex(result, source.url)
+      if (plan.action === 'stale') return fallback()
+
+      const remember = (index) => {
         if (!isObject(index) || !Array.isArray(index.skills)) return null
-        descriptionIndexFailures.delete(source.id)
-        return { sourceId: source.id, skills: index.skills }
-      } catch {
-        descriptionIndexFailures.set(source.id, Date.now())
-        return null
-      } finally {
-        clearTimeout(timer)
+        lastGoodIndexes.set(sourceId, { url: sourceUrl, skills: index.skills, fetchedAt: Date.now() })
+        descriptionIndexFailures.delete(sourceId)
+        return { sourceId, url: sourceUrl, skills: index.skills }
+      }
+      const recordFailure = (error) => {
+        if (!isCanceledMarketIndexError(error)) descriptionIndexFailures.set(sourceId, Date.now())
+      }
+
+      /**
+       * One bounded read. A budget expiry resolves the sentinel instead of rejecting, so the
+       * caller can tell "the wait ended" apart from "the source failed".
+       */
+      const readWithBudget = (attemptRefresh, budgetMs) => {
+        let timer
+        const timeout = new Promise((resolve) => {
+          timer = setTimeout(() => resolve(MARKET_INDEX_TIMEOUT), budgetMs)
+          if (typeof timer.unref === 'function') timer.unref()
+        })
+        const pending = fetchIndex(sourceUrl, { refresh: attemptRefresh })
+        // Whatever the wait did, the settled fetch updates the shared state exactly the same
+        // way: a late success warms the copy the next `/installed` falls back on, a late
+        // failure starts the back-off. Recording it twice is harmless and keeps the code
+        // flat. This observer must never throw: a rejected normalizeIndex would otherwise
+        // surface as an unhandled rejection because the race has already returned.
+        pending.then(
+          (result) => {
+            try { remember(normalizeIndex(result, sourceUrl)) } catch { /* the next read retries */ }
+          },
+          (error) => {
+            try { recordFailure(error) } catch { /* back-off bookkeeping only */ }
+          },
+        ).catch(() => { /* the observer is best-effort; the request path owns failures */ })
+        return Promise.race([pending, timeout]).finally(() => { clearTimeout(timer) })
+      }
+
+      try {
+        const result = await readWithBudget(refresh, plan.budgetMs)
+        // The budget expiring is not a failure: serve the last index that was read, and let
+        // the fetch that is still running refresh it for the next request.
+        if (result === MARKET_INDEX_TIMEOUT) return fallback()
+        // `fetchIndex` keeps the last good index when a refresh fails; that is still the
+        // best metadata we have, so only the index shape decides.
+        return remember(normalizeIndex(result, sourceUrl)) ?? fallback()
+      } catch (error) {
+        // A canceled read says nothing about the source's health, and it is exactly what
+        // `check-updates` causes: it drops the fetch cache (aborting in-flight requests) a
+        // moment before the client reloads `/installed`. Without a copy to fall back on, one
+        // retry is what keeps that window from costing every icon in the list.
+        if (shouldRetryCanceledMarketIndexRead({ error, hasPrevious: fallback() !== null })) {
+          try {
+            const retried = await readWithBudget(false, MARKET_INDEX_WAIT_COLD_MS)
+            if (retried !== MARKET_INDEX_TIMEOUT) {
+              const index = remember(normalizeIndex(retried, sourceUrl))
+              if (index !== null) return index
+            }
+          } catch (retryError) {
+            recordFailure(retryError)
+          }
+        }
+        recordFailure(error)
+        // A failed read is exactly when the last good index matters most.
+        return fallback()
       }
     }))
     return results.filter((entry) => entry !== null)
   }
+
+  /**
+   * Re-read every source's index without a budget and remember it as the fallback copy.
+   *
+   * `POST /check-updates` ends by calling `indexFetcher.invalidate(url)` on every healthy
+   * source — it drops the 10-minute fetch cache *and* aborts the reads that are in flight —
+   * and only then does the client reload `/installed`. On a warm process the previous copy
+   * in `lastGoodIndexes` covers that window, but on a cold one (`lastGoodIndexes` empty,
+   * which is every freshly started Host) the reload had nothing to fall back on: it
+   * started a brand-new 15 s-bounded fetch and gave up after the cold budget, so the list
+   * came back without icons.
+   *
+   * Taking the copy *before* the invalidation is what closes that hole, and starting it
+   * alongside the check (not after it) is what keeps the route as fast as it was: the
+   * checker keeps its own index cache, so a sequential read would pay the source twice.
+   *
+   * A copy is only bookkeeping: a failed or canceled read simply leaves the map untouched,
+   * so the caller keeps whatever copy it already had and the next `/installed` retries.
+   * Deliberately not exported — it is cache maintenance for this route, not policy.
+   *
+   * @param {object[]} sources
+   * @returns {Promise<void>} settles once every source has been tried
+   */
+  const rememberIndexCopies = async (sources) => {
+    const list = Array.isArray(sources) ? sources : []
+    await Promise.all(list.map(async (source) => {
+      if (!isObject(source) || typeof source.id !== 'string' || source.id === '') return
+      if (typeof source.url !== 'string' || source.url === '') return
+      try {
+        // No `refresh`: the check is pulling this URL at the same time, so whichever read
+        // finishes first serves the other from the 10-minute cache.
+        const result = await fetchIndex(source.url)
+        const copy = marketIndexCopyOf(normalizeIndex(result, source.url), { sourceId: source.id, url: source.url })
+        if (copy === null) return
+        lastGoodIndexes.set(source.id, { ...copy, fetchedAt: Date.now() })
+        descriptionIndexFailures.delete(source.id)
+      } catch {
+        /* no copy is better than a wrong one; the next `/installed` retries */
+      }
+    }))
+  }
+
   // Automatic update checks must use the same compatibility rules as installs, otherwise
   // they would prompt for versions the installer refuses (and vice versa).
   const updateChecker = createUpdateChecker({
@@ -1119,9 +1413,10 @@ export function apply(ctx, config) {
     await setOrder(order)
   }
 
-  // `/check-updates` is single-flight at the route level so the index-cache/scan refresh
-  // around the update check also runs at most once (contract §4.3).
-  let checkUpdatesInflight = null
+  // `/check-updates` is single-flight per scope: an all-sources check and a
+  // single-source check never swallow each other, and a repeat of the same scope
+  // reuses the in-flight result (contract §4.3).
+  const checkUpdatesInflight = new Map()
   // Sources whose last update check failed. `/market` keeps serving their last good cache
   // but must report `stale: true` until a later check (or explicit refresh) succeeds.
   const staleSources = new Set()
@@ -1293,6 +1588,11 @@ export function apply(ctx, config) {
                 /* keep the original failure */
               }
               throw error
+            } finally {
+              // Both branches above already settle the mark; this covers the paths they
+              // cannot — an aborted response, a throw from `sendJson`, a store write that
+              // never resolves. `markOk`/`markError` run first, so this is a no-op then.
+              sourceTracker.markIdle(id)
             }
             return
           }
@@ -1340,6 +1640,88 @@ export function apply(ctx, config) {
     const scan = await scanAll(ctx, cwd, { force: true })
     return { issues: scan.issues, checkedAt: Date.now() }
   })
+
+  // ---- authored skill icons ----------------------------------------------
+
+  const ICON_CONTENT_TYPES = {
+    '.svg': 'image/svg+xml',
+    '.png': 'image/png',
+    '.jpg': 'image/jpeg',
+    '.jpeg': 'image/jpeg',
+    '.webp': 'image/webp',
+  }
+  const ICON_MAX_BYTES = 256 * 1024
+
+  /**
+   * `GET /skill/icon?path=<SKILL.md>&cwd=<project>`: the icon an author declared
+   * in SKILL.md (`icon: assets/icon.svg`). Binary response, behind the trust fence.
+   * The target must stay inside the skill directory (realpath checked), use a known
+   * image extension and stay under 256 KiB.
+   */
+  const skillIconRoute = () => {
+    ctx.effect(() => ctx.webServer.register({
+      kind: 'exact',
+      path: `${API_PREFIX}/skill/icon`,
+      handler: async (req, res) => {
+        try {
+          if (rejected(ctx, req, res)) return
+          if (String(req.method ?? '').toUpperCase() !== 'GET') {
+            methodNotAllowed(res, 'GET')
+            return
+          }
+          const query = queryOf(req)
+          const cwd = await resolveCwd(ctx, query.cwd || settings.cwd)
+          const path = requireString(query.path, 'path')
+          const [installed, sources] = await Promise.all([readInstalled(state), readSources(state)])
+          const detail = await readSkillDetail(ctx, path, cwd, {
+            installed,
+            sources,
+            updates: updateStateOf(updateChecker),
+            marketIndexes: [],
+          })
+          const skill = detail !== null && typeof detail === 'object' ? detail.skill : null
+          const iconPath = typeof skill?.iconPath === 'string' ? skill.iconPath : ''
+          if (iconPath === '') {
+            throw new ApiError('E_NOT_FOUND', 'this skill declares no icon', {}, 404)
+          }
+          const skillDir = dirname(skill.path)
+          let rootReal
+          try {
+            rootReal = await realpath(skillDir)
+          } catch {
+            rootReal = skillDir
+          }
+          let targetReal
+          try {
+            targetReal = await realpath(resolve(skillDir, iconPath))
+          } catch {
+            throw new ApiError('E_NOT_FOUND', 'icon file not found', {}, 404)
+          }
+          if (targetReal !== rootReal && !targetReal.startsWith(rootReal + sep)) {
+            throw new ApiError('E_FORBIDDEN', 'icon escapes the skill directory', {}, 403)
+          }
+          const contentType = ICON_CONTENT_TYPES[extname(targetReal).toLowerCase()]
+          if (contentType === undefined) {
+            throw new ApiError('E_UNSUPPORTED', 'unsupported icon format', {}, 415)
+          }
+          const data = await readFile(targetReal)
+          if (data.length > ICON_MAX_BYTES) {
+            throw new ApiError('E_TOO_LARGE', 'icon exceeds 256 KiB', {}, 413)
+          }
+          res.statusCode = 200
+          res.setHeader('content-type', contentType)
+          res.setHeader('cache-control', 'no-store')
+          res.setHeader('x-content-type-options', 'nosniff')
+          res.setHeader('content-security-policy', "default-src 'none'; style-src 'unsafe-inline'")
+          res.end(data)
+        } catch (error) {
+          respondError(res, error)
+        }
+      },
+    }), 'skill-manager: skill icon')
+  }
+
+  skillIconRoute()
 
   // ---- installed skill CRUD ----------------------------------------------
 
@@ -1573,7 +1955,15 @@ export function apply(ctx, config) {
       // A failed `/check-updates` marks the source stale even while its cached index is
       // still within the fetch TTL, so the client can show the "last good" hint.
       if (staleSources.has(source.id)) stale = true
-      sourceTracker.markChecking(source.id)
+      // `/market` deliberately does *not* publish the `checking` transient. The source
+      // status the page paints comes from `GET /sources`, and the client caches that
+      // answer: `/check-updates` reloads `/installed`, `/sources` and `/market` together,
+      // so a `/sources` reply taken while this loop is awaiting an index read would
+      // capture `status: 'checking'` and never be refreshed again — the yellow dot stayed
+      // until a page reload. This route is a listing read (the page shows its own loading
+      // state), so the transient belongs to the explicit `POST /sources/:id/refresh`
+      // instead, which the client awaits *before* reloading `/sources`. The health marks
+      // this loop still owes the tracker are the settled ones below.
       try {
         const result = await fetchIndex(source.url, { refresh: truthyFlag(query.refresh) })
         const index = normalizeIndex(result, source.url)
@@ -1781,14 +2171,36 @@ export function apply(ctx, config) {
 
   route('POST', `${API_PREFIX}/check-updates`, async (req) => {
     const body = await readJsonBody(req, settings.maxBodyBytes)
-    if (checkUpdatesInflight !== null) return checkUpdatesInflight
+    const requestedSourceId = text(body.sourceId)
+    const scopeKey = requestedSourceId === '' ? '*' : requestedSourceId
+    const inflight = checkUpdatesInflight.get(scopeKey)
+    if (inflight !== undefined) return inflight
 
     const force = body.force === true
     const cwd = typeof body.cwd === 'string' && body.cwd !== '' ? body.cwd : settings.cwd
     const run = async () => {
-      const sources = (await readSources(state)).filter((source) => source?.enabled !== false)
-      // Contract §4.3: re-pull every enabled index, recompute updates, refresh the scan.
-      const checked = await checkUpdatesOf(updateChecker, { force, refreshIndexes: true })
+      const allSources = (await readSources(state)).filter((source) => source?.enabled !== false)
+      const sources = requestedSourceId === ''
+        ? allSources
+        : allSources.filter((source) => source?.id === requestedSourceId)
+      if (requestedSourceId !== '' && sources.length === 0) {
+        throw new ApiError('E_NOT_FOUND', `no enabled source with id "${requestedSourceId}"`, {}, 404)
+      }
+      // Start the copy read *alongside* the check, not after it. The two reads use different
+      // caches (`updateChecker` has its own), so running them sequentially would double the
+      // route's latency on a cold process — 2.2 s for the check plus 2.2 s for the copy.
+      // Started together they share the source's response time instead of adding to it.
+      // Nothing awaits this promise here: `rememberIndexCopies` swallows every failure, and
+      // the settled copy is only needed once the route returns (the client reloads
+      // `/installed` afterwards).
+      const copies = rememberIndexCopies(sources)
+      // Contract §4.3: re-pull every enabled index (or just the requested one),
+      // recompute updates and refresh the scan.
+      const checked = await checkUpdatesOf(updateChecker, {
+        force,
+        refreshIndexes: true,
+        ...(requestedSourceId === '' ? {} : { sourceIds: [requestedSourceId] }),
+      })
       // P2-5: only a source whose check succeeded may have its market cache dropped. On
       // failure the last good index is retained (the checker marks it stale), so `/market`
       // can still render cached cards instead of losing them.
@@ -1800,7 +2212,23 @@ export function apply(ctx, config) {
         if (id === '') globalFailure = true
         else failedSources.add(id)
       }
+      // Regression ①-b: a successful check is *evidence* that the source is healthy again,
+      // so the 60 s failure back-off recorded by an earlier `/installed` read is now stale
+      // information. Leaving it in place makes the very next cold `/installed` skip the
+      // network and render every skill without its market icon until the back-off expires.
+      // Only a forced check actually re-read the index (`ensureIndex` serves its own TTL
+      // cache otherwise), so only a forced check may clear the failure record.
+      if (!globalFailure && force) {
+        for (const source of sources) {
+          const sourceId = typeof source?.id === 'string' ? source.id : ''
+          if (sourceId === '' || failedSources.has(sourceId)) continue
+          descriptionIndexFailures.delete(sourceId)
+        }
+      }
       if (!globalFailure) {
+        // Wait for the copy read that was started above, *before* `invalidate()` drops the
+        // fetch cache. A failing source keeps its old copy instead of taking a new one.
+        await copies
         for (const source of sources) {
           if (typeof source?.url !== 'string' || source.url === '') continue
           if (failedSources.has(source.id)) continue
@@ -1834,10 +2262,11 @@ export function apply(ctx, config) {
         errors,
       }
     }
-    checkUpdatesInflight = run().finally(() => {
-      checkUpdatesInflight = null
+    const promise = run().finally(() => {
+      checkUpdatesInflight.delete(scopeKey)
     })
-    return checkUpdatesInflight
+    checkUpdatesInflight.set(scopeKey, promise)
+    return promise
   })
 
   // ---- validation / settings ---------------------------------------------

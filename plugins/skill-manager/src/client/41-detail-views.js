@@ -2,6 +2,8 @@
     function SmDetailHeader(props) {
         const skill = props.skill
         const version = smSkillVersion(skill)
+        const technicalName = smText(props.technicalName)
+        const shownName = smText(props.name, technicalName)
         return h('div', { className: 'sm-detail-head' },
             h('div', null,
                 h('div', {
@@ -9,10 +11,13 @@
                     style: {
                         opacity: smIsDisabled(skill) ? 0.6 : 1,
                     },
-                }, icon(skillIconName(skill), 28)),
+                }, h(SmSkillIcon, { skill: skill, size: 28, fallback: skillIconName(skill) })),
                 h('div', { style: { display: 'flex', flexDirection: 'column', gap: '6px', minWidth: 0 } },
                     h('div', { className: 'sm-detail-title-line' },
-                        h('h2', { className: 'sm-mono sm-detail-title' }, props.name),
+                        h('h2', { className: cx('sm-detail-title', technicalName === '' ? 'sm-mono' : 'sm-display-name'), title: shownName }, shownName),
+                        technicalName !== '' && technicalName !== shownName
+                            ? h('span', { className: 'sm-mono sm-detail-tech', title: technicalName }, technicalName)
+                            : null,
                         version !== '' ? h('span', { className: 'sm-mono sm-detail-ver' }, version) : null,
                         props.badge !== undefined && props.badge !== null ? props.badge : null),
                     props.subtitle !== undefined && props.subtitle !== null && props.subtitle !== ''
@@ -36,7 +41,8 @@
         const detail = props.detail
         const skill = props.skill
         const name = smText(skill.name, smText(detail.name, smText(detail.id)))
-        const description = smSkillDescription(skill)
+        const displayName = smSkillDisplayName(skill) || name
+        const description = smSkillDisplayDescription(skill)
         const whenToUse = smText(skill.whenToUse)
         const path = smText(skill.path)
         const writable = !smIsReadonly(skill) && !smIsBuiltin(skill)
@@ -184,7 +190,8 @@
             h(SmDetailBack, { kind: 'installed' }),
             h(SmDetailHeader, {
                 skill: skill,
-                name: name,
+                name: displayName,
+                technicalName: name,
                 badge: badge,
                 subtitle: smSourceShort(skill) + ' · ' + t('detail.updated', { time: fmtTime(smNumber(skill.mtime, 0)) }),
             }, actions),
@@ -295,6 +302,7 @@
         const content = smText(data.content, smText(data.readme))
         const contentError = smText(data.contentError, error)
         const name = smText(market.name, key.name)
+        const displayName = smSkillDisplayName(market) || name
         const version = smSkillVersion(market)
         const sourceName = smText(market.sourceName, smText(detail.sourceName, smSourceNameById(smText(market.sourceId, key.sourceId))))
         const homepage = smText(market.homepage)
@@ -347,7 +355,8 @@
             h(SmDetailBack, { kind: 'market' }),
             h(SmDetailHeader, {
                 skill: market,
-                name: name,
+                name: displayName,
+                technicalName: name,
                 badge: installedNow ? h(SmBadge, { tone: 'ok' }, t('market.installed')) : null,
                 subtitle: smText(market.author) + (smText(market.author) !== '' ? ' · ' : '') + t('detail.source.market', { source: sourceName }),
             }, actions),
@@ -355,7 +364,7 @@
                 h('div', { className: 'sm-detail-main' },
                     h(SmCard, null,
                         h(SmCardTitle, null, t('market.detailDesc')),
-                        h('div', { className: 'sm-fs-14', style: { color: 'var(--dsw-alias-label-primary)', lineHeight: '1.55' } }, smText(smSkillDescription(market), '—'))),
+                        h('div', { className: 'sm-fs-14', style: { color: 'var(--dsw-alias-label-primary)', lineHeight: '1.55' } }, smText(smSkillDisplayDescription(market), '—'))),
                     /* 正文卡片始终占位（即使正文为空），保证骨架与内容页结构一致。 */
                     h(SmCard, { className: 'sm-detail-content' },
                         h(SmCardTitle, {

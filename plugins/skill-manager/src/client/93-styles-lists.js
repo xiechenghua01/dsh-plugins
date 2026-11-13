@@ -368,11 +368,19 @@ const STYLES_4 = `
 
 .sm-icon-box > .sm-dot,
 .sm-row-icon > .sm-dot,
-.sm-detail-icon > .sm-dot,
-.sm-card-icon > .sm-dot {
+.sm-detail-icon > .sm-dot {
   position: absolute;
   left: 5px;
   bottom: 5px;
+}
+
+/* Card status dot: the single rule shared by the skills and market card
+ * title rows. It sits in normal flow ahead of the name, so it can never cover
+ * the authored icon artwork; the 6px title-row gap is the spec separation and
+ * the ring the on-icon version needed is dropped, keeping it a true 8x8.
+ * Both pages render it through renderStatusDot(). */
+.sm-card-title-row > .sm-dot {
+  border: none;
 }
 
 .sm-dot-ok {

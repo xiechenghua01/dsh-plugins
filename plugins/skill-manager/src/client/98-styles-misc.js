@@ -426,6 +426,59 @@ const STYLES_9 = `
   }
 }
 
+
+/* ------------------------------------------------------------------ *
+ * Authored display names and icons                                   *
+ * ------------------------------------------------------------------ */
+
+/* Display names are prose, not identifiers: drop the mono face used for the
+ * technical name. Chinese names simply render in the UI font. */
+.sm-card-name.sm-card-display-name {
+  font-family: inherit;
+  font-weight: 500;
+}
+
+/* The technical identifier stays visible but subordinate. */
+.sm-card-tech,
+.sm-detail-tech {
+  font-size: calc(var(--ds-fs) - 2px);
+  color: var(--dsw-alias-label-caption);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 16ch;
+}
+
+/* The detail title does not participate in the card's shrink contest. */
+.sm-detail-tech {
+  flex: none;
+}
+
+/* On a card the technical name is the first thing to yield: it shrinks to
+ * nothing before the display name loses a pixel, so a long Chinese name is
+ * never ellipsised at the cost of the identifier. The detail title keeps the
+ * old fixed behaviour. */
+.sm-card-tech {
+  flex: 1 1 auto;
+  min-width: 0;
+  /* A far larger shrink weight than the display name: the identifier absorbs
+   * the whole overflow, so the ellipsis lands here and not on the name. */
+  flex-shrink: 1000;
+}
+
+/* Detail title without the mono face when it is an authored display name. */
+.sm-detail-title.sm-display-name {
+  font-family: inherit;
+  font-weight: 500;
+}
+
+/* Author icon: fill the existing 40/48px icon box without changing layout. */
+.sm-skill-icon-img {
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+}
 `
 
 /* 按原顺序拼接，保证层叠顺序不变。 */

@@ -9,6 +9,7 @@
             : installed
                 ? t('market.installed')
                 : t('action.install')
+        const version = smMarketVersionLabel(item.version)
         const tags = []
         if (update !== '') {
             tags.push(h('span', {
@@ -17,14 +18,23 @@
                 'data-tip': t('badge.updateTip', { version: smMarketVersionLabel(update) }),
             }, smMarketUpgradeGlyph(), h('span', null, smMarketVersionLabel(update))))
         }
+        /* The version used to sit in the title row and stole width from the
+         * Chinese display name. It now belongs to the badge row below the
+         * description, next to the tags (user instruction). */
+        if (version !== '') {
+            tags.push(h('span', { key: 'version', className: 'sm-badge sm-mono' }, version))
+        }
         const maxTags = update !== '' ? 3 : 4
         const itemTags = Array.isArray(item.tags) ? item.tags : []
         itemTags.slice(0, maxTags).forEach(function (tag) {
             if (typeof tag !== 'string' || tag === '') return
             tags.push(h('span', { key: 'tag-' + tag, className: 'sm-badge' }, tag))
         })
-        const version = smMarketVersionLabel(item.version)
-        const description = typeof item.description === 'string' ? item.description : ''
+        /* Market items localize through `titleByLocale` / `descriptionByLocale`;
+         * the technical name is still what install / update calls use. */
+        const technicalName = String(item.name === undefined || item.name === null ? '' : item.name)
+        const displayName = smSkillDisplayName(item) || technicalName
+        const description = smSkillDisplayDescription(item)
         const openDetail = function () { smMarketOpenDetail(item) }
 
         return h('div', {
@@ -44,34 +54,17 @@
                 }
             },
         },
-        h('div', {
-            className: 'sm-card-icon',
-        },
-        icon(smMarketIconName(item), 24),
-        h('span', { className: cx('sm-dot', dotClass), title: dotTip, 'data-tip': dotTip })),
-        h('div', {
-            className: 'sm-card-main',
-            /* .sm-card-main 的 gap 为 5px，卡片需更紧，暂留 gap。 */
-            style: { gap: '4px' },
-        },
-        h('div', {
-            className: 'sm-card-title-row',
-            /* .sm-card-title-row 的 gap 为 6px，卡片标题行需 8px 并裁切溢出。 */
-            style: { gap: '8px', overflow: 'hidden' },
-        },
-        h('span', { className: 'sm-card-name sm-mono', title: String(item.name || '') }, String(item.name || '')),
-        version !== '' ? h('span', { className: 'sm-badge sm-mono' }, version) : null,
-        tags.length > 0
-            ? h('div', {
-                className: 'sm-tagbar',
-                /* 布局/裁切由 .sm-tagbar 提供，其 gap 为 6px，市场标签行需 4px。 */
-                style: { gap: '4px' },
-            }, tags)
-            : null),
-        h('div', {
-            className: 'sm-card-desc',
-            title: description,
-        }, description)),
+        /* Same icon box as the skills page: one helper, no duplicated markup. */
+        renderSkillIconBox(item, { iconSize: 24, fallback: smMarketIconName(item) }),
+        /* Title row, description and badge row come from one shared helper;
+         * the version badge and tags sit on the badge row, not in the title. */
+        renderCardMain({
+            dot: renderStatusDot(cx('sm-dot', dotClass), dotTip),
+            displayName: displayName,
+            technicalName: technicalName,
+            description: description,
+            badges: tags,
+        }),
         h('div', {
             className: 'sm-card-tail',
             onClick: function (event) {

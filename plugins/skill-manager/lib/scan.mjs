@@ -32,6 +32,10 @@ const CACHE_MS = 1000
 const MAX_SKILL_BYTES = 1024 * 1024
 const OVERSIZE_BYTES = 256 * 1024
 const MAX_RESOURCE_FILES = 200
+// Optional display metadata declared in SKILL.md frontmatter.
+const DISPLAY_NAME_MAX = 120
+const DISPLAY_TEXT_MAX = 2000
+const ICON_PATH_MAX = 200
 const LOCAL_SOURCES = new Set(['project-dsh', 'project-agents', 'custom', 'user-dsh', 'user-agents'])
 const MOUNTED_PRESETS = new Set(['cordis', 'standard', 'ptc'])
 const STATIC_PRESETS = [
@@ -209,6 +213,104 @@ function isLocalSkillEntry(entry) {
 function samePath(left, right) {
   if (typeof left !== 'string' || typeof right !== 'string' || left === '' || right === '') return false
   return resolve(left) === resolve(right)
+}
+
+// ---------------------------------------------------------------------------
+// Optional display metadata (SKILL.md frontmatter + market fallback)
+// ---------------------------------------------------------------------------
+
+function trimmedBounded(value, max) {
+  if (typeof value !== 'string') return ''
+  const trimmed = value.trim()
+  if (trimmed === '' || trimmed.length > max) return ''
+  return trimmed
+}
+
+/**
+ * A safe icon path relative to the skill directory: no absolute path, no Windows
+ * separator and no `..` segment. The icon route re-checks containment with
+ * `realpath` before serving a file.
+ * @param {unknown} value
+ * @returns {string}
+ */
+export function normalizeIconPath(value) {
+  const raw = trimmedBounded(value, ICON_PATH_MAX)
+  if (raw === '') return ''
+  if (raw.startsWith('/')) return ''
+  if (raw.includes('\\')) return ''
+  if (raw.split('/').includes('..')) return ''
+  return raw
+}
+
+/**
+ * Extract the optional localized display metadata from one SKILL.md frontmatter
+ * object. Invalid values are dropped field by field; they never invalidate the
+ * skill itself.
+ *
+ * @param {unknown} frontmatter
+ * @returns {{
+ *   displayNameByLocale?: { zh?: string, en?: string },
+ *   descriptionByLocale?: { zh?: string, en?: string },
+ *   iconPath?: string,
+ * }}
+ */
+export function skillDisplayMeta(frontmatter) {
+  if (frontmatter === null || typeof frontmatter !== 'object') return {}
+  const meta = {}
+
+  const names = {}
+  const zhName = trimmedBounded(frontmatter.display_name_zh, DISPLAY_NAME_MAX)
+  const enName = trimmedBounded(frontmatter.display_name_en, DISPLAY_NAME_MAX)
+  if (zhName !== '') names.zh = zhName
+  if (enName !== '') names.en = enName
+  if (Object.keys(names).length > 0) meta.displayNameByLocale = names
+
+  const descriptions = {}
+  const zhDescription = trimmedBounded(frontmatter.description_zh, DISPLAY_TEXT_MAX)
+  const enDescription = trimmedBounded(frontmatter.description_en, DISPLAY_TEXT_MAX)
+  if (zhDescription !== '') descriptions.zh = zhDescription
+  if (enDescription !== '') descriptions.en = enDescription
+  if (Object.keys(descriptions).length > 0) meta.descriptionByLocale = descriptions
+
+  const iconPath = normalizeIconPath(frontmatter.icon)
+  if (iconPath !== '') meta.iconPath = iconPath
+  return meta
+}
+
+/**
+ * Merge the local SKILL.md localization with the market index fallback.
+ *
+ * Local keys always win; the index only fills missing `zh` / `en` keys. A legacy
+ * plain-string index value carries no locale information: the index spec treats it
+ * as the default copy, so it fills `en` only when the local value has no `en`.
+ *
+ * @param {unknown} local `{ zh?, en? }` produced from the skill frontmatter
+ * @param {unknown} indexValue index `title` / `description` (LocalizedText or legacy string)
+ * @returns {{ zh?: string, en?: string } | null} `null` when neither side has a value
+ */
+export function mergeLocalizedPair(local, indexValue) {
+  const localPair = localizedPair(local) ?? {}
+  const indexPair = localizedPair(indexValue)
+    ?? (typeof indexValue === 'string' && indexValue.trim() !== '' ? { en: indexValue.trim() } : null)
+  if (indexPair === null && Object.keys(localPair).length === 0) return null
+  const merged = { ...(indexPair ?? {}), ...localPair }
+  return Object.keys(merged).length === 0 ? null : merged
+}
+
+/**
+ * Pre-shaped display fields a provider snapshot entry may already carry.
+ * Provider entries are not SKILL.md frontmatter, so only normalized fields are
+ * passed through (never a raw provider `icon`).
+ */
+function displayFieldsOfEntry(entry) {
+  const fields = { iconPath: '' }
+  const names = localizedPair(entry.displayNameByLocale)
+  if (names !== null) fields.displayNameByLocale = names
+  const descriptions = localizedPair(entry.descriptionByLocale)
+  if (descriptions !== null) fields.descriptionByLocale = descriptions
+  const iconPath = normalizeIconPath(entry.iconPath)
+  if (iconPath !== '') fields.iconPath = iconPath
+  return fields
 }
 
 // ---------------------------------------------------------------------------
@@ -436,6 +538,9 @@ function makeSkill(input) {
     name: input.name,
     description: input.description,
     ...(typeof input.whenToUse === 'string' && input.whenToUse !== '' ? { whenToUse: input.whenToUse } : {}),
+    ...(input.displayNameByLocale === undefined ? {} : { displayNameByLocale: { ...input.displayNameByLocale } }),
+    ...(input.descriptionByLocale === undefined ? {} : { descriptionByLocale: { ...input.descriptionByLocale } }),
+    iconPath: typeof input.iconPath === 'string' ? input.iconPath : '',
     category: categoryOf(input.spec.id, input.spec.writable === true),
     location: input.spec.id,
     rootPath: input.spec.display,
@@ -551,6 +656,9 @@ async function readSkillFile(spec, file, baseName, disabled, layout) {
   }
 
   const parsed = parseSkillFile(text)
+  // Optional display metadata is independent of frontmatter validity: a skill with a
+  // broken name can still show its authored Chinese/English name and icon.
+  const display = parsed.ok ? skillDisplayMeta(parsed.frontmatter) : {}
   let name = baseName
   let description = ''
   let whenToUse
@@ -604,6 +712,7 @@ async function readSkillFile(spec, file, baseName, disabled, layout) {
 
   const status = disabled ? 'disabled' : (valid ? 'active' : 'invalid')
   skills.push(makeSkill({
+    ...display,
     spec,
     name,
     description,
@@ -1239,7 +1348,32 @@ function marketEntryKey(sourceId, name) {
  * @param {unknown} options scan options, expecting `marketIndexes` or `indexes`
  * @returns {Map<string, { en?: string, zh?: string }>}
  */
-function buildDescriptionLookup(options) {
+function resolveIndexIcon(value, indexUrl) {
+  if (typeof value !== 'string' || value.trim() === '') return ''
+  const raw = value.trim()
+  if (/^data:image\//iu.test(raw)) return raw
+  let base = null
+  try {
+    base = new URL(indexUrl)
+  } catch {
+    base = null
+  }
+  try {
+    const resolved = new URL(raw, base ?? undefined)
+    if (resolved.protocol === 'https:') return resolved.href
+    if (base !== null && resolved.origin === base.origin) return resolved.href
+  } catch {
+    /* invalid icon reference */
+  }
+  return ''
+}
+
+/**
+ * Per (sourceId, name) display metadata from the market indexes: the localized
+ * title/description pair and the resolved icon URL. Installed skills merge these
+ * under their own SKILL.md declarations.
+ */
+function buildMarketDisplayLookup(options) {
   const lookup = new Map()
   const inputs = Array.isArray(options?.marketIndexes)
     ? options.marketIndexes
@@ -1248,6 +1382,7 @@ function buildDescriptionLookup(options) {
     if (input === null || typeof input !== 'object') continue
     const sourceId = typeof input.sourceId === 'string' ? input.sourceId : ''
     if (sourceId === '') continue
+    const sourceUrl = typeof input.url === 'string' ? input.url : ''
     const entries = Array.isArray(input.skills)
       ? input.skills
       : (Array.isArray(input.index?.skills) ? input.index.skills : null)
@@ -1255,8 +1390,14 @@ function buildDescriptionLookup(options) {
     for (const entry of entries) {
       if (entry === null || typeof entry !== 'object') continue
       if (typeof entry.name !== 'string' || entry.name === '') continue
-      const pair = localizedPair(entry.description)
-      if (pair !== null) lookup.set(marketEntryKey(sourceId, entry.name), pair)
+      const title = localizedPair(entry.title)
+      const description = localizedPair(entry.description)
+        ?? (typeof entry.description === 'string' && entry.description.trim() !== ''
+          ? { en: entry.description.trim() }
+          : null)
+      const icon = resolveIndexIcon(entry.icon, sourceUrl)
+      if (title === null && description === null && icon === '') continue
+      lookup.set(marketEntryKey(sourceId, entry.name), { title, description, icon })
     }
   }
   return lookup
@@ -1264,7 +1405,7 @@ function buildDescriptionLookup(options) {
 
 function attachMarket(skills, options) {
   const installed = Array.isArray(options?.installed) ? options.installed : []
-  const descriptionByKey = buildDescriptionLookup(options)
+  const displayByKey = buildMarketDisplayLookup(options)
   const sourceNames = new Map()
   if (Array.isArray(options?.sources)) {
     for (const source of options.sources) {
@@ -1306,14 +1447,20 @@ function attachMarket(skills, options) {
           : (typeof record.sourceName === 'string' ? record.sourceName : ''))
     if (sourceId !== '') skill.sourceId = sourceId
     if (sourceName !== '') skill.sourceName = sourceName
-    // Optional: the localized market description is attached only when the install record
-    // points at an index entry that actually carries a LocalizedText. Local/builtin skills
-    // (no record) and legacy string descriptions never get the field.
-    const localizedDescription = sourceId === ''
-      ? null
-      : descriptionByKey.get(marketEntryKey(sourceId, skill.name))
-    if (localizedDescription !== null && localizedDescription !== undefined) {
-      skill.descriptionByLocale = { ...localizedDescription }
+    // Optional: an install record that points at an index entry merges that entry's
+    // localized title/description and icon under the skill's own SKILL.md declarations.
+    // Local values win; the index only fills missing languages. Legacy plain-string
+    // index descriptions carry no locale and fill `en` only.
+    const display = sourceId === ''
+      ? undefined
+      : displayByKey.get(marketEntryKey(sourceId, skill.name))
+    if (display !== undefined) {
+      const mergedName = mergeLocalizedPair(skill.displayNameByLocale, display.title)
+      if (mergedName !== null) skill.displayNameByLocale = mergedName
+      const mergedDescription = mergeLocalizedPair(skill.descriptionByLocale, display.description)
+      if (mergedDescription !== null) skill.descriptionByLocale = mergedDescription
+      const hasLocalIcon = typeof skill.iconPath === 'string' && skill.iconPath !== ''
+      if (!hasLocalIcon && display.icon !== '') skill.iconUrl = display.icon
     }
     // Only a record installed from this source can have an update; a legacy record without
     // `sourceId` gets no update at all rather than matching any same-name row.

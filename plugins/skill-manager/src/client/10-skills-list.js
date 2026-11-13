@@ -50,7 +50,17 @@
     function skillsMatchesQuery(skill, query) {
         if (query === '') return true
         if (!skillsIsSkill(skill)) return false
+        /* Match the technical name plus every authored locale variant, so a
+         * search works in either language regardless of the active one. */
         const fields = [skill.name, skill.description, skill.whenToUse]
+        const pushLocalized = function (value) {
+            if (value === null || typeof value !== 'object') return
+            if (typeof value.zh === 'string' && value.zh !== '') fields.push(value.zh)
+            if (typeof value.en === 'string' && value.en !== '') fields.push(value.en)
+        }
+        pushLocalized(skill.displayNameByLocale)
+        pushLocalized(skill.titleByLocale)
+        pushLocalized(skill.descriptionByLocale)
         return fields.some(function (field) {
             return typeof field === 'string' && field.toLowerCase().indexOf(query) !== -1
         })

@@ -395,6 +395,18 @@ textarea.sm-input.sm-edit-body {
   align-items: center;
   gap: 6px;
   min-width: 0;
+  /* The title row never clips: the display name must stay whole. Anything
+   * that cannot fit yields first (see .sm-card-tech). */
+  overflow: hidden;
+}
+
+/* The badge/tag row sits between the title row and the description. It hugs
+ * the title (4px) and keeps 8px before the description, so the column reads
+ * name, then badges, then prose without the badges touching either text.
+ * The offsets are relative to the .sm-card-main gap of 6px. */
+.sm-card-main > .sm-tagbar {
+  margin-top: -2px;
+  margin-bottom: 2px;
 }
 
 .sm-card-name {
@@ -405,9 +417,13 @@ textarea.sm-input.sm-edit-body {
   line-height: 1.4;
   color: var(--dsw-alias-label-primary);
   white-space: nowrap;
+  /* The display name holds its full content width: the technical name yields
+   * almost all of the overflow first (see .sm-card-tech). The ellipsis is the
+   * last resort, only for a name wider than the whole title row. */
+  flex: 0 1 auto;
+  min-width: 0;
   overflow: hidden;
   text-overflow: ellipsis;
-  min-width: 0;
 }
 
 .sm-card-desc {

@@ -122,10 +122,11 @@
         const broken = skill.status === 'broken' || skill.status === 'invalid'
         const readonly = skill.writable === false
         const updateVersion = skillUpdateVersion(skill)
-        // Locale-aware description when the market index carries both languages.
-        const description = typeof smSkillDescription === 'function'
-            ? smSkillDescription(skill)
-            : (typeof skill.description === 'string' ? skill.description : '')
+        /* Display name / description are localized; the technical name stays
+         * visible as a small mono label and keeps driving every action. */
+        const technicalName = String(skill.name === undefined || skill.name === null ? '' : skill.name)
+        const displayName = smSkillDisplayName(skill) || technicalName
+        const description = smSkillDisplayDescription(skill)
         const badges = []
         /* Upgrade badge sits first in the tag bar (interaction spec §4.2). */
         if (updateVersion !== '') {
@@ -173,14 +174,14 @@
             },
         },
         renderSkillIconBox(skill),
-        h('div', { className: 'sm-card-main' },
-            h('div', { className: 'sm-card-title-row' },
-                h('span', { className: 'sm-card-name sm-mono', title: String(skill.name || '') }, String(skill.name || '')),
-                badges.length > 0 ? h('span', { className: 'sm-tagbar' }, badges) : null),
-            h('div', {
-                className: 'sm-card-desc',
-                'data-tip': description !== '' ? description : undefined,
-            }, description)),
+        /* Title row, description and badge row come from one shared helper. */
+        renderCardMain({
+            dot: renderSkillStatusDot(skill),
+            displayName: displayName,
+            technicalName: technicalName,
+            description: description,
+            badges: badges,
+        }),
         h('div', {
             className: 'sm-card-tail',
             onClick: function (event) { event.stopPropagation() },

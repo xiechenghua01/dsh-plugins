@@ -99,9 +99,67 @@
       await Promise.all([loadSources(), loadInstalled()])
     }
 
+    /**
+     * Follow the host locale face (`{ getSnapshot, subscribe }`): seed
+     * `appState.locale` from the snapshot and re-render on every change.
+     * Returns an unsubscribe function (or null when the face is absent).
+     */
+    function smWatchHostLocale(ctx) {
+      const locale = ctx !== null && typeof ctx === 'object' ? ctx.locale : null
+      if (locale === null || typeof locale !== 'object') return null
+      const readActive = function () {
+        if (typeof locale.getSnapshot !== 'function') return ''
+        try {
+          const snapshot = locale.getSnapshot()
+          return snapshot !== null && typeof snapshot === 'object' && typeof snapshot.active === 'string'
+            ? snapshot.active
+            : ''
+        } catch {
+          return ''
+        }
+      }
+      const applySnapshot = function (snapshot) {
+        let active = snapshot !== null && typeof snapshot === 'object' && typeof snapshot.active === 'string'
+          ? snapshot.active
+          : ''
+        /* Some hosts invoke subscribers without an argument; read it back. */
+        if (active === '') active = readActive()
+        if (active === '') return
+        smLocaleSubscribed = true
+        if (active === appState.locale) return
+        appState.locale = active
+        rerender()
+      }
+      applySnapshot(null)
+      if (typeof locale.subscribe !== 'function') return null
+      let subscription = null
+      try {
+        subscription = locale.subscribe(function (snapshot) { applySnapshot(snapshot) })
+      } catch {
+        return null
+      }
+      if (typeof subscription === 'function') return subscription
+      if (subscription !== null && typeof subscription === 'object' && typeof subscription.dispose === 'function') {
+        return function () { subscription.dispose() }
+      }
+      return null
+    }
+
     /** Browser half entry. */
     function apply(ctx) {
       ctx.effect(() => ctx.locale.register(NS, { zh, en }), 'skill-manager: dictionaries')
+
+      /* Locale: primary source while the panel is mounted (props.locale in
+       * renderPage remains only the fallback). */
+      let disposeLocale = null
+      if (typeof ctx.effect === 'function') {
+        ctx.effect(() => {
+          const dispose = smWatchHostLocale(ctx)
+          return typeof dispose === 'function' ? dispose : () => {}
+        }, 'skill-manager: locale')
+      } else {
+        disposeLocale = smWatchHostLocale(ctx)
+      }
 
       ctx.effect(() => {
         if (typeof document === 'undefined' || document === null) return () => {}
@@ -150,6 +208,9 @@
           ),
         'skill-manager: sidebar entry',
       )
+
+      /* Hosts without ctx.effect dispose through apply's return value. */
+      if (typeof disposeLocale === 'function') return disposeLocale
     }
 
     return { inject: ['slots', 'locale', 'layout'], apply }

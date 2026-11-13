@@ -238,6 +238,10 @@
      * 行内动作                                                            *
      * ------------------------------------------------------------------ */
 
+    /**
+     * 行内“检查更新”：与管理源外的检查更新走同一条链路。
+     * 只检查当前源，仍会强制拉取索引、刷新技能数量并重载市场与已安装状态。
+     */
     function smSourceRefresh(source) {
         if (source === null || typeof source !== 'object' || !source.id) return
         const id = String(source.id)
@@ -247,11 +251,15 @@
         if (typeof setState === 'function') setState({})
         const run = async function () {
             try {
-                await api('sources/' + encodeURIComponent(id) + '/refresh', { method: 'POST' })
-                if (typeof loadSources === 'function') {
-                    try { await loadSources(true) } catch (err) { void err }
+                if (typeof checkUpdates === 'function') {
+                    await checkUpdates(id)
+                } else {
+                    await api('sources/' + encodeURIComponent(id) + '/refresh', { method: 'POST' })
+                    if (typeof loadSources === 'function') {
+                        try { await loadSources(true) } catch (err) { void err }
+                    }
+                    smSourceReloadMarket()
                 }
-                smSourceReloadMarket()
             } catch (err) {
                 void err
                 smSourceDialogError[id] = t('source.error.refreshFailed')
